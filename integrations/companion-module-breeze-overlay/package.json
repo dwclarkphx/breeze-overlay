@@ -1,0 +1,29 @@
+{
+  "name": "companion-module-breeze-overlay",
+  "version": "0.2.0",
+  "main": "dist/main.js",
+  "type": "module",
+  "scripts": {
+    "build": "rimraf dist && tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "check": "companion-module-check",
+    "package": "yarn build && companion-module-build"
+  },
+  "license": "MPL-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dwclarkphx/breeze-overlay.git"
+  },
+  "engines": {
+    "node": "^22.20"
+  },
+  "dependencies": {
+    "@companion-module/base": "^2.1.2"
+  },
+  "devDependencies": {
+    "@companion-module/tools": "^3.0.2",
+    "@types/node": "^22.19.17",
+    "rimraf": "^6.1.3",
+    "typescript": "~6.0.3"
+  }
+}

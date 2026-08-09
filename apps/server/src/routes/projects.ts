@@ -30,6 +30,7 @@ import {
   deleteComposition,
   deleteProject,
   getComposition,
+  listAllChannels,
   listChannels,
   listProjects,
   newProject,
@@ -73,6 +74,20 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
   app.get<{ Params: { id: string } }>('/api/projects/:id/channels', async (req) => ({
     channels: await listChannels(req.params.id),
   }));
+
+  /**
+   * The same thing for every project at once.
+   *
+   * For control surfaces building a button set: one request instead of one per
+   * project. A GET, so a Stream Deck or a Companion module can discover what
+   * exists without needing the API key.
+   */
+  app.get('/api/channels', async (_req, reply) => {
+    // Never cached: a scene added in the editor should appear the next time a
+    // control surface asks, not after a proxy's TTL.
+    reply.header('cache-control', 'no-store');
+    return { projects: await listAllChannels() };
+  });
 
   /** Suggest a URL key from a name, using the same rules the server enforces. */
   app.get<{ Querystring: { name?: string } }>('/api/keys/suggest', async (req) => {

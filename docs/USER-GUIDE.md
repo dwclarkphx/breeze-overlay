@@ -21,6 +21,7 @@ No coding required. If you have used After Effects, Photoshop or any NLE, the mo
 13. [Scenes — several graphics, one browser source](#13-scenes--several-graphics-one-browser-source)
 13a. [Assets and video](#13a-assets-and-video)
 14. [Getting it on air](#14-getting-it-on-air)
+14a. [Remote control — the HTTP API](#14a-remote-control--the-http-api)
 15. [Keyboard shortcuts](#15-keyboard-shortcuts)
 16. [When something looks wrong](#16-when-something-looks-wrong)
 
@@ -783,6 +784,185 @@ The three buttons on every scene do different jobs, and it is worth being clear 
 | **Debug URL** | The same page, scaled to fit, with a readout | Checking a graphic in an ordinary browser tab |
 
 Opening an **Output URL** in a desktop browser will look wrong, and is not. See [When something looks wrong](#16-when-something-looks-wrong).
+
+---
+
+## 14a. Remote control — the HTTP API
+
+Everything the control panel does, a URL can do. This is how a Stream Deck, a Bitfocus Companion button, a hardware panel or a script drives Breeze.
+
+### The shape of it
+
+```
+http://<host>:7331/api/control/<project>/<channel>/<verb>
+```
+
+`<project>` is the project's URL key. `<channel>` is a scene's URL key, or — in a scene — an element's **Channel** ([section 13](#13-scenes--several-graphics-one-browser-source)). `<verb>` is one of:
+
+| Verb | What it does |
+|---|---|
+| `play` | Rolls in, and holds at the next STOP marker. Press again to advance |
+| `next` | Advance to the next hold |
+| `stop` | Runs the outro. This is how a graphic leaves air |
+| `clear` | Hard reset. Nothing on screen, immediately |
+| `clear-all` | Every element of a scene down at once |
+| `update` | Push new field values (below) |
+| `state` | Read back what the graphic is doing — no side effects |
+
+**Both `GET` and `POST` work for all of them.** A side-effecting GET is poor REST and entirely deliberate: an operator wiring a button in a hurry reaches for a URL, and a great many control surfaces can only issue a plain GET. Use whichever your device makes easy.
+
+Every call answers with JSON:
+
+```json
+{ "ok": true, "verb": "play", "channel": "rahb-1k3f9/lower-third", "delivered": 1 }
+```
+
+`delivered` is the number of browser sources that received it. **`delivered: 0` means the call worked and nothing was listening** — the graphic is not open in OBS or vMix, so nothing happened on screen. That is the single most useful field for debugging a button that appears dead, and it is worth reading it back rather than assuming.
+
+An unknown project or channel answers `404`, rather than quietly succeeding into a channel nothing renders.
+
+### Changing text
+
+`update` takes fields as query parameters on a GET, or as a JSON body on a POST:
+
+```
+http://<host>:7331/api/control/rahb-1k3f9/lower-third/update?name=Jane%20Doe&title=Reporter
+```
+
+The names are the **binding names** from the properties panel — the same ones the control panel shows. Changes apply live; the graphic does not need re-playing. Fields fed by a data source are read-only and cannot be pushed this way, deliberately ([section 12](#12-data-sources-and-tables)).
+
+You can also preset fields on the browser-source URL itself, which is applied when the page loads:
+
+```
+http://<host>:7331/play/rahb-1k3f9/lower-third?name=Jane%20Doe&autoplay=1
+```
+
+### The API key
+
+By default there is none, which suits a closed LAN. Set one with the `BREEZE_API_KEY` environment variable and every mutating call — including the GET verb triggers, because a GET that puts a graphic to air is a write in every sense that matters — needs it.
+
+Two ways to send it, because plenty of control surfaces cannot set a header:
+
+```
+x-breeze-key: your-key                                    ← header
+…/api/control/rahb-1k3f9/lower-third/play?key=your-key    ← query parameter
+```
+
+`key` is stripped from an `update` before the rest becomes field values, so it will never turn up as a field on your graphic.
+
+Reads stay open either way: the portal, the browser-source pages and the editor never need credentials.
+
+> A key in a query string is visible in the activity log, in any proxy log, and to anyone reading over your shoulder at the desk. It exists so header-less hardware can work at all, not because it is the better of the two. Use the header where the device allows it.
+
+### Bitfocus Companion
+
+Companion is the recommended way to drive Breeze from a Stream Deck: it speaks to the hardware natively, and it can read state back to colour the buttons.
+
+#### The Breeze module
+
+There is a Breeze connection module in this repository, at
+`integrations/companion-module-breeze-overlay`. It gives you the verbs as proper actions,
+button colouring from live playback state, and variables — rather than a URL per button.
+
+To install it, in Companion go to **Modules → Import module package** and choose
+`integrations/dist/breeze-overlay-<version>.tgz`. Then **Connections → Add connection →
+Breeze Overlay**, and fill in:
+
+| | |
+|---|---|
+| **Server address** | The machine running Breeze. If Companion is in Docker, this must be an address that container can reach — its own `localhost` is not your Breeze machine |
+| **Port** | `7331` |
+| **Project URL key** | The project this connection drives |
+| **API key** | Only if `BREEZE_API_KEY` is set |
+
+Every action and feedback takes a **channel** — a scene's key, or a scene element's
+Channel — and blank means the connection's default. `project/channel` also works, so one
+connection can reach a second project.
+
+The feedback worth putting on every button is **No browser source attached**: it warns
+you, before you press anything, that nothing is listening on that channel. The module
+also logs a warning whenever a verb reaches zero browser sources.
+
+**Presets.** The module generates a ready-made button set for every scene and every scene
+element in its project — PLAY / NEXT / STOP / CLEAR, plus CLEAR ALL on scenes. Drag them
+in from Companion's preset list rather than building buttons by hand. The PLAY preset
+comes with the on-air and missing-source feedbacks already attached.
+
+Presets are built when the connection starts, so a scene added in Breeze appears after
+you press **Save** on the connection.
+
+To rebuild it after a change:
+
+```bash
+cd integrations/companion-module-breeze-overlay
+yarn install && yarn build && yarn package
+```
+
+#### Or the generic HTTP module
+
+If you would rather not install anything, Companion's built-in
+**Generic: HTTP Requests** module drives Breeze perfectly well:
+
+1. **Connections → Add connection → Generic: HTTP Requests.** No base URL is required; put the whole address in each action.
+2. On a button, add the action **GET request** (or POST).
+3. URL: `http://<host>:7331/api/control/rahb-1k3f9/lower-third/play`
+4. Add a second action on the same button's **release** — or a second button — for `stop`.
+
+A workable four-button layout per graphic is PLAY / NEXT / STOP / CLEAR, which is exactly what the control panel shows. Label the buttons with the channel name, not the scene name, when you are driving a scene's elements.
+
+For a text field, Companion's variables go straight into the URL:
+
+```
+http://<host>:7331/api/control/rahb-1k3f9/lower-third/update?name=$(internal:custom_name)
+```
+
+Remember to URL-encode anything that might contain a space or an ampersand — Companion has a `urlencode` expression function for this.
+
+### Reading state back
+
+`state` is a plain GET with no side effects, so it is safe to poll:
+
+```
+http://<host>:7331/api/control/rahb-1k3f9/lower-third/state
+```
+
+```json
+{
+  "channel": "rahb-1k3f9/lower-third",
+  "state": {
+    "data": { "name": "Jane Doe" },
+    "playback": { "state": "holding", "time": 1.2, "step": 1, "stepCount": 2 },
+    "renderers": 1,
+    "controllers": 2,
+    "updatedAt": "2026-08-08T19:02:11.400Z"
+  }
+}
+```
+
+`renderers` is how many browser sources are attached — `0` is the "nothing is listening" case above. `playback.state` is what the graphic is doing, which is what you would drive a button colour from.
+
+### Finding the addresses
+
+You do not have to read them off the editor one at a time:
+
+| | |
+|---|---|
+| `GET /api/projects` | Every project, with its scenes |
+| `GET /api/projects/<project>/channels` | Every address that project answers to, including scene elements |
+| `GET /api/status` | Server-wide: what is connected right now |
+
+`/channels` is the authoritative list — it is the same index the server resolves a trigger against, so if an address is not in there, it will 404.
+
+### Checking a button before the show
+
+`curl` from the machine that will be sending, which tests the address and the network path in one go:
+
+```bash
+curl "http://graphics-pc:7331/api/control/rahb-1k3f9/lower-third/state"
+curl "http://graphics-pc:7331/api/control/rahb-1k3f9/lower-third/play"
+```
+
+If the second returns `"delivered": 0`, the URL is right and the browser source is not open. If it returns `404`, check the project and channel keys against `/channels`. If it returns `401`, the API key is set and missing from your call.
 
 ---
 

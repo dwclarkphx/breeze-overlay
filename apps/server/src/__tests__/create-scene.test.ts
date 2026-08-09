@@ -182,3 +182,54 @@ describe('creating a scene', () => {
     expect(res.json().stage.height).toBe(720);
   });
 });
+
+/*
+ * Placed last on purpose: it asserts against the scene element created by the
+ * collision test above, and vitest runs describes in file order.
+ */
+describe('GET /api/channels', () => {
+  it('lists every project and what it answers to, in one call', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/channels' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+
+    const projects = res.json().projects as Array<{
+      id: string;
+      name: string;
+      channels: Array<{ channel: string; name: string }>;
+    }>;
+
+    const mine = projects.find((p) => p.id === projectId);
+    expect(mine).toBeDefined();
+    expect(mine!.name).toBe('New Scene Tests');
+    // Every channel carries a display name — the whole reason a control surface
+    // can label a button without fetching the project as well.
+    expect(mine!.channels.every((c) => typeof c.name === 'string' && c.name.length > 0)).toBe(true);
+  });
+
+  it('names a scene element by the element, not the composition it renders', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/channels' });
+    const mine = (
+      res.json().projects as Array<{ id: string; channels: Array<Record<string, unknown>> }>
+    ).find((p) => p.id === projectId)!;
+
+    const element = mine.channels.find((c) => c.channel === 'bug');
+    expect(element).toBeDefined();
+    // The layer is named "Bug"; the composition it points at is "Screen Bug
+    // Source". A button should say Bug.
+    expect(element!.name).toBe('Bug');
+    expect(element!.sceneId).toBe('game');
+    expect(element!.ref).toBe('screen-bug');
+  });
+
+  it('agrees with the per-project route', async () => {
+    const all = await app.inject({ method: 'GET', url: '/api/channels' });
+    const one = await app.inject({ method: 'GET', url: `/api/projects/${projectId}/channels` });
+
+    const fromAll = (all.json().projects as Array<{ id: string; channels: unknown[] }>).find(
+      (p) => p.id === projectId,
+    )!.channels;
+    expect(fromAll).toEqual(one.json().channels);
+  });
+});

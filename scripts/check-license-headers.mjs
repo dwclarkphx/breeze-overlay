@@ -27,7 +27,13 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-const ROOTS = ['apps', 'packages', 'scripts', 'tests'];
+/*
+ * `integrations` is in here for the same reason as the rest: MPL-2.0 copyleft
+ * is file-scoped, and the Companion module ships as its own package built from
+ * these sources. Being outside the pnpm workspace means nothing else in CI
+ * looks at it, so without this its headers would drift unnoticed.
+ */
+const ROOTS = ['apps', 'integrations', 'packages', 'scripts', 'tests'];
 const EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.mjs', '.css', '.html']);
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'public']);
 

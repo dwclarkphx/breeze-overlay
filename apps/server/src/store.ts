@@ -312,6 +312,15 @@ export interface ChannelRef {
   channel: string;
   /** Composition rendered on it. */
   ref: string;
+  /**
+   * What to call this on a button.
+   *
+   * The composition's name, or for a scene element the element's own name —
+   * which is the layer's name, and is the thing an operator recognises. Without
+   * it every consumer has to fetch the project and join the two itself, which
+   * is exactly what the Companion module was doing before this existed.
+   */
+  name: string;
   /** Scene it is mounted in, or null when the composition is played directly. */
   sceneId: string | null;
   /** Layer id within the scene; null when the composition is played directly. */
@@ -347,7 +356,7 @@ export async function listChannels(projectId: string): Promise<ChannelRef[]> {
   };
 
   for (const comp of project.compositions) {
-    claim({ channel: comp.id, ref: comp.id, sceneId: null, layerId: null });
+    claim({ channel: comp.id, ref: comp.id, name: comp.name, sceneId: null, layerId: null });
   }
 
   for (const comp of project.compositions) {
@@ -355,6 +364,7 @@ export async function listChannels(projectId: string): Promise<ChannelRef[]> {
       claim({
         channel: element.channel,
         ref: element.ref,
+        name: element.name,
         sceneId: comp.id,
         layerId: element.layerId,
       });
@@ -363,6 +373,42 @@ export async function listChannels(projectId: string): Promise<ChannelRef[]> {
 
   channelCache.set(projectId, { updatedAt: project.updatedAt, channels });
   return channels;
+}
+
+/** A project and everything it answers to. */
+export interface ProjectChannels {
+  id: string;
+  name: string;
+  channels: ChannelRef[];
+}
+
+/**
+ * Every channel on the server, in one call.
+ *
+ * Exists for control surfaces. Building a set of Companion presets means
+ * enumerating every addressable graphic, and doing that through
+ * `/api/projects` followed by `/api/projects/:id/channels` per project is an
+ * N+1 against a server that is also feeding graphics to air. Each project's
+ * list is individually cached by `listChannels`, so this is cheap to repeat.
+ *
+ * A project that cannot be read is skipped rather than failing the request: one
+ * corrupt project.json should not deny a Stream Deck its buttons for every
+ * other show on the box.
+ */
+export async function listAllChannels(): Promise<ProjectChannels[]> {
+  const out: ProjectChannels[] = [];
+  for (const summary of await listProjects()) {
+    try {
+      out.push({
+        id: summary.id,
+        name: summary.name,
+        channels: await listChannels(summary.id),
+      });
+    } catch {
+      continue;
+    }
+  }
+  return out;
 }
 
 /**

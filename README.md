@@ -642,4 +642,3 @@ Breeze Overlay is licensed under the [Mozilla Public License 2.0](LICENSE). Ever
 Breeze embeds [GSAP](https://gsap.com) (GreenSock Animation Platform), (C) Webflow, which is licensed separately under the [GSAP Standard License](https://gsap.com/standard-license) — free for commercial use, with its own terms that are not part of the MPL.
 
 
-# breeze-overlay
