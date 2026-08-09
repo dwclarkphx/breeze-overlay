@@ -32,6 +32,19 @@ process.env['BREEZE_LOG_LEVEL'] = 'silent';
 const { DEMOS, seedDemos } = await import('../seed.js');
 const store = await import('../store.js');
 const { readDataSources } = await import('../data/sources.js');
+const { REPO_ROOT } = await import('../config.js');
+
+/**
+ * Where the demo documents live.
+ *
+ * `REPO_ROOT`, not `process.cwd()`. `pnpm -r test` runs vitest with the cwd set
+ * to each package, so a cwd-relative path here looked for
+ * `apps/server/examples/` and the suite failed to load — but only under the
+ * recursive runner, which is why it survived until CI ran it. Resolving the
+ * same way `seed.ts` does also means the test cannot disagree with the code it
+ * is testing about where the examples are.
+ */
+const examplePath = (file: string): string => path.join(REPO_ROOT, 'examples', file);
 
 /** Every demo id that ships, read from the manifest rather than hard-coded. */
 let demoIds: string[] = [];
@@ -40,10 +53,7 @@ beforeAll(async () => {
   await store.ensureDataDirs();
   demoIds = await Promise.all(
     DEMOS.map(async (d) => {
-      const raw = await fs.readFile(
-        path.join(process.cwd(), 'examples', d.file),
-        'utf8',
-      );
+      const raw = await fs.readFile(examplePath(d.file), 'utf8');
       return (JSON.parse(raw) as { id: string }).id;
     }),
   );
@@ -201,7 +211,7 @@ describe('upgrading an existing install', () => {
     // Stand in for the old seed rule: one demo present, edited, no ledger.
     const last = DEMOS[DEMOS.length - 1]!;
     const id = demoIds[demoIds.length - 1]!;
-    const raw = await fs.readFile(path.join(process.cwd(), 'examples', last.file), 'utf8');
+    const raw = await fs.readFile(examplePath(last.file), 'utf8');
     await store.writeProject({ ...(JSON.parse(raw) as never), name: 'Renamed Before Upgrade' });
 
     const written = await seedDemos();
