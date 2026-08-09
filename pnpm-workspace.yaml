@@ -1,0 +1,18 @@
+packages:
+  - 'packages/*'
+  - 'apps/*'
+
+# Blocked install scripts. esbuild's is a binary download; cpu-features and
+# ssh2's are optional native builds (SFTP drop source, 0.48.0) that are
+# performance-only — ssh2 falls back to Node's built-in crypto. All declined so
+# no node-gyp toolchain is required on dev machines or in CI.
+#
+# MUST MIRROR package.json -> pnpm.ignoredBuiltDependencies. pnpm does not merge
+# the two: if the key is present in package.json, that list wins outright and
+# everything here is discarded. Listing cpu-features and ssh2 only here is why
+# they kept prompting on install while esbuild did not. `pnpm approve-builds`
+# writes to this file, so re-check package.json after ever running it.
+ignoredBuiltDependencies:
+  - cpu-features
+  - esbuild
+  - ssh2

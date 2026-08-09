@@ -1,0 +1,33 @@
+slot,round,side,seq,date,venue,homeTeam,homeCode,homeName,homeScore,homePens,awayTeam,awayCode,awayName,awayScore,awayPens,decidedBy,resultLabel,winner,winnerCode,loser,loserCode,feeds,feedsLoser,homeDisplay,awayDisplay,homeMark,awayMark
+R32L-1,R32,L,1,,,Netherlands,NED,Netherlands,1,2,Morocco,MAR,Morocco,1,3,pens,PENALTIES · MAR WIN 3-2,Morocco,MAR,Netherlands,NED,R16L-1:home,,1 (2),1 (3),,●
+R32L-2,R32,L,2,,,South Africa,RSA,South Africa,0,,Canada,CAN,Canada,1,,ft,FULL TIME,Canada,CAN,South Africa,RSA,R16L-1:away,,0,1,,●
+R32L-3,R32,L,3,,,France,FRA,France,3,,Sweden,SWE,Sweden,0,,ft,FULL TIME,France,FRA,Sweden,SWE,R16L-2:home,,3,0,●,
+R32L-4,R32,L,4,,,Germany,GER,Germany,1,3,Paraguay,PAR,Paraguay,1,4,pens,PENALTIES · PAR WIN 4-3,Paraguay,PAR,Germany,GER,R16L-2:away,,1 (3),1 (4),,●
+R32L-5,R32,L,5,,,Spain,ESP,Spain,3,,Austria,AUT,Austria,0,,ft,FULL TIME,Spain,ESP,Austria,AUT,R16L-3:home,,3,0,●,
+R32L-6,R32,L,6,,,Portugal,POR,Portugal,2,,Croatia,CRO,Croatia,1,,ft,FULL TIME,Portugal,POR,Croatia,CRO,R16L-3:away,,2,1,●,
+R32L-7,R32,L,7,,,Belgium,BEL,Belgium,3,,Senegal,SEN,Senegal,2,,aet,AFTER EXTRA TIME,Belgium,BEL,Senegal,SEN,R16L-4:home,,3*,2,●,
+R32L-8,R32,L,8,,,United States,USA,United States,2,,Bosnia and Herzegovina,BIH,Bosnia,0,,ft,FULL TIME,United States,USA,Bosnia and Herzegovina,BIH,R16L-4:away,,2,0,●,
+R16L-1,R16,L,1,,,,,,3,,,,,0,,ft,FULL TIME,Morocco,MAR,Canada,CAN,QFL-1:home,,3,0,●,
+R16L-2,R16,L,2,,,,,,1,,,,,0,,ft,FULL TIME,France,FRA,Paraguay,PAR,QFL-1:away,,1,0,●,
+R16L-3,R16,L,3,,,,,,1,,,,,0,,ft,FULL TIME,Spain,ESP,Portugal,POR,QFL-2:home,,1,0,●,
+R16L-4,R16,L,4,,,,,,4,,,,,1,,ft,FULL TIME,Belgium,BEL,United States,USA,QFL-2:away,,4,1,●,
+QFL-1,QF,L,1,2026-07-09,,,,,0,,,,,2,,ft,FULL TIME,France,FRA,Morocco,MAR,SFL-1:home,,0,2,,●
+QFL-2,QF,L,2,2026-07-10,,,,,2,,,,,1,,ft,FULL TIME,Spain,ESP,Belgium,BEL,SFL-1:away,,2,1,●,
+SFL-1,SF,L,1,2026-07-14,Dallas,,,,0,,,,,2,,ft,FULL TIME,Spain,ESP,France,FRA,FINAL-1:home,3RD-1:home,0,2,,●
+R32R-1,R32,R,1,,,Brazil,BRA,Brazil,2,,Japan,JPN,Japan,1,,ft,FULL TIME,Brazil,BRA,Japan,JPN,R16R-1:home,,2,1,●,
+R32R-2,R32,R,2,,,Ivory Coast,CIV,Ivory Coast,1,,Norway,NOR,Norway,2,,ft,FULL TIME,Norway,NOR,Ivory Coast,CIV,R16R-1:away,,1,2,,●
+R32R-3,R32,R,3,,,Mexico,MEX,Mexico,2,,Ecuador,ECU,Ecuador,0,,ft,FULL TIME,Mexico,MEX,Ecuador,ECU,R16R-2:home,,2,0,●,
+R32R-4,R32,R,4,,,England,ENG,England,2,,DR Congo,COD,DR Congo,1,,ft,FULL TIME,England,ENG,DR Congo,COD,R16R-2:away,,2,1,●,
+R32R-5,R32,R,5,,,Argentina,ARG,Argentina,3,,Cabo Verde,CPV,Cabo Verde,2,,aet,AFTER EXTRA TIME,Argentina,ARG,Cabo Verde,CPV,R16R-3:home,,3*,2,●,
+R32R-6,R32,R,6,,,Australia,AUS,Australia,1,2,Egypt,EGY,Egypt,1,4,pens,PENALTIES · EGY WIN 4-2,Egypt,EGY,Australia,AUS,R16R-3:away,,1 (2),1 (4),,●
+R32R-7,R32,R,7,,,Switzerland,SUI,Switzerland,2,,Algeria,ALG,Algeria,0,,ft,FULL TIME,Switzerland,SUI,Algeria,ALG,R16R-4:home,,2,0,●,
+R32R-8,R32,R,8,,,Colombia,COL,Colombia,1,,Ghana,GHA,Ghana,0,,ft,FULL TIME,Colombia,COL,Ghana,GHA,R16R-4:away,,1,0,●,
+R16R-1,R16,R,1,,,,,,0,,,,,2,,ft,FULL TIME,Norway,NOR,Brazil,BRA,QFR-1:home,,0,2,,●
+R16R-2,R16,R,2,,,,,,2,,,,,3,,ft,FULL TIME,England,ENG,Mexico,MEX,QFR-1:away,,2,3,,●
+R16R-3,R16,R,3,,,,,,3,,,,,2,,ft,FULL TIME,Argentina,ARG,Egypt,EGY,QFR-2:home,,3,2,●,
+R16R-4,R16,R,4,,,,,,0,4,,,,0,3,pens,PENALTIES · SUI WIN 4-3,Switzerland,SUI,Colombia,COL,QFR-2:away,,0 (4),0 (3),●,
+QFR-1,QF,R,1,2026-07-11,,,,,1,,,,,2,,aet,AFTER EXTRA TIME,England,ENG,Norway,NOR,SFR-1:home,,1,2*,,●
+QFR-2,QF,R,2,2026-07-11,,,,,3,,,,,1,,aet,AFTER EXTRA TIME,Argentina,ARG,Switzerland,SUI,SFR-1:away,,3*,1,●,
+SFR-1,SF,R,1,2026-07-15,Atlanta,,,,1,,,,,2,,ft,FULL TIME,Argentina,ARG,England,ENG,FINAL-1:away,3RD-1:away,1,2,,●
+3RD-1,DECIDER,T,1,2026-07-18,Miami,,,,4,,,,,6,,ft,FULL TIME,England,ENG,France,FRA,,,4,6,,●
+FINAL-1,DECIDER,F,1,2026-07-19,MetLife Stadium,,,,1,,,,,0,,aet,AFTER EXTRA TIME,Spain,ESP,Argentina,ARG,,,1*,0,●,

@@ -1,0 +1,73 @@
+{
+  "formatVersion": 1,
+  "sources": [
+    {
+      "id": "standings",
+      "name": "East Division standings",
+      "type": "manual",
+      "columns": [
+        { "key": "team", "label": "Team", "type": "string" },
+        { "key": "w", "label": "W", "type": "number" },
+        { "key": "l", "label": "L", "type": "number" },
+        { "key": "pct", "label": "PCT", "type": "string" }
+      ],
+      "rows": [
+        { "team": "Mesa Marlins", "w": 11, "l": 2, "pct": ".846" },
+        { "team": "Chandler Chargers", "w": 9, "l": 4, "pct": ".692" },
+        { "team": "Tempe Thunderbirds", "w": 8, "l": 5, "pct": ".615" },
+        { "team": "Gilbert Grizzlies", "w": 7, "l": 6, "pct": ".538" },
+        { "team": "Scottsdale Scorpions", "w": 5, "l": 8, "pct": ".385" },
+        { "team": "Peoria Pioneers", "w": 3, "l": 10, "pct": ".231" }
+      ]
+    },
+    {
+      "id": "headlines",
+      "name": "Newsroom headlines",
+      "type": "manual",
+      "columns": [
+        { "key": "title", "label": "Title", "type": "string" },
+        { "key": "link", "label": "Link", "type": "string" },
+        { "key": "date", "label": "Date", "type": "string" },
+        { "key": "category", "label": "Category", "type": "string" }
+      ],
+      "rows": [
+        {
+          "title": "Marlins clinch the East with a late run",
+          "link": "https://example.test/1",
+          "date": "2026-08-02T19:55:00.000Z",
+          "category": "baseball"
+        },
+        {
+          "title": "Thunderbirds rally from four down",
+          "link": "https://example.test/2",
+          "date": "2026-08-02T18:10:00.000Z",
+          "category": "baseball"
+        },
+        {
+          "title": "Chargers name a new head coach",
+          "link": "https://example.test/3",
+          "date": "2026-08-02T14:30:00.000Z",
+          "category": "baseball"
+        },
+        {
+          "title": "Grizzlies open their new ballpark Friday",
+          "link": "https://example.test/4",
+          "date": "2026-08-01T22:05:00.000Z",
+          "category": "community"
+        }
+      ]
+    },
+    {
+      "id": "wx-current",
+      "name": "Station weather \u2014 current conditions",
+      "type": "weather",
+      "provider": "nws",
+      "latitude": 33.4484,
+      "longitude": -112.074,
+      "place": "Phoenix, AZ",
+      "units": "imperial",
+      "mode": "current",
+      "pollInterval": 900
+    }
+  ]
+}

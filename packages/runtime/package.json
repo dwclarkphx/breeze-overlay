@@ -1,0 +1,30 @@
+{
+  "name": "@breeze/runtime",
+  "version": "0.63.0",
+  "private": true,
+  "license": "MPL-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@breeze/schema": "workspace:*",
+    "gsap": "^3.13.0"
+  },
+  "devDependencies": {
+    "happy-dom": "^20.11.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}

@@ -1,0 +1,45 @@
+# Keep the build context small and keep host build output from leaking into the
+# image. Anything the container needs is either compiled in the builder stage or
+# copied explicitly by the Dockerfile.
+
+.git/
+.github/
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+apps/server/public/
+
+# Private maintainer tree, local version snapshots and the GitHub staging copy.
+# dev/build_test alone is several hundred MB of installed dependencies.
+dev/
+releases/
+github_push/
+
+# Runtime state belongs in the volume, never in the image.
+data/projects/
+data/assets/
+data/tmp/
+data/seeded.json
+
+# Local secrets. BREEZE_DATA_SECRETS_FILE should be a bind mount at run time.
+.env
+.env.local
+*.pem
+*.key
+
+coverage/
+test-results/
+playwright-report/
+# Covers playwright.config.ts too — it lives with the suite it configures.
+tests/
+
+.vite/
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+_tmp_*
+
+docs/
+*.md
+!README.md

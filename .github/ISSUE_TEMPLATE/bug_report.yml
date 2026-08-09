@@ -1,0 +1,70 @@
+name: Bug report
+description: Something is broken or behaving unexpectedly
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. The more precisely you can describe how to reproduce the problem, the faster it gets fixed.
+  - type: input
+    id: version
+    attributes:
+      label: Breeze Overlay version
+      description: From package.json or the release tag you downloaded (e.g. v0.1.0)
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does the problem show up?
+      options:
+        - Editor (template builder UI)
+        - Output page (/play) rendered in a browser
+        - Output in OBS browser source
+        - Output in vMix web input
+        - Server / API
+        - Animations / GSAP behavior
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you see, and what did you expect to see instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps starting from a fresh project if possible. Reports that can't be reproduced usually can't be fixed.
+      placeholder: |
+        1. Create a new lower-third template
+        2. Add a text layer with an in-point at 0.5s
+        3. Click Fit Width
+        4. ...
+    validations:
+      required: true
+  - type: textarea
+    id: template-json
+    attributes:
+      label: Template / project JSON (if relevant)
+      description: Export the affected template and paste it here, or attach the file. Strip anything private first.
+      render: json
+  - type: textarea
+    id: console
+    attributes:
+      label: Console errors
+      description: Open the browser dev tools (F12) → Console, and paste any errors.
+      render: text
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, browser + version, Node version, and OBS/vMix version if relevant
+      placeholder: "Windows 11, Chrome 138, Node 20.14, OBS 31.0"
+    validations:
+      required: true

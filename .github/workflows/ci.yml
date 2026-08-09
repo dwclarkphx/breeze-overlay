@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # Reads the packageManager field in package.json for the pnpm version
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cheap, and first: a bump that only landed in the root package.json is
+      # the kind of mistake that otherwise ships and then gets quoted back in a
+      # bug report. The unit suite asserts this too; failing here names the file.
+      - name: Version consistency
+        run: pnpm version:check
+
+      # MPL-2.0 copyleft is file-scoped: a file without the Exhibit A notice
+      # has quietly left the license. Cheap, so it runs before the build.
+      - name: License headers
+        run: pnpm license:check
+
+      # Build FIRST — dev/test do not rebuild workspace deps,
+      # so skipping this tests a stale bundle.
+      - name: Build
+        run: pnpm build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: E2E tests
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14

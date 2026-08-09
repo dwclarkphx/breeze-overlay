@@ -1,0 +1,81 @@
+# Breeze Overlay — single-service deployment.
+#
+#   cp env.breeze .env        # edit BREEZE_PORT and BREEZE_CONTACT
+#   docker compose up -d --build
+#
+# Or keep the template's name and pass it explicitly:
+#
+#   docker compose --env-file env.breeze up -d --build
+#
+# Note it has to be `--env-file` and not an `env_file:` key below. env_file
+# passes variables into the container, but compose interpolates ${BREEZE_PORT}
+# in the ports mapping before any of that happens — so env_file alone would
+# publish 7331 no matter what the file said.
+#
+# Then open http://localhost:${BREEZE_PORT}/ and point vMix or OBS at
+# http://<this-host>:${BREEZE_PORT}/play/demo/l3rd-name
+
+services:
+  breeze:
+    build:
+      context: .
+      target: runtime
+    image: breeze-overlay:local
+    container_name: breeze-overlay
+    restart: unless-stopped
+
+    # Host and container port are deliberately the same value. The server logs
+    # its LAN browser-source URLs using its own listen port, and those URLs are
+    # copied straight into a switcher — publishing 8080:7331 would print a URL
+    # that does not work from the vMix machine. Change BREEZE_PORT in .env and
+    # both sides move together.
+    ports:
+      - "${BREEZE_PORT:-7331}:${BREEZE_PORT:-7331}"
+
+    environment:
+      BREEZE_PORT: "${BREEZE_PORT:-7331}"
+      # 0.0.0.0 inside the container is the container's own interface, not the
+      # host's — the ports mapping above is what exposes it. Leave it be.
+      BREEZE_HOST: "0.0.0.0"
+      BREEZE_DATA_DIR: "/app/data"
+      BREEZE_LOG_LEVEL: "${BREEZE_LOG_LEVEL:-info}"
+
+      # Who this server is, for outgoing feed requests. Set it — see the
+      # User-Agent section of the README.
+      BREEZE_CONTACT: "${BREEZE_CONTACT:-}"
+
+      # Empty means no auth on mutating /api/* calls. Fine on an isolated
+      # production LAN, not fine anywhere a laptop can reach.
+      BREEZE_API_KEY: "${BREEZE_API_KEY:-}"
+
+      BREEZE_DATA_POLLING: "${BREEZE_DATA_POLLING:-1}"
+      BREEZE_DATA_ALLOW_HOSTS: "${BREEZE_DATA_ALLOW_HOSTS:-}"
+      BREEZE_DATA_SECRETS: "${BREEZE_DATA_SECRETS:-}"
+
+      # For anything with newlines in it — notably a Google service-account key.
+      # Uncomment together with the bind mount below.
+      # BREEZE_DATA_SECRETS_FILE: "/run/secrets/breeze-data.json"
+
+    volumes:
+      # Projects and uploaded assets. Named rather than a bind mount so the
+      # container's uid 1000 owns it without a host-side chown; `docker compose
+      # down` keeps it, `down -v` destroys every project on the server.
+      - breeze-data:/app/data
+
+      # Credentials, read-only, kept out of the image and out of `docker inspect`.
+      # - ./secrets/breeze-data.json:/run/secrets/breeze-data.json:ro
+
+      # A font a graphic names has to exist inside the container, not just on
+      # the host — an unresolved family falls back silently and the lower third
+      # goes to air in the wrong typeface. Share the host's fonts, or bake them
+      # into the image.
+      # - /usr/share/fonts:/usr/share/fonts:ro
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  breeze-data:

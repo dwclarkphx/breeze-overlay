@@ -1,0 +1,38 @@
+node_modules/
+dist/
+apps/server/public/
+_tmp_*
+
+# Everything private: maintainer scripts, private docs, the build_test scratch
+# area. dev/make-release.mjs drops this whole directory from the GitHub copy,
+# so a new private file needs no entry here beyond living in dev/.
+dev/
+
+# Private local version snapshots — public history is git tags + GitHub Releases
+releases/
+
+# Staging copy pushed to GitHub (built by dev/make-release.mjs; has its own .git)
+github_push/
+
+.vite/
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+
+# Runtime data — user projects and uploaded media live here
+data/projects/
+data/assets/
+data/tmp/
+# Which demo projects this install has already been given. Local state: an
+# operator who deleted a demo must not have it reinstated by a checkout.
+data/seeded.json
+!data/projects/.gitkeep
+
+# Local env
+.env
+.env.local
+
+# Test output
+coverage/
+test-results/
+playwright-report/

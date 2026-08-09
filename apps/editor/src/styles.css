@@ -1,0 +1,1199 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * Copyright (C) 2026 Dave Clark
+ * SPDX-License-Identifier: MPL-2.0
+ */
+
+/* Dark UI throughout: a graphics editor is used in a dim gallery, and a bright
+   chrome around a transparent stage wrecks color judgment. */
+
+:root {
+  --bg: #0d1117;
+  --panel: #161b22;
+  --panel-2: #1c2129;
+  --border: #30363d;
+  --text: #c9d1d9;
+  --muted: #8b949e;
+  --accent: #58a6ff;
+  --accent-dim: #1f6feb;
+  --danger: #f85149;
+  --key: #e3b341;
+  --row: 22px;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 system-ui, "Segoe UI", sans-serif;
+}
+
+button, select, input, textarea {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 7px;
+  font: inherit;
+}
+button { cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.45; cursor: default; }
+input[type='color'] { padding: 0; width: 34px; height: 24px; }
+input[type='checkbox'] { width: auto; }
+
+.app { display: flex; flex-direction: column; height: 100%; }
+
+.app-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.brand { color: var(--accent); letter-spacing: 0.5px; }
+/* Quiet by design — present when looked for, not competing with the transport. */
+.brand-version { color: var(--muted); font-weight: 400; font-size: 11px; letter-spacing: 0; }
+
+/* URL keys in the app bar. Quiet by default — they are reference, not a
+   control — and legible the moment someone goes looking for them. */
+.url-keys {
+  color: var(--muted);
+  font: 11px/1 ui-monospace, Consolas, monospace;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.url-keys:hover { color: var(--text); border-color: var(--border); }
+.spacer { flex: 1; }
+.dirty-dot { color: var(--key); }
+.output-link { color: var(--accent); text-decoration: none; font-size: 12px; }
+
+.banner {
+  padding: 8px 12px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.banner.error { background: #3d1518; color: #ffdcd8; }
+.banner ul { margin: 4px 0 0; padding-left: 18px; }
+.banner code { color: var(--key); }
+
+.app-body { flex: 1; display: flex; min-height: 0; }
+/*
+ * Widths and the timeline height are set inline from the saved layout; these are
+ * the fallbacks for a first paint before that applies. `flex: 0 0 auto` matters:
+ * without it these are flex items with the default shrink of 1, so a wide stage
+ * would quietly squeeze them below the size the user chose.
+ */
+/* The left column now stacks two panels — layers over data sources — so it is a
+   column flexbox rather than a single scroller. Each panel scrolls its own body,
+   which keeps a long layer list from pushing the data sources off the bottom. */
+.left {
+  width: 260px; flex: 0 0 auto;
+  display: flex; flex-direction: column; min-height: 0;
+}
+.left > .panel { min-height: 0; }
+.left > .layers-panel { flex: 1 1 auto; }
+.left > .data-panel { flex: 0 0 auto; max-height: 55%; border-top: 1px solid var(--border); }
+
+/* The asset bin sizes like the data panel, and for the same reason: `.panel`
+   sets `height: 100%`, which for a `flex: 0 0 auto` item in a column *is* the
+   flex-basis — so without an explicit basis the bin would claim the whole
+   column and push the layer list out, exactly as the data panel once did.
+   Capped lower than the data panel because two uncapped siblings below the
+   layers can still add up to the whole column between them. */
+.left > .asset-bin {
+  flex: 0 0 auto;
+  height: auto;
+  max-height: 35%;
+  border-top: 1px solid var(--border);
+}
+
+/* Collapsed, the data panel is a title bar on the bottom edge and nothing more.
+
+   It was still taking 55% of the column when folded away. `.panel` sets
+   `height: 100%`, and for a `flex: 0 0 auto` item in a column that height *is*
+   the flex-basis — so the panel claimed the full column, `max-height` trimmed it
+   to 55%, and whether any of that space had content in it never entered into it.
+   Collapsing bought the layer list nothing, which is the one thing collapsing is
+   for.
+
+   `height: auto` hands the basis back to the content, which when collapsed is
+   just the header. `margin-top: auto` then pins it to the bottom: the layers
+   panel already grows into the gap, but stating it means a short layer list
+   cannot leave the bar floating in the middle of the column. */
+.left > .data-panel[data-collapsed='1'],
+.left > .asset-bin[data-collapsed='1'] {
+  height: auto;
+  max-height: none;
+}
+
+/*
+ * `margin-top: auto` belongs to the topmost collapsed panel in the stack, not
+ * to the data panel specifically.
+ *
+ * It is what pins a folded panel to the bottom edge so a short layer list
+ * cannot leave the bar floating mid-column. With two foldable panels below the
+ * layers, putting it on both would insert a second gap *between* them —
+ * the data bar at the bottom of the free space and the asset bar below it,
+ * separated by nothing that means anything.
+ *
+ * So: the data panel claims it when it is folded, and the asset bin claims it
+ * only when the data panel above is still open and therefore already absorbing
+ * the slack. Either way exactly one auto margin exists and the folded bars stack
+ * flush on the bottom edge.
+ */
+.left > .data-panel[data-collapsed='1'] { margin-top: auto; }
+.left > .data-panel:not([data-collapsed='1']) + .asset-bin[data-collapsed='1'] { margin-top: auto; }
+.right { width: 300px; flex: 0 0 auto; overflow: auto; }
+.center { flex: 1; min-width: 0; display: flex; }
+.app-timeline { height: 280px; flex: 0 0 auto; background: var(--panel); }
+
+/* ------------------------------------------------------- splitters */
+
+/*
+ * The divider replaces the panel borders it sits between, so the layout does not
+ * gain a pixel when these appear. 5px is the compromise: thin enough to read as
+ * a border, wide enough to hit without aiming.
+ */
+.splitter {
+  flex: 0 0 auto;
+  background: var(--border);
+  transition: background 120ms ease;
+  touch-action: none;
+}
+.splitter-x { width: 5px; cursor: col-resize; }
+.splitter-y { height: 5px; cursor: row-resize; }
+.splitter:hover, .splitter:focus-visible { background: var(--accent); outline: none; }
+
+.panel { display: flex; flex-direction: column; height: 100%; }
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+.panel-sub { color: var(--muted); font-weight: 400; font-size: 11px; }
+.panel-actions { display: flex; gap: 4px; }
+.panel-body { padding: 8px 10px; overflow: auto; }
+.panel-empty { padding: 20px; color: var(--muted); }
+.hint { color: var(--muted); font-size: 11px; }
+
+/* ---------------------------------------------------------- layers */
+
+.layer-list { overflow: auto; flex: 1; }
+.layer-row {
+  display: flex; align-items: center; gap: 4px;
+  height: 26px; padding-right: 6px;
+  cursor: default; user-select: none;
+  border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+}
+.layer-row:hover { background: var(--panel-2); }
+.layer-row.selected { background: var(--accent-dim); color: #fff; }
+.layer-icon-btn { border: none; background: none; padding: 0 2px; font-size: 11px; }
+
+/* Caption above a table's row template. Not a layer row — it has no selection,
+   no toggles and nothing to click — so it is deliberately not styled like one. */
+.layer-subhead {
+  height: 20px; display: flex; align-items: center;
+  color: var(--muted); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+  user-select: none;
+}
+
+/* The column a cell reads, shown after its name.
+
+   Pushed right and allowed to shrink to nothing: on a narrow layers panel the
+   layer name is the thing that must survive, and a key that elbowed it out
+   would make the panel worse than it was before cells appeared in it. */
+.layer-cell-key {
+  margin-left: auto;
+  min-width: 0;
+  padding: 0 4px;
+  border-radius: 2px;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 10px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.layer-row.selected .layer-cell-key { background: rgba(0, 0, 0, 0.25); color: #fff; }
+.layer-type {
+  width: 22px; height: 22px; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--muted); overflow: hidden;
+}
+
+/* ------------------------------------------------- layer thumbnails */
+
+/* Every variant occupies the same box so rows stay aligned whatever mix of
+   layer types a composition has. Backed by a checker so a transparent PNG and a
+   failed load look different. */
+.layer-thumb {
+  width: 22px; height: 22px; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 2px; font-size: 10px; line-height: 1; overflow: hidden;
+}
+.layer-thumb.glyph { color: var(--muted); font-size: 12px; }
+img.layer-thumb {
+  object-fit: contain;
+  background:
+    repeating-conic-gradient(#2b3038 0% 25%, #23272e 0% 50%) 0 0 / 8px 8px;
+}
+.layer-thumb.swatch { border: 1px solid rgba(255, 255, 255, 0.12); }
+.layer-thumb.sample {
+  font-size: 12px; font-weight: 600;
+  background: rgba(0, 0, 0, 0.35);
+  /* The sample is the layer's own color, which may be near the panel's — the
+     dark plate keeps white-on-white legible. */
+}
+.layer-thumb.table-thumb { flex-direction: column; gap: 1px; background: rgba(0, 0, 0, 0.35); }
+.layer-thumb.table-thumb i {
+  font-style: normal; font-size: 6px; line-height: 6px;
+  color: var(--muted); letter-spacing: .5px;
+}
+.layer-thumb.stack { position: relative; }
+.layer-thumb.stack .stack-item { position: absolute; transform: scale(0.6); transform-origin: 0 0; }
+.layer-thumb.stack i { font-style: normal; color: var(--muted); font-size: 12px; }
+.layer-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.layer-rename { flex: 1; padding: 1px 4px; }
+.layer-order button { border: none; background: none; padding: 0 2px; font-size: 9px; }
+
+/* ------------------------------------------------------ properties */
+
+.prop-section { margin-bottom: 14px; }
+.prop-section h3 {
+  margin: 0 0 6px;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 3px;
+}
+.prop-field { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.prop-label { width: 78px; color: var(--muted); font-size: 12px; }
+.prop-input { flex: 1; display: flex; align-items: center; gap: 4px; }
+.prop-input input, .prop-input select, .prop-input textarea { flex: 1; min-width: 0; }
+.stopwatch {
+  border: none; background: none; color: var(--muted);
+  padding: 0 2px; font-size: 12px; opacity: 0.5;
+}
+.stopwatch.on { color: var(--key); opacity: 1; }
+.add-key {
+  border: none; background: none; color: var(--muted);
+  padding: 0 2px; font-size: 11px; opacity: 0.55;
+}
+.add-key:hover { opacity: 1; color: var(--key); border: none; }
+/* Filled when a keyframe already sits at the playhead, matching the timeline. */
+.add-key.on { color: var(--key); opacity: 1; }
+.raw-json { color: var(--muted); font-size: 11px; }
+
+/* Authoring warnings: things that will look like a fault on air but are a
+   timing or sizing mistake here, where they can still be fixed. Amber rather
+   than red — the document is valid and will save; it just will not look right. */
+.prop-warning {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.45;
+  background: rgba(227, 179, 65, 0.12);
+  border: 1px solid rgba(227, 179, 65, 0.35);
+  color: var(--key);
+}
+.reveal-readout { margin: 6px 0 0; }
+
+/* Neutral counterpart to .prop-warning: a statement of fact, not a problem.
+   The clock preview and the "content is a placeholder" note both belong here —
+   amber would read as "something is wrong" when nothing is. */
+.prop-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.prop-note strong { color: var(--text); font-family: ui-monospace, Consolas, monospace; }
+
+/* ----------------------------------------------------------- stage */
+
+.stage-wrap { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.stage-toolbar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 8px; background: var(--panel); border-bottom: 1px solid var(--border);
+}
+.zoom-readout { width: 48px; text-align: center; color: var(--muted); }
+.stage-size { margin-left: auto; color: var(--muted); font-size: 11px; }
+
+/* Answers "why can't I see the layer I just selected?" before it is asked. */
+.selection-hint {
+  margin-left: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  background: rgba(227, 179, 65, 0.15);
+  border: 1px solid rgba(227, 179, 65, 0.4);
+  color: var(--key);
+  white-space: nowrap;
+}
+.selection-hint[data-state='hidden'] {
+  background: rgba(139, 148, 158, 0.15);
+  border-color: rgba(139, 148, 158, 0.4);
+  color: var(--muted);
+}
+.toggle { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; }
+/* Guides auto-hidden because the pane is too narrow. Dimmed rather than removed
+   so the control stays where it was — a toolbar that reflows as you drag a
+   splitter is worse than one with a greyed-out item in it. */
+.toggle[data-auto-off='1'] { opacity: 0.45; cursor: not-allowed; }
+.toggle[data-auto-off='1'] input { cursor: not-allowed; }
+
+.stage-canvas {
+  flex: 1; overflow: hidden; position: relative;
+  display: flex; align-items: center; justify-content: center;
+  background: #05070a;
+  /* The pinch and pan gestures are ours. Left to the browser, a two-finger
+     gesture here zooms the whole page — chrome, panels and all — and a
+     one-finger drag scrolls the document instead of panning the stage. */
+  touch-action: none;
+  /* min-height so the canvas is never measured as zero on a short viewport,
+     which would leave the fit calculation with nothing to work from. */
+  min-height: 120px;
+}
+.stage-transform { position: relative; transform-origin: center center; }
+/* Reads dimmer while the zoom is tracking the viewport, brighter once it is a
+   value the operator chose — the difference the Fit button toggles. */
+.zoom-readout[data-fitted='1'] { color: var(--muted); }
+.zoom-readout[data-fitted='0'] { color: var(--text); }
+.stage-checker {
+  /* Transparency needs to read as transparency, not as black. */
+  background-image:
+    linear-gradient(45deg, #23282f 25%, transparent 25%),
+    linear-gradient(-45deg, #23282f 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #23282f 75%),
+    linear-gradient(-45deg, transparent 75%, #23282f 75%);
+  background-size: 24px 24px;
+  background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+  background-color: #191d23;
+}
+.stage-host { position: absolute; inset: 0; }
+
+/* Selection outline. Width comes from the stage so it stays constant on screen
+   regardless of zoom — a 14px-wide layer is otherwise a few invisible pixels. */
+.stage-host [data-selected='1'] {
+  outline: var(--bz-select-width, 2px) solid var(--accent);
+  outline-offset: 0;
+}
+.stage-guides { position: absolute; inset: 0; pointer-events: none; }
+.stage-guides rect { fill: none; stroke: rgba(88, 166, 255, 0.35); stroke-width: 2; stroke-dasharray: 8 6; }
+.stage-guides line { stroke: rgba(88, 166, 255, 0.18); stroke-width: 1; }
+.stage-empty { margin: auto; color: var(--muted); }
+
+/* -------------------------------------------------------- timeline */
+
+.timeline-panel { height: 100%; }
+.timeline-toolbar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 8px; border-bottom: 1px solid var(--border);
+}
+.timecode { font-family: ui-monospace, Consolas, monospace; color: var(--key); min-width: 76px; }
+
+.timeline-body { flex: 1; display: flex; overflow: auto; min-height: 0; }
+.timeline-label.marker-label { color: var(--muted); font-size: 11px; }
+.timeline-labels { flex: none; border-right: 1px solid var(--border); background: var(--panel); }
+.timeline-label-head {
+  /* Sticks alongside the ruler so the two columns stay in step. */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 24px; display: flex; align-items: center; padding: 0 8px;
+  background: var(--panel);
+  color: var(--muted); font-size: 11px; border-bottom: 1px solid var(--border);
+}
+.timeline-label {
+  height: var(--row); display: flex; align-items: center; padding: 0 8px;
+  font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  border-bottom: 1px solid rgba(48, 54, 61, 0.4);
+}
+.timeline-label.selected { background: var(--accent-dim); color: #fff; }
+.timeline-label.lane { padding-left: 22px; color: var(--muted); font-size: 11px; }
+
+/* A row-template cell. Indented under its table and marked with a rule down the
+   left, because the one structural fact an author needs from this column is
+   whether a track belongs to the table or to a cell inside it: the two animate
+   on different clocks (table time vs. row arrival) and a keyframe placed in the
+   wrong one lands somewhere unintended. */
+.timeline-label.cell {
+  padding-left: 20px;
+  box-shadow: inset 3px 0 0 -1px var(--border);
+}
+.timeline-label.cell .label-cell-key {
+  margin-left: auto;
+  padding: 0 4px;
+  color: var(--muted);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 10px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.timeline-label.cell.selected .label-cell-key { color: #fff; }
+
+/* No lifetime bar lives in this row — a cell has no in/out — so the rule is the
+   only thing distinguishing it from an empty layer row. */
+.timeline-row.cell-row { box-shadow: inset 3px 0 0 -1px var(--border); }
+
+.timeline-tracks {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+
+  /* Sized to its own content, so the playhead spans every row rather than just
+     the visible panel. Deliberately NOT a scroll container: clipping lives on
+     the individual rows below, which lets .timeline-body be the scrollport the
+     sticky ruler anchors to.
+
+     The labels deliberately do NOT get a z-index: raising them above the track
+     area made them swallow pointer events for the keyframe at t=0, whose
+     diamond is centered on its time and so reaches slightly left. The track
+     gutter (TRACK_INSET) keeps that content inside the clip region instead. */
+  align-self: flex-start;
+
+  /* `clip`, not `hidden`, and this distinction is the whole point.
+
+     Two things are absolutely positioned in here and both reach past the right
+     edge: a ruler tick's label sits 3px right of its line, so the last tick
+     overhangs by the width of "2.40s"; and the playhead head is a 10px triangle
+     centered on a 1px line. Neither is clipped by the rows (they are not in a
+     row), so both counted towards .timeline-body's scrollWidth and put a
+     horizontal scrollbar under a timeline that had just been told to Fit.
+
+     `overflow: hidden` would fix the scrollbar and break the panel: it makes
+     this a scroll container, and the sticky ruler and sticky playhead head both
+     anchor to .timeline-body — they would start sticking to this element
+     instead and stop tracking the vertical scroll. `clip` establishes the
+     clipping without the scroll container, so stickiness still resolves outward.
+     It also permits mixing axes, which `hidden` does not: `hidden` on one axis
+     computes the `visible` one to `auto` and reintroduces the scrollbar. */
+  overflow-x: clip;
+  overflow-y: visible;
+}
+.timeline-ruler {
+  /* Sticky so the time axis stays put while the layer list scrolls — you can
+     always tell where you are. Anchors to .timeline-body, which is why the
+     track column must not be a scroll container itself. */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 24px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  cursor: ew-resize; user-select: none;
+}
+.tick { position: absolute; top: 0; height: 100%; border-left: 1px solid var(--border); }
+.tick span { position: absolute; left: 3px; top: 3px; font-size: 10px; color: var(--muted); }
+
+.timeline-row {
+  position: relative; height: var(--row);
+  border-bottom: 1px solid rgba(48, 54, 61, 0.4);
+  /* Horizontal clipping lives here rather than on the track column. A row is
+     exactly its content's height, so clipping both axes costs nothing — and it
+     leaves the track column free of `overflow`, which the sticky ruler needs.
+     Without it, keyframes before a scrolled view start paint over the layer
+     names. */
+  overflow: hidden;
+}
+.timeline-row.layer-row.selected { background: rgba(31, 111, 235, 0.16); }
+.timeline-row.marker-lane { background: rgba(255, 255, 255, 0.02); }
+.lifetime {
+  position: absolute; top: 4px; height: 14px;
+  background: rgba(88, 166, 255, 0.22);
+  border: 1px solid rgba(88, 166, 255, 0.5);
+  border-radius: 3px;
+  cursor: grab;
+}
+.lifetime:hover { background: rgba(88, 166, 255, 0.32); }
+.lifetime:active { cursor: grabbing; }
+
+/* Edge handles sit INSIDE the bar. Reaching outside it (the old `left: -4px`)
+   meant that on a short bar the two handles met in the middle and covered every
+   pixel of it — so grabbing the bar to move it always trimmed an edge instead,
+   changing the layer's length. The component drops the handles below
+   MIN_TRIMMABLE_PX so the bar always keeps a region that means "move";
+   `[data-trimmable='0']` is that state, and it widens the grab cursor's target
+   rather than pretending an edge is there. */
+.trim {
+  position: absolute; top: 0; bottom: 0; width: 6px;
+  cursor: ew-resize;
+  border-radius: 2px;
+}
+.trim-in { left: 0; }
+.trim-out { right: 0; }
+.trim:hover { background: var(--accent); }
+
+/* Touch pointers are far coarser than a mouse: a 6px handle is unhittable, and
+   a mis-hit here silently retimes a graphic. Widen the handles and keep the
+   move region by only doing it where the bar can afford it. */
+@media (pointer: coarse) {
+  .trim { width: 12px; }
+  .lifetime { top: 2px; height: 18px; }
+}
+
+.keyframe {
+  position: absolute; top: 50%; width: 11px; height: 11px;
+  margin: -6px 0 0 -6px;
+  background: var(--key);
+  border: 1px solid #7a5c14;
+  transform: rotate(45deg);
+  cursor: ew-resize;
+}
+.keyframe.selected { background: #fff; border-color: var(--accent); }
+
+.marker {
+  position: absolute; top: 3px; width: 3px; height: 16px;
+  margin-left: -1px; background: var(--danger); cursor: ew-resize;
+}
+.marker.cue { background: var(--muted); }
+
+.playhead {
+  position: absolute; top: 0; bottom: 0; width: 1px;
+  background: var(--danger); pointer-events: none;
+  /* Above the sticky ruler, so the head stays visible and the line reads
+     against the time axis rather than disappearing behind it. */
+  z-index: 3;
+}
+
+/* The head sticks to the top of the scrollport instead of being painted at the
+   top of the content.
+
+   As a ::before on the line it sat at content y=0, so scrolling the layer list
+   carried it out of view and left the ruler with an unlabelled red line running
+   through it. Sticky works here because .playhead spans the full content height
+   — it is the containing block, and .timeline-body is the scrolling ancestor —
+   so the head travels down as you scroll and stops at the ruler.
+
+   Left offsets are deliberately absent: sticky uses them for horizontal
+   scrolling, which would fight the centering. The negative margin does that. */
+.playhead-head {
+  position: sticky;
+  top: 0;
+  display: block;
+  width: 0; height: 0;
+  margin-left: -5px;
+  border-left: 5px solid transparent; border-right: 5px solid transparent;
+  border-top: 8px solid var(--danger);
+}
+
+/* ---------------------------------------------------------- easing */
+
+.easing-overlay {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+.easing-dialog {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+}
+.easing-dialog header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; border-bottom: 1px solid var(--border); font-weight: 600;
+}
+.easing-body { display: flex; gap: 16px; padding: 12px; }
+.easing-controls { width: 230px; display: flex; flex-direction: column; gap: 10px; }
+.easing-controls label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 11px; }
+.preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.bezier-readout { color: var(--key); font-size: 11px; }
+
+/* ------------------------------------------------------- data sources */
+
+.data-panel { overflow: hidden; }
+.panel-toggle {
+  border: none; background: none; padding: 0; font: inherit; font-weight: 600;
+  color: inherit; cursor: pointer;
+}
+.panel-error { padding: 6px 10px; background: #3d1518; color: #ffdcd8; font-size: 11px; }
+.source-list { overflow: auto; flex: 1; padding: 6px 10px; }
+.source-row {
+  padding: 6px 0; border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+}
+/* A failing source is marked on the row, not only in the error text — the whole
+   point of this panel is that a dead feed is obvious at a glance. */
+.source-row.failing { border-left: 2px solid #d1444f; padding-left: 6px; }
+.source-head { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.source-name { font-weight: 600; }
+.source-id { color: var(--muted); font-size: 10px; }
+.source-type { color: var(--muted); font-size: 10px; margin-left: auto; }
+.source-meta {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  color: var(--muted); font-size: 10px; margin-top: 2px;
+}
+.source-error { color: #ff9d95; font-size: 11px; margin-top: 3px; word-break: break-word; }
+.source-actions { display: flex; gap: 4px; margin-top: 5px; flex-wrap: wrap; }
+.source-actions .primary { background: var(--accent-dim); }
+
+.source-editor {
+  padding: 8px 10px; border-top: 1px solid var(--border);
+  background: var(--panel-2); overflow: auto; max-height: 60vh;
+}
+.source-editor label { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+.source-editor label > span { color: var(--muted); font-size: 11px; }
+.source-editor label.inline { flex-direction: row; align-items: center; gap: 6px; }
+/*
+ * Lat/lon, host/port, units/mode — pairs that are read together and would
+ * otherwise stack into a column three times taller than the panel.
+ * `min-width: 0` on the child because a flex item defaults to `auto`, which
+ * refuses to shrink below its input's intrinsic width and overflows the panel.
+ */
+.source-editor .field-row { display: flex; gap: 8px; }
+.source-editor .field-row > label { flex: 1; min-width: 0; }
+.source-editor .field-row > label > input,
+.source-editor .field-row > label > select { min-width: 0; width: 100%; }
+.source-editor .source-error a, .source-editor .hint a { color: inherit; }
+.linkish {
+  border: none; background: none; padding: 0; color: var(--accent);
+  font: inherit; font-size: 10px; text-decoration: underline; cursor: pointer;
+}
+
+/* Candidate row-element paths for an XML source. Wrapped chips rather than a
+   <select>, because the counts are the useful part of each option and a select
+   renders them as unscannable one-line strings. */
+.xml-candidates { display: flex; flex-wrap: wrap; gap: 4px; margin: -4px 0 8px; }
+.xml-candidates .chip {
+  font-size: 10px; padding: 2px 6px; border-radius: 9px;
+  border: 1px solid var(--border); background: var(--panel);
+  color: var(--muted); cursor: pointer; white-space: nowrap;
+}
+.xml-candidates .chip:hover { color: var(--fg); border-color: var(--accent-dim); }
+.xml-candidates .chip.selected {
+  border-color: var(--accent); color: var(--fg); background: var(--accent-dim);
+}
+.xml-candidates .chip .count { opacity: 0.65; }
+
+/* Both grids scroll horizontally rather than wrapping: a standings table with
+   wrapped columns is unreadable, and column alignment is the whole point. */
+.data-preview, .manual-table { overflow-x: auto; margin-bottom: 8px; }
+.data-preview table, .manual-table table { border-collapse: collapse; font-size: 11px; }
+.data-preview th, .manual-table th {
+  text-align: left; color: var(--muted); font-weight: 600;
+  padding: 2px 6px 4px; white-space: nowrap;
+}
+.data-preview td, .manual-table td { padding: 1px 6px; white-space: nowrap; }
+.manual-table th { display: table-cell; }
+.manual-table th code { display: block; color: var(--muted); font-size: 9px; }
+.manual-table .col-label { width: 84px; }
+.manual-table input { width: 84px; padding: 2px 4px; }
+
+/* --------------------------------------------------- table transforms */
+
+.transform-row {
+  display: flex; align-items: center; gap: 4px; margin-bottom: 4px; flex-wrap: wrap;
+}
+.transform-op {
+  color: var(--key); font-size: 10px; text-transform: uppercase;
+  letter-spacing: .5px; min-width: 44px;
+}
+.transform-row select, .transform-row input { flex: 1 1 60px; min-width: 0; }
+.transform-move, .transform-del {
+  border: none; background: none; color: var(--muted); padding: 0 3px; font-size: 10px;
+}
+.hint.warn { color: #e3b341; }
+
+/*
+ * advance carries seven optional fields, which will not sit on the one flex
+ * line the other transforms share. It takes the full width of the row and
+ * stacks; the move/remove buttons stay on the line above it.
+ */
+.transform-advance {
+  flex: 1 1 100%; display: grid; grid-template-columns: 76px 1fr;
+  gap: 3px 6px; align-items: center; margin: 2px 0 4px 44px;
+}
+.transform-advance label { display: contents; }
+.transform-advance label > span { color: var(--muted); font-size: 10px; }
+.transform-advance select, .transform-advance input { width: 100%; min-width: 0; }
+.transform-advance .transform-advance-toggle { display: flex; align-items: center; gap: 5px; grid-column: 1 / -1; }
+.transform-advance .transform-advance-toggle input { width: auto; flex: none; }
+.transform-advance .hint { grid-column: 1 / -1; margin: 2px 0 0; }
+
+/* A slot filled by advance, not by the operator. Read-only and marked as such. */
+.manual-table td.fed input {
+  color: var(--key); background: rgba(31, 111, 235, .08); cursor: not-allowed;
+}
+.manual-table .bracket-bar {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 11px;
+}
+
+.graph-bg { fill: #0b0f14; stroke: var(--border); }
+.graph-linear { stroke: var(--border); stroke-dasharray: 4 4; }
+.graph-curve { fill: none; stroke: var(--accent); stroke-width: 2; }
+.handle-line { stroke: var(--muted); stroke-width: 1; }
+.handle { fill: var(--key); stroke: #000; stroke-width: 1; cursor: grab; }
+
+/* ------------------------------------------------------ small screens */
+
+/* The side panels and the timeline were fixed widths and heights sized for a
+   desktop window. On a tablet they left the stage a sliver — 260 + 300px of
+   chrome out of a 1024px-wide screen — so the preview had nowhere to scale into
+   however well it fitted itself. These reclaim that space progressively rather
+   than hiding panels, which would strand the properties an operator is editing. */
+
+@media (max-width: 1180px) {
+  .left { width: 208px; }
+  .right { width: 244px; }
+  .app-timeline { height: 236px; }
+}
+
+@media (max-width: 900px) {
+  .left { width: 168px; }
+  .right { width: 208px; }
+  .app-timeline { height: 200px; }
+  .prop-label { width: 62px; }
+  .app-bar { flex-wrap: wrap; row-gap: 4px; }
+}
+
+/* A short viewport — a tablet in landscape — squeezes the stage vertically, and
+   the timeline is the panel that can most afford to give. */
+@media (max-height: 780px) {
+  .app-timeline { height: 190px; }
+}
+
+/* Touch targets. A 22px row and a 6px handle are mouse dimensions; on a
+   touchscreen they are misses, and a miss in this editor retimes a graphic. */
+@media (pointer: coarse) {
+  :root { --row: 30px; }
+  button { padding: 6px 10px; }
+  .layer-row { height: 34px; }
+  .timeline-toolbar, .stage-toolbar { gap: 8px; padding: 6px 8px; }
+  .keyframe { width: 15px; height: 15px; margin: -8px 0 0 -8px; }
+  .marker { width: 5px; margin-left: -2px; }
+  /* Scrubbing with a finger: let the ruler own the gesture rather than the
+     browser interpreting it as a page scroll. */
+  .timeline-ruler { touch-action: none; }
+  .timeline-row { touch-action: pan-y; }
+}
+
+/* ------------------------------------------------------- asset bin */
+
+.asset-bin { display: flex; flex-direction: column; min-height: 0; }
+
+/* The drop target doubles as the upload-progress area. One region rather than
+   two: while an upload is running the drop hint is the least useful thing on
+   screen, and stacking them would push the asset list down and then back up
+   again every time a file finished. */
+.asset-drop {
+  margin: 6px; padding: 8px;
+  border: 1px dashed var(--border); border-radius: 4px;
+  text-align: center;
+}
+.asset-drop.over { border-color: var(--accent); background: var(--accent-dim); }
+.asset-drop .hint { margin: 0; }
+
+.asset-uploads { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.asset-uploads li { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+.asset-upload-name {
+  flex: 1; min-width: 0; text-align: left;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.asset-progress {
+  flex: 0 0 70px; height: 4px; border-radius: 2px;
+  background: var(--panel-2); overflow: hidden;
+}
+.asset-progress-fill { display: block; height: 100%; background: var(--accent); }
+.asset-upload-pct { flex: 0 0 34px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.asset-error {
+  margin: 0 6px 6px; padding: 4px 6px;
+  border-radius: 3px; background: rgba(248, 81, 73, 0.12);
+  color: var(--danger, #f85149); font-size: 11px;
+}
+
+.asset-list { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; }
+.asset-empty { padding: 6px 10px; }
+
+.asset-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 6px; height: 34px;
+  border-bottom: 1px solid rgba(48, 54, 61, 0.4);
+}
+.asset-row:hover { background: var(--panel-2); }
+
+/* Checkered, so a transparent PNG and a failed load look different — the same
+   reason the layer thumbnails are. A logo that silently failed to upload and a
+   logo that is legitimately transparent are otherwise the same gray square. */
+.asset-thumb {
+  width: 26px; height: 26px; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 2px; overflow: hidden;
+  background:
+    linear-gradient(45deg, #2a2f36 25%, transparent 25%, transparent 75%, #2a2f36 75%),
+    linear-gradient(45deg, #2a2f36 25%, #1b1f24 25%, #1b1f24 75%, #2a2f36 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 4px 4px;
+}
+.asset-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.asset-glyph { color: var(--muted); font-size: 11px; }
+
+.asset-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.asset-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asset-sub { font-size: 10px; color: var(--muted); }
+.asset-inuse { color: var(--accent); }
+/* Dimmer than the row it sits in, not brighter: a retired file is still there
+   on purpose, it is just no longer the one to reach for. */
+.asset-retired { color: var(--muted); font-style: italic; }
+.asset-row:has(.asset-retired) .asset-thumb { opacity: 0.5; }
+
+.asset-copy, .asset-delete {
+  flex: 0 0 auto; border: none; background: none;
+  padding: 0 3px; font-size: 11px; color: var(--muted);
+}
+.asset-copy:hover, .asset-delete:hover { color: var(--fg); }
+
+/* Confirm in place rather than in a modal. A modal steals focus mid-build for
+   an action that is cheap to get wrong and cheap to undo by re-uploading — the
+   file is content-addressed, so the same bytes come back to the same path. */
+.asset-confirm { display: flex; gap: 3px; flex: 0 0 auto; }
+.asset-confirm button { font-size: 10px; padding: 1px 5px; }
+.asset-confirm .danger { background: rgba(248, 81, 73, 0.18); color: #f85149; }
+
+/* Transcode controls in the asset bin. */
+
+.asset-transcode {
+  flex: 0 0 auto; border: none; background: none;
+  padding: 0 3px; font-size: 12px; color: var(--muted);
+}
+.asset-transcode:hover:not(:disabled) { color: var(--accent); }
+.asset-transcode:disabled { opacity: 0.3; cursor: default; }
+
+/* Replaces the metadata line while a job runs, rather than adding a row — the
+   list is a fixed row height and a growing row would push everything below it
+   down for the minutes an encode takes. */
+.asset-job { display: flex; align-items: center; gap: 5px; }
+.asset-job .asset-progress { flex: 0 0 54px; }
+.asset-job.failed {
+  color: var(--danger);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ------------------------------------------------------- asset library */
+
+/* The docked bin is a picker; this is the library. Facets, a grid, bulk edit
+   and a detail panel do not fit in one column of a three-panel stack without
+   making the layer list beside them unusable, so they get a modal instead.
+
+   Sized in vh/vw rather than fixed px: a graphics box is as likely to be a
+   1080p operator station as a 4K desk, and a library that occupies a quarter of
+   the screen on one and overflows the other is worse than either. */
+
+.lib-overlay {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.66);
+  display: flex; align-items: center; justify-content: center; z-index: 200;
+}
+
+.lib-dialog {
+  display: flex; flex-direction: column;
+  width: min(1500px, 94vw); height: min(900px, 90vh);
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+}
+/* The whole dialog is the drop target, not a strip inside it — an operator
+   dragging forty files aims at the window, not at a dashed rectangle. */
+.lib-dialog.over { outline: 2px dashed var(--accent); outline-offset: -6px; }
+
+.lib-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.lib-header-gap { flex: 1 1 auto; }
+.lib-count { color: var(--muted); font-size: 11px; }
+.lib-search { width: min(340px, 32vw); }
+.lib-close { border: none; background: none; color: var(--muted); font-size: 14px; }
+.lib-close:hover { color: var(--fg, var(--text)); }
+
+.lib-error { margin: 0; padding: 6px 10px; background: #3d1518; color: #ffdcd8; font-size: 11px; }
+
+.lib-uploads { list-style: none; margin: 0; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+.lib-uploads li { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.lib-upload-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-uploads .asset-progress { flex: 0 0 160px; }
+.lib-upload-pct { flex: 0 0 34px; text-align: right; color: var(--muted); }
+
+.lib-body { flex: 1 1 auto; display: flex; min-height: 0; }
+
+/* Facets ------------------------------------------------------------- */
+
+.lib-facets {
+  flex: 0 0 190px; overflow-y: auto; padding: 10px;
+  border-right: 1px solid var(--border); background: var(--bg);
+}
+.lib-facet { margin-bottom: 14px; }
+.lib-facet h4 {
+  margin: 0 0 4px; font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--muted);
+}
+.lib-facet ul { list-style: none; margin: 0; padding: 0; }
+.lib-facet li { margin: 1px 0; }
+.lib-facet button {
+  display: flex; width: 100%; gap: 6px; align-items: baseline;
+  border: none; background: none; padding: 2px 5px; border-radius: 3px;
+  color: var(--text); font: inherit; font-size: 11px; text-align: left;
+}
+.lib-facet button:hover { background: var(--panel-2); }
+.lib-facet button.active { background: var(--accent-dim); color: #fff; }
+.lib-facet-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-facet-count { flex: 0 0 auto; color: var(--muted); font-size: 10px; }
+.lib-facet button.active .lib-facet-count { color: rgba(255, 255, 255, 0.75); }
+.lib-clear { width: 100%; font-size: 11px; }
+
+/* Grid --------------------------------------------------------------- */
+
+.lib-grid-wrap { flex: 1 1 auto; overflow-y: auto; padding: 12px; min-width: 0; }
+.lib-empty { padding: 24px; text-align: center; }
+
+.lib-grid {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+
+.lib-card {
+  position: relative; display: flex; flex-direction: column; gap: 3px;
+  padding: 7px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--panel-2); cursor: pointer;
+}
+.lib-card:hover { border-color: var(--accent); }
+.lib-card.current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.lib-card.ticked { background: rgba(31, 111, 235, 0.18); border-color: var(--accent-dim); }
+
+/* The tick appears on hover or once anything is ticked — a checkbox on every
+   card all the time reads as a form to fill in rather than a library. */
+.lib-tick { position: absolute; top: 5px; left: 5px; opacity: 0; z-index: 1; }
+.lib-card:hover .lib-tick, .lib-card.ticked .lib-tick { opacity: 1; }
+
+.lib-thumb {
+  position: relative; display: flex; align-items: center; justify-content: center;
+  height: 92px; border-radius: 4px; overflow: hidden;
+  /* Checkerboard, so a transparent PNG reads as transparent rather than white
+     — the single most common thing an operator needs to see about a logo. */
+  background-image:
+    linear-gradient(45deg, #2a2f37 25%, transparent 25%, transparent 75%, #2a2f37 75%),
+    linear-gradient(45deg, #2a2f37 25%, transparent 25%, transparent 75%, #2a2f37 75%);
+  background-size: 14px 14px;
+  background-position: 0 0, 7px 7px;
+  background-color: #1b1f27;
+}
+.lib-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.lib-glyph { font-size: 26px; color: var(--muted); }
+
+.lib-badge {
+  position: absolute; bottom: 3px; right: 3px;
+  padding: 0 4px; border-radius: 3px; font-size: 10px; line-height: 15px;
+}
+.lib-badge.alpha { background: rgba(88, 166, 255, 0.25); color: var(--accent); }
+.lib-badge.expired { right: 22px; background: rgba(248, 81, 73, 0.28); color: var(--danger); font-weight: 700; }
+
+.lib-name { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-sub { font-size: 10px; color: var(--muted); }
+.lib-folder {
+  align-self: flex-start; padding: 0 5px; border-radius: 8px;
+  background: var(--panel); border: 1px solid var(--border);
+  font-size: 9px; color: var(--muted);
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Detail and bulk ---------------------------------------------------- */
+
+.lib-detail {
+  flex: 0 0 300px; display: flex; flex-direction: column; min-height: 0;
+  border-left: 1px solid var(--border); background: var(--bg);
+}
+.lib-detail > header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 10px; border-bottom: 1px solid var(--border); flex: 0 0 auto;
+}
+.lib-detail-body { flex: 1 1 auto; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 9px; }
+.lib-detail label, .lib-field { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--muted); }
+.lib-detail input, .lib-detail select, .lib-detail textarea { width: 100%; color: var(--text); }
+.lib-field-label { font-size: 11px; }
+.lib-inline { display: flex; gap: 4px; }
+.lib-inline input { flex: 1 1 auto; min-width: 0; }
+
+.lib-tags { display: flex; flex-wrap: wrap; gap: 3px; }
+.lib-tag {
+  padding: 1px 6px; border-radius: 9px; font-size: 10px;
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+}
+.lib-tag:hover { border-color: var(--danger); color: var(--danger); }
+
+.lib-warn {
+  margin: 0; padding: 5px 7px; border-radius: 4px; font-size: 11px;
+  background: rgba(248, 81, 73, 0.14); color: #ffb3ae;
+}
+
+/* Derived facts. Rendered as a definition list rather than as disabled inputs:
+   a greyed-out field invites clicking, and these describe the bytes — there is
+   nothing to type. */
+.lib-tech {
+  margin: 4px 0 0; padding-top: 8px; border-top: 1px solid var(--border);
+  display: grid; grid-template-columns: auto 1fr; gap: 2px 8px;
+  font-size: 10px;
+}
+.lib-tech dt { color: var(--muted); }
+.lib-tech dd { margin: 0; overflow: hidden; text-overflow: ellipsis; }
+
+.lib-usage { padding-top: 8px; border-top: 1px solid var(--border); }
+.lib-usage h4 { margin: 0 0 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.lib-usage ul { list-style: none; margin: 0; padding: 0; font-size: 11px; }
+.lib-usage li { margin: 2px 0; }
+
+.lib-delete { align-self: flex-start; color: var(--danger); border-color: rgba(248, 81, 73, 0.4); }
+.lib-confirm { padding: 7px; border: 1px solid var(--danger); border-radius: 4px; background: rgba(248, 81, 73, 0.1); }
+.lib-confirm p { margin: 0 0 6px; font-size: 11px; }
+.lib-confirm .danger { background: rgba(248, 81, 73, 0.2); color: var(--danger); }
+
+.asset-browse { font-size: 11px; }
+
+/* ---------------------------------------------- upload conflict prompt */
+
+/* Narrow and short, unlike the library it borrows the overlay from. This is a
+   question with two answers, asked while the operator is mid-gesture and often
+   mid-show; a dialog the size of the library would imply a session's worth of
+   work rather than one click. It reuses `.lib-overlay` because two dimming
+   layers that differ slightly is the kind of inconsistency people notice
+   without being able to say why. */
+
+.conflict-dialog {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; gap: 10px;
+  width: min(620px, 92vw); max-height: 84vh;
+  padding: 14px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.7);
+  z-index: 201;
+}
+
+.conflict-dialog header strong { font-size: 14px; }
+
+.conflict-modes { display: flex; flex-direction: column; gap: 6px; }
+.conflict-modes label {
+  display: flex; gap: 8px; align-items: flex-start;
+  padding: 7px 8px; border: 1px solid var(--border); border-radius: 4px;
+  cursor: pointer;
+}
+.conflict-modes label:hover { border-color: var(--accent); }
+/* `:has` rather than a class toggled in React: the checked state already lives
+   in the radio, and mirroring it into props is two sources of truth for one
+   fact. */
+.conflict-modes label:has(input:checked) {
+  border-color: var(--accent); background: rgba(88, 166, 255, 0.08);
+}
+.conflict-modes label > span { display: flex; flex-direction: column; gap: 2px; }
+.conflict-modes input { margin-top: 2px; }
+
+.conflict-list {
+  list-style: none; margin: 0; padding: 0;
+  overflow-y: auto; min-height: 0;
+  border: 1px solid var(--border); border-radius: 4px;
+}
+.conflict-list li {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.conflict-list li:last-child { border-bottom: none; }
+
+/* A row that is going to be replaced is marked, because "Replace" as a button
+   label describes what clicking does, not what the current state is — and with
+   per-file overrides in play the two come apart. */
+.conflict-list li[data-choice='replace'] { border-left: 2px solid var(--key); }
+.conflict-list li[data-choice='new'] { border-left: 2px solid transparent; }
+
+.conflict-thumb {
+  flex: 0 0 auto; width: 34px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 3px;
+  overflow: hidden;
+}
+.conflict-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+.conflict-meta { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.conflict-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conflict-sub { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conflict-override { flex: 0 0 auto; font-size: 11px; }
+
+.conflict-clean { margin: 0; }
+/* A hint that the two files may be the same, not a claim that they are. */
+.conflict-same { color: var(--key); }
+
+.conflict-dialog footer {
+  display: flex; align-items: center; gap: 8px;
+  padding-top: 4px; border-top: 1px solid var(--border);
+}
+.conflict-actions { margin-left: auto; display: flex; gap: 6px; }
+.conflict-dialog .primary { background: var(--accent-dim); border-color: var(--accent-dim); }
+
+/* What a replace changed, after the fact. A replace can rewrite layers in
+   compositions that are not on screen, and an operator who is not told has no
+   reason to go and check them. */
+.asset-replaced {
+  margin: 0; padding: 5px 7px;
+  border: 1px solid var(--accent-dim); border-radius: 4px;
+  background: rgba(31, 111, 235, 0.12);
+  font-size: 11px;
+  display: flex; align-items: baseline; gap: 6px;
+}
+.asset-replaced button { padding: 0 4px; margin-left: auto; font-size: 11px; }
+
+/* ------------------------------------------- project and scene dialogs */
+
+/* Shared by New project, Delete project and Delete scene. All three borrow
+   `.conflict-dialog` for the frame — one question, two buttons — and add only
+   what a form needs: labelled fields, a place for the server's complaint about
+   one of them, and a destructive button that does not look like the safe one.
+
+   Two of the three cannot be undone, so nothing here is styled to be quick. */
+
+.dialog-field { display: flex; flex-direction: column; gap: 4px; }
+.dialog-field > span { color: var(--muted); font-size: 11px; }
+.dialog-field input { width: 100%; }
+/* The browser's own invalid ring is inconsistent across the CEF builds in vMix
+   and OBS, and this field is read in a hurry. */
+.dialog-field input[aria-invalid='true'] { border-color: var(--danger); }
+
+.dialog-hint { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.dialog-error { margin: 0; color: var(--danger); font-size: 11px; line-height: 1.5; }
+
+/* Warnings carry a rule rather than a background wash: the dialog is already
+   a raised panel, and a second filled surface inside it flattens both. */
+.dialog-warn {
+  margin: 0; padding: 8px 10px; font-size: 12px; line-height: 1.6;
+  border-left: 3px solid var(--danger); background: rgba(248, 81, 73, 0.08);
+  border-radius: 0 4px 4px 0;
+}
+
+/* What is still using this scene. Scrolls rather than growing the dialog past
+   the viewport — a scene mounted by a dozen others is exactly the case where
+   the list matters and exactly the case that would push the buttons off. */
+.dialog-list {
+  list-style: none; margin: 0; padding: 6px 8px;
+  max-height: 30vh; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 4px;
+  font-size: 12px;
+}
+.dialog-list li { display: flex; align-items: baseline; gap: 6px; padding: 3px 0; }
+.dialog-tag {
+  margin-left: auto; padding: 0 6px; border-radius: 8px;
+  border: 1px solid var(--border); color: var(--muted); font-size: 10px;
+}
+
+.dialog-actions { display: flex; justify-content: flex-end; gap: 6px; padding-top: 4px; }
+.dialog-actions .primary { background: var(--accent-dim); border-color: var(--accent-dim); }
+.dialog-actions .danger {
+  background: rgba(248, 81, 73, 0.18); border-color: rgba(248, 81, 73, 0.5); color: var(--danger);
+}
+.dialog-actions .danger:disabled { opacity: 0.45; }

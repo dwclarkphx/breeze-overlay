@@ -1,0 +1,1954 @@
+{
+  "formatVersion": 1,
+  "id": "demo",
+  "name": "Breeze Demo",
+  "createdAt": "2026-07-26T00:00:00.000Z",
+  "updatedAt": "2026-08-03T00:00:00.000Z",
+  "assets": [],
+  "compositions": [
+    {
+      "formatVersion": 1,
+      "id": "l3rd-name",
+      "name": "Lower Third \u2014 Name",
+      "duration": 2.4,
+      "stage": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 60,
+        "background": "transparent"
+      },
+      "markers": [
+        {
+          "type": "stop",
+          "time": 1.5,
+          "name": "Hold on air"
+        }
+      ],
+      "layers": [
+        {
+          "id": "bar",
+          "name": "Bar",
+          "type": "shape",
+          "shape": "rect",
+          "fill": {
+            "type": "linear",
+            "angle": 90,
+            "stops": [
+              {
+                "pos": 0,
+                "color": "#0b1f33"
+              },
+              {
+                "pos": 1,
+                "color": "#123b5e"
+              }
+            ]
+          },
+          "cornerRadius": 4,
+          "size": {
+            "width": 900,
+            "height": 100
+          },
+          "transform": {
+            "x": 120,
+            "y": 870,
+            "anchorX": 0,
+            "anchorY": 0.5
+          },
+          "keyframes": {
+            "x": [
+              {
+                "t": 0,
+                "v": -960,
+                "ease": "power3.out"
+              },
+              {
+                "t": 0.6,
+                "v": 120,
+                "ease": "none"
+              },
+              {
+                "t": 1.5,
+                "v": 120,
+                "ease": "power3.in"
+              },
+              {
+                "t": 2.1,
+                "v": -960
+              }
+            ]
+          }
+        },
+        {
+          "id": "accent",
+          "name": "Accent",
+          "type": "shape",
+          "shape": "rect",
+          "fill": "#ff3b30",
+          "size": {
+            "width": 14,
+            "height": 100
+          },
+          "transform": {
+            "x": 120,
+            "y": 870,
+            "anchorX": 0,
+            "anchorY": 0.5
+          },
+          "keyframes": {
+            "x": [
+              {
+                "t": 0,
+                "v": -960,
+                "ease": "power3.out"
+              },
+              {
+                "t": 0.08,
+                "v": -960,
+                "ease": "power3.out"
+              },
+              {
+                "t": 0.68,
+                "v": 120,
+                "ease": "none"
+              },
+              {
+                "t": 1.5,
+                "v": 120,
+                "ease": "power3.in"
+              },
+              {
+                "t": 2.02,
+                "v": -960
+              }
+            ]
+          }
+        },
+        {
+          "id": "name",
+          "name": "Name",
+          "type": "text",
+          "text": "JANE DOE",
+          "binding": "name",
+          "style": {
+            "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+            "fontSize": 40,
+            "fontWeight": 700,
+            "fill": "#ffffff",
+            "letterSpacing": 0.5,
+            "align": "left",
+            "verticalAlign": "middle",
+            "textTransform": "uppercase"
+          },
+          "fit": {
+            "mode": "width",
+            "maxWidth": 700,
+            "minScale": 0.6
+          },
+          "size": {
+            "width": 700,
+            "height": 44
+          },
+          "transform": {
+            "x": 160,
+            "y": 878,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0,
+                "v": 0,
+                "ease": "none"
+              },
+              {
+                "t": 0.35,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.6,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 1.5,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 1.85,
+                "v": 0
+              }
+            ],
+            "y": [
+              {
+                "t": 0,
+                "v": 898,
+                "ease": "none"
+              },
+              {
+                "t": 0.35,
+                "v": 898,
+                "ease": "power3.out"
+              },
+              {
+                "t": 0.7,
+                "v": 878
+              }
+            ]
+          }
+        },
+        {
+          "id": "badge",
+          "name": "Live badge",
+          "type": "composition",
+          "ref": "badge",
+          "in": 0.3,
+          "size": {
+            "width": 120,
+            "height": 40
+          },
+          "transform": {
+            "x": 900,
+            "y": 878,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "overrides": {
+            "badgeText": "LIVE"
+          },
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 1.5,
+                "v": 1
+              },
+              {
+                "t": 1.845833,
+                "v": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "title",
+          "name": "Title",
+          "type": "text",
+          "text": "Senior Correspondent",
+          "binding": "title",
+          "style": {
+            "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+            "fontSize": 24,
+            "fontWeight": 400,
+            "fill": "#9fb3c8",
+            "letterSpacing": 1.2,
+            "align": "left",
+            "verticalAlign": "middle"
+          },
+          "fit": {
+            "mode": "width",
+            "maxWidth": 700,
+            "minScale": 0.6
+          },
+          "size": {
+            "width": 700,
+            "height": 30
+          },
+          "transform": {
+            "x": 160,
+            "y": 924,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0,
+                "v": 0,
+                "ease": "none"
+              },
+              {
+                "t": 0.45,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.72,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 1.5,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 1.8,
+                "v": 0
+              }
+            ],
+            "y": [
+              {
+                "t": 0,
+                "v": 940,
+                "ease": "none"
+              },
+              {
+                "t": 0.45,
+                "v": 940,
+                "ease": "power3.out"
+              },
+              {
+                "t": 0.82,
+                "v": 924
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "badge",
+      "formatVersion": 1,
+      "name": "Badge",
+      "duration": 0.4,
+      "stage": {
+        "width": 120,
+        "height": 40,
+        "fps": 60,
+        "background": "transparent"
+      },
+      "layers": [
+        {
+          "id": "chip",
+          "name": "Chip",
+          "type": "shape",
+          "shape": "rect",
+          "fill": "#ff3b30",
+          "cornerRadius": 4,
+          "size": {
+            "width": 120,
+            "height": 40
+          },
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "anchorX": 0.5,
+            "anchorY": 0.5
+          },
+          "mask": {
+            "type": "rect",
+            "x": 0,
+            "y": 0,
+            "width": 120,
+            "height": 40,
+            "feather": 6
+          },
+          "keyframes": {
+            "scaleX": [
+              {
+                "t": 0,
+                "v": 0,
+                "ease": "back.out"
+              },
+              {
+                "t": 0.35,
+                "v": 1
+              }
+            ]
+          }
+        },
+        {
+          "id": "label",
+          "name": "Badge text",
+          "type": "text",
+          "text": "LIVE",
+          "binding": "badgeText",
+          "style": {
+            "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+            "fontSize": 20,
+            "fontWeight": 700,
+            "fill": "#ffffff",
+            "letterSpacing": 2,
+            "align": "center",
+            "verticalAlign": "middle"
+          },
+          "fit": {
+            "mode": "width",
+            "maxWidth": 104,
+            "minScale": 0.6
+          },
+          "size": {
+            "width": 120,
+            "height": 40
+          },
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0,
+                "v": 0,
+                "ease": "none"
+              },
+              {
+                "t": 0.2,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.4,
+                "v": 1
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "ticker",
+      "formatVersion": 1,
+      "name": "News Ticker",
+      "duration": 1.2,
+      "stage": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 60,
+        "background": "transparent"
+      },
+      "markers": [
+        {
+          "type": "stop",
+          "time": 0.6
+        }
+      ],
+      "layers": [
+        {
+          "id": "ticker-bg",
+          "name": "Ticker background",
+          "type": "shape",
+          "shape": "rect",
+          "fill": "#0b1f33",
+          "size": {
+            "width": 1920,
+            "height": 64
+          },
+          "transform": {
+            "x": 0,
+            "y": 1000,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "keyframes": {
+            "y": [
+              {
+                "t": 0,
+                "v": 1080,
+                "ease": "power3.out"
+              },
+              {
+                "t": 0.5,
+                "v": 1000,
+                "ease": "none"
+              },
+              {
+                "t": 0.6,
+                "v": 1000,
+                "ease": "power3.in"
+              },
+              {
+                "t": 1.1,
+                "v": 1080
+              }
+            ]
+          }
+        },
+        {
+          "id": "ticker-text",
+          "name": "Headlines",
+          "type": "crawl",
+          "binding": "headlines",
+          "speed": 140,
+          "direction": "left",
+          "separator": "     \u2022     ",
+          "items": [
+            "Breeze Overlay reaches Phase 1",
+            "Runtime, schema and server online",
+            "Editor lands in Phase 2"
+          ],
+          "style": {
+            "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+            "fontSize": 28,
+            "fill": "#e6edf3"
+          },
+          "size": {
+            "width": 1920,
+            "height": 64
+          },
+          "transform": {
+            "x": 0,
+            "y": 1000,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "keyframes": {
+            "y": [
+              {
+                "t": 0,
+                "v": 1080,
+                "ease": "power3.out"
+              },
+              {
+                "t": 0.5,
+                "v": 1000,
+                "ease": "none"
+              },
+              {
+                "t": 0.6,
+                "v": 1000,
+                "ease": "power3.in"
+              },
+              {
+                "t": 1.1,
+                "v": 1080
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "news-ticker",
+      "formatVersion": 1,
+      "name": "News Ticker \u2014 Feed",
+      "duration": 1.2,
+      "stage": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 60,
+        "background": "transparent"
+      },
+      "markers": [
+        {
+          "type": "stop",
+          "time": 0.6
+        }
+      ],
+      "layers": [
+        {
+          "id": "feed-bg",
+          "name": "Ticker background",
+          "type": "shape",
+          "shape": "rect",
+          "fill": "#0b1f33",
+          "size": {
+            "width": 1920,
+            "height": 64
+          },
+          "transform": {
+            "x": 0,
+            "y": 1000,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "keyframes": {
+            "y": [
+              {
+                "t": 0,
+                "v": 1080,
+                "ease": "power3.out"
+              },
+              {
+                "t": 0.5,
+                "v": 1000,
+                "ease": "none"
+              },
+              {
+                "t": 0.6,
+                "v": 1000,
+                "ease": "power3.in"
+              },
+              {
+                "t": 1.1,
+                "v": 1080
+              }
+            ]
+          }
+        },
+        {
+          "id": "feed-text",
+          "name": "Headlines from feed",
+          "type": "crawl",
+          "binding": "headlines",
+          "speed": 140,
+          "direction": "left",
+          "separator": "     \u2022     ",
+          "items": [
+            "Waiting for the headline feed\u2026"
+          ],
+          "style": {
+            "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+            "fontSize": 28,
+            "fill": "#e6edf3"
+          },
+          "size": {
+            "width": 1920,
+            "height": 64
+          },
+          "transform": {
+            "x": 0,
+            "y": 1000,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "keyframes": {
+            "y": [
+              {
+                "t": 0,
+                "v": 1080,
+                "ease": "power3.out"
+              },
+              {
+                "t": 0.5,
+                "v": 1000,
+                "ease": "none"
+              },
+              {
+                "t": 0.6,
+                "v": 1000,
+                "ease": "power3.in"
+              },
+              {
+                "t": 1.1,
+                "v": 1080
+              }
+            ]
+          },
+          "source": "headlines",
+          "column": "title",
+          "transforms": [
+            {
+              "op": "sort",
+              "key": "date",
+              "dir": "desc"
+            },
+            {
+              "op": "limit",
+              "n": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "l3rd-reveal",
+      "formatVersion": 1,
+      "name": "Lower Third \u2014 Reveal",
+      "duration": 3,
+      "stage": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 60,
+        "background": "transparent"
+      },
+      "markers": [
+        {
+          "type": "stop",
+          "time": 1.6,
+          "name": "Hold on air"
+        }
+      ],
+      "layers": [
+        {
+          "id": "bar",
+          "name": "Bar",
+          "type": "shape",
+          "shape": "rect",
+          "fill": {
+            "type": "linear",
+            "angle": 90,
+            "stops": [
+              {
+                "pos": 0,
+                "color": "#0b1f33"
+              },
+              {
+                "pos": 1,
+                "color": "#123b5e"
+              }
+            ]
+          },
+          "cornerRadius": 4,
+          "size": {
+            "width": 900,
+            "height": 100
+          },
+          "transform": {
+            "x": 120,
+            "y": 870,
+            "anchorX": 0,
+            "anchorY": 0.5
+          },
+          "keyframes": {
+            "x": [
+              {
+                "t": 0,
+                "v": -960,
+                "ease": "power3.out"
+              },
+              {
+                "t": 0.5,
+                "v": 120,
+                "ease": "none"
+              },
+              {
+                "t": 1.6,
+                "v": 120,
+                "ease": "power3.in"
+              },
+              {
+                "t": 2.3,
+                "v": -960
+              }
+            ]
+          }
+        },
+        {
+          "id": "name",
+          "name": "Name",
+          "type": "text",
+          "text": "JANE DOE",
+          "binding": "name",
+          "style": {
+            "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+            "fontSize": 40,
+            "fontWeight": 700,
+            "fill": "#ffffff",
+            "letterSpacing": 0.5,
+            "align": "left",
+            "verticalAlign": "middle",
+            "textTransform": "uppercase"
+          },
+          "fit": {
+            "mode": "width",
+            "maxWidth": 700,
+            "minScale": 0.6
+          },
+          "textAnimPreset": {
+            "id": "chars-up"
+          },
+          "size": {
+            "width": 700,
+            "height": 44
+          },
+          "transform": {
+            "x": 160,
+            "y": 878,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "in": 0.45,
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 1.6,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 1.95,
+                "v": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "title",
+          "name": "Title",
+          "type": "text",
+          "text": "Senior Correspondent",
+          "binding": "title",
+          "style": {
+            "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+            "fontSize": 24,
+            "fontWeight": 400,
+            "fill": "#9fb3c8",
+            "letterSpacing": 1.2,
+            "align": "left",
+            "verticalAlign": "middle"
+          },
+          "fit": {
+            "mode": "width",
+            "maxWidth": 700,
+            "minScale": 0.6
+          },
+          "textAnimPreset": {
+            "id": "words-fade"
+          },
+          "size": {
+            "width": 700,
+            "height": 30
+          },
+          "transform": {
+            "x": 160,
+            "y": 924,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "in": 0.7,
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 1.6,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 1.9,
+                "v": 0
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "formatVersion": 1,
+      "id": "standings",
+      "name": "Standings \u2014 Table",
+      "duration": 3,
+      "stage": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 60,
+        "background": "transparent"
+      },
+      "markers": [
+        {
+          "type": "stop",
+          "time": 1.4,
+          "name": "Hold on air"
+        }
+      ],
+      "layers": [
+        {
+          "id": "panel",
+          "type": "group",
+          "name": "Standings panel",
+          "transform": {
+            "x": 120,
+            "y": 300
+          },
+          "children": [
+            {
+              "id": "header-bar",
+              "type": "shape",
+              "name": "Header bar",
+              "shape": "rect",
+              "fill": "#1f6feb",
+              "cornerRadius": 4,
+              "size": {
+                "width": 760,
+                "height": 52
+              },
+              "transform": {
+                "x": 0,
+                "y": -60
+              },
+              "keyframes": {
+                "x": [
+                  {
+                    "t": 0,
+                    "v": -890,
+                    "ease": "power3.out"
+                  },
+                  {
+                    "t": 0.45,
+                    "v": 0
+                  }
+                ],
+                "opacity": [
+                  {
+                    "t": 2.6,
+                    "v": 1,
+                    "ease": "power1.in"
+                  },
+                  {
+                    "t": 3,
+                    "v": 0
+                  }
+                ]
+              }
+            },
+            {
+              "id": "header-text",
+              "type": "text",
+              "name": "Header",
+              "text": "EAST DIVISION",
+              "binding": "heading",
+              "size": {
+                "width": 720,
+                "height": 52
+              },
+              "transform": {
+                "x": 20,
+                "y": -60
+              },
+              "style": {
+                "fontFamily": "Inter, Arial, sans-serif",
+                "fontSize": 28,
+                "fontWeight": 700,
+                "fill": "#ffffff",
+                "letterSpacing": 2,
+                "align": "left",
+                "verticalAlign": "middle"
+              },
+              "keyframes": {
+                "x": [
+                  {
+                    "t": 0,
+                    "v": -800,
+                    "ease": "power3.out"
+                  },
+                  {
+                    "t": 0.5,
+                    "v": 20
+                  }
+                ],
+                "opacity": [
+                  {
+                    "t": 2.6,
+                    "v": 1,
+                    "ease": "power1.in"
+                  },
+                  {
+                    "t": 3,
+                    "v": 0
+                  }
+                ]
+              }
+            },
+            {
+              "id": "table",
+              "type": "table",
+              "name": "Standings table",
+              "source": "standings",
+              "binding": "standings",
+              "size": {
+                "width": 760,
+                "height": 344
+              },
+              "transform": {
+                "x": 0,
+                "y": 72
+              },
+              "transforms": [
+                {
+                  "op": "sort",
+                  "key": "w",
+                  "dir": "desc"
+                },
+                {
+                  "op": "rank"
+                }
+              ],
+              "row": {
+                "height": 64,
+                "gap": 6,
+                "cells": [
+                  {
+                    "id": "row-bg",
+                    "type": "shape",
+                    "name": "Row background",
+                    "shape": "rect",
+                    "fill": {
+                      "type": "linear",
+                      "angle": 90,
+                      "stops": [
+                        {
+                          "pos": 0,
+                          "color": "rgba(13,17,23,0.92)"
+                        },
+                        {
+                          "pos": 1,
+                          "color": "rgba(22,27,34,0.92)"
+                        }
+                      ]
+                    },
+                    "cornerRadius": 4,
+                    "size": {
+                      "width": 760,
+                      "height": 64
+                    },
+                    "transform": {
+                      "x": 0,
+                      "y": 0
+                    }
+                  },
+                  {
+                    "id": "pos-chip",
+                    "type": "shape",
+                    "name": "Position chip",
+                    "shape": "rect",
+                    "fill": "#1f6feb",
+                    "cornerRadius": 3,
+                    "size": {
+                      "width": 56,
+                      "height": 64
+                    },
+                    "transform": {
+                      "x": 0,
+                      "y": 0
+                    }
+                  },
+                  {
+                    "id": "pos",
+                    "type": "text",
+                    "name": "Position",
+                    "cell": "rank",
+                    "text": "",
+                    "size": {
+                      "width": 56,
+                      "height": 64
+                    },
+                    "transform": {
+                      "x": 0,
+                      "y": 0
+                    },
+                    "style": {
+                      "fontFamily": "Inter, Arial, sans-serif",
+                      "fontSize": 30,
+                      "fontWeight": 600,
+                      "fill": "#ffffff",
+                      "align": "center",
+                      "verticalAlign": "middle"
+                    }
+                  },
+                  {
+                    "id": "team",
+                    "type": "text",
+                    "name": "Team",
+                    "cell": "team",
+                    "text": "",
+                    "size": {
+                      "width": 440,
+                      "height": 64
+                    },
+                    "transform": {
+                      "x": 76,
+                      "y": 0
+                    },
+                    "style": {
+                      "fontFamily": "Inter, Arial, sans-serif",
+                      "fontSize": 34,
+                      "fontWeight": 600,
+                      "fill": "#ffffff",
+                      "align": "left",
+                      "verticalAlign": "middle"
+                    },
+                    "fit": {
+                      "mode": "width",
+                      "maxWidth": 420,
+                      "minScale": 0.6
+                    }
+                  },
+                  {
+                    "id": "w",
+                    "type": "text",
+                    "name": "Wins",
+                    "cell": "w",
+                    "text": "",
+                    "size": {
+                      "width": 70,
+                      "height": 64
+                    },
+                    "transform": {
+                      "x": 530,
+                      "y": 0
+                    },
+                    "style": {
+                      "fontFamily": "Inter, Arial, sans-serif",
+                      "fontSize": 34,
+                      "fontWeight": 600,
+                      "fill": "#7ee787",
+                      "align": "center",
+                      "verticalAlign": "middle"
+                    }
+                  },
+                  {
+                    "id": "l",
+                    "type": "text",
+                    "name": "Losses",
+                    "cell": "l",
+                    "text": "",
+                    "size": {
+                      "width": 70,
+                      "height": 64
+                    },
+                    "transform": {
+                      "x": 610,
+                      "y": 0
+                    },
+                    "style": {
+                      "fontFamily": "Inter, Arial, sans-serif",
+                      "fontSize": 34,
+                      "fontWeight": 600,
+                      "fill": "#ff9d95",
+                      "align": "center",
+                      "verticalAlign": "middle"
+                    }
+                  },
+                  {
+                    "id": "pct",
+                    "type": "text",
+                    "name": "Win pct",
+                    "cell": "pct",
+                    "text": "",
+                    "size": {
+                      "width": 76,
+                      "height": 64
+                    },
+                    "transform": {
+                      "x": 680,
+                      "y": 0
+                    },
+                    "style": {
+                      "fontFamily": "Inter, Arial, sans-serif",
+                      "fontSize": 34,
+                      "fontWeight": 400,
+                      "fill": "#8b949e",
+                      "align": "center",
+                      "verticalAlign": "middle"
+                    }
+                  }
+                ]
+              },
+              "rowsPerPage": 5,
+              "rowAnim": {
+                "id": "rows-up",
+                "stagger": 0.07,
+                "duration": 0.45,
+                "ease": "power3.out"
+              },
+              "flip": {
+                "duration": 0.5,
+                "ease": "power2.inOut"
+              },
+              "data": {
+                "columns": [
+                  {
+                    "key": "team",
+                    "label": "Team",
+                    "type": "string"
+                  },
+                  {
+                    "key": "w",
+                    "label": "W",
+                    "type": "number"
+                  },
+                  {
+                    "key": "l",
+                    "label": "L",
+                    "type": "number"
+                  },
+                  {
+                    "key": "pct",
+                    "label": "PCT",
+                    "type": "string"
+                  }
+                ],
+                "rows": [
+                  {
+                    "team": "Mesa Marlins",
+                    "w": 11,
+                    "l": 2,
+                    "pct": ".846"
+                  },
+                  {
+                    "team": "Chandler Chargers",
+                    "w": 9,
+                    "l": 4,
+                    "pct": ".692"
+                  },
+                  {
+                    "team": "Tempe Thunderbirds",
+                    "w": 8,
+                    "l": 5,
+                    "pct": ".615"
+                  },
+                  {
+                    "team": "Gilbert Grizzlies",
+                    "w": 7,
+                    "l": 6,
+                    "pct": ".538"
+                  },
+                  {
+                    "team": "Scottsdale Scorpions",
+                    "w": 5,
+                    "l": 8,
+                    "pct": ".385"
+                  },
+                  {
+                    "team": "Peoria Pioneers",
+                    "w": 3,
+                    "l": 10,
+                    "pct": ".231"
+                  }
+                ]
+              },
+              "keyframes": {
+                "y": [
+                  {
+                    "t": 0,
+                    "v": 40,
+                    "ease": "power3.out"
+                  },
+                  {
+                    "t": 0.5,
+                    "v": 0
+                  }
+                ],
+                "opacity": [
+                  {
+                    "t": 0,
+                    "v": 0,
+                    "ease": "power1.out"
+                  },
+                  {
+                    "t": 0.35,
+                    "v": 1
+                  },
+                  {
+                    "t": 2.6,
+                    "v": 1,
+                    "ease": "power1.in"
+                  },
+                  {
+                    "t": 3,
+                    "v": 0
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "formatVersion": 1,
+      "id": "screen-bug",
+      "name": "Screen Bug \u2014 Logo, Time & Temp",
+      "duration": 2.4,
+      "stage": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 60,
+        "background": "transparent"
+      },
+      "markers": [
+        {
+          "type": "stop",
+          "time": 1.5,
+          "name": "Hold on air"
+        }
+      ],
+      "layers": [
+        {
+          "id": "bug",
+          "name": "Screen bug",
+          "type": "group",
+          "transform": {
+            "x": 1520,
+            "y": 818
+          },
+          "keyframes": {
+            "x": [
+              {
+                "t": 0,
+                "v": 2000,
+                "ease": "power3.out"
+              },
+              {
+                "t": 0.6,
+                "v": 1520,
+                "ease": "none"
+              },
+              {
+                "t": 1.5,
+                "v": 1520,
+                "ease": "power3.in"
+              },
+              {
+                "t": 2.1,
+                "v": 2000
+              }
+            ]
+          },
+          "children": [
+            {
+              "id": "bug-panel",
+              "name": "Logo panel",
+              "type": "shape",
+              "shape": "rect",
+              "fill": {
+                "type": "linear",
+                "angle": 90,
+                "stops": [
+                  {
+                    "pos": 0,
+                    "color": "#0b1f33"
+                  },
+                  {
+                    "pos": 1,
+                    "color": "#123b5e"
+                  }
+                ]
+              },
+              "cornerRadius": 4,
+              "size": {
+                "width": 280,
+                "height": 100
+              },
+              "transform": {
+                "x": 0,
+                "y": 0,
+                "anchorX": 0,
+                "anchorY": 0
+              }
+            },
+            {
+              "id": "bug-accent",
+              "name": "Accent",
+              "type": "shape",
+              "shape": "rect",
+              "fill": "#ff3b30",
+              "size": {
+                "width": 14,
+                "height": 100
+              },
+              "transform": {
+                "x": 266,
+                "y": 0,
+                "anchorX": 0,
+                "anchorY": 1
+              },
+              "keyframes": {
+                "scaleY": [
+                  {
+                    "t": 0,
+                    "v": 0,
+                    "ease": "none"
+                  },
+                  {
+                    "t": 0.5,
+                    "v": 0,
+                    "ease": "power3.out"
+                  },
+                  {
+                    "t": 0.85,
+                    "v": 1
+                  }
+                ]
+              }
+            },
+            {
+              "id": "logo-ring",
+              "name": "Logo ring",
+              "type": "shape",
+              "shape": "ellipse",
+              "fill": "transparent",
+              "stroke": {
+                "color": "#ff3b30",
+                "width": 4
+              },
+              "size": {
+                "width": 64,
+                "height": 64
+              },
+              "transform": {
+                "x": 20,
+                "y": 18,
+                "anchorX": 0.5,
+                "anchorY": 0.5
+              },
+              "keyframes": {
+                "scaleX": [
+                  {
+                    "t": 0,
+                    "v": 0,
+                    "ease": "none"
+                  },
+                  {
+                    "t": 0.35,
+                    "v": 0,
+                    "ease": "back.out"
+                  },
+                  {
+                    "t": 0.75,
+                    "v": 1
+                  }
+                ],
+                "scaleY": [
+                  {
+                    "t": 0,
+                    "v": 0,
+                    "ease": "none"
+                  },
+                  {
+                    "t": 0.35,
+                    "v": 0,
+                    "ease": "back.out"
+                  },
+                  {
+                    "t": 0.75,
+                    "v": 1
+                  }
+                ]
+              }
+            },
+            {
+              "id": "logo-arc",
+              "name": "Logo sweep",
+              "type": "shape",
+              "shape": "ellipse",
+              "fill": "transparent",
+              "stroke": {
+                "color": "#ffffff",
+                "width": 4
+              },
+              "size": {
+                "width": 64,
+                "height": 64
+              },
+              "transform": {
+                "x": 20,
+                "y": 18,
+                "anchorX": 0.5,
+                "anchorY": 0.5
+              },
+              "mask": {
+                "type": "rect",
+                "x": 0,
+                "y": 0,
+                "width": 64,
+                "height": 32,
+                "feather": 1
+              },
+              "keyframes": {
+                "rotation": [
+                  {
+                    "t": 0,
+                    "v": -200,
+                    "ease": "none"
+                  },
+                  {
+                    "t": 0.4,
+                    "v": -200,
+                    "ease": "power3.out"
+                  },
+                  {
+                    "t": 1.15,
+                    "v": 0
+                  }
+                ],
+                "opacity": [
+                  {
+                    "t": 0,
+                    "v": 0,
+                    "ease": "none"
+                  },
+                  {
+                    "t": 0.4,
+                    "v": 0,
+                    "ease": "power1.out"
+                  },
+                  {
+                    "t": 0.55,
+                    "v": 1,
+                    "ease": "power2.in"
+                  },
+                  {
+                    "t": 0.95,
+                    "v": 1,
+                    "ease": "power2.in"
+                  },
+                  {
+                    "t": 1.2,
+                    "v": 0
+                  }
+                ]
+              }
+            },
+            {
+              "id": "logo-line-1",
+              "name": "Breeze line 1",
+              "type": "shape",
+              "shape": "rect",
+              "fill": "#ffffff",
+              "cornerRadius": 2,
+              "size": {
+                "width": 26,
+                "height": 4
+              },
+              "transform": {
+                "x": 39,
+                "y": 38,
+                "anchorX": 0,
+                "anchorY": 0.5
+              },
+              "keyframes": {
+                "scaleX": [
+                  {
+                    "t": 0,
+                    "v": 0,
+                    "ease": "none"
+                  },
+                  {
+                    "t": 0.6,
+                    "v": 0,
+                    "ease": "power2.out"
+                  },
+                  {
+                    "t": 0.85,
+                    "v": 1
+                  }
+                ]
+              }
+            },
+            {
+              "id": "logo-line-2",
+              "name": "Breeze line 2",
+              "type": "shape",
+              "shape": "rect",
+              "fill": "#ffffff",
+              "cornerRadius": 2,
+              "size": {
+                "width": 20,
+                "height": 4
+              },
+              "transform": {
+                "x": 39,
+                "y": 48,
+                "anchorX": 0,
+                "anchorY": 0.5
+              },
+              "keyframes": {
+                "scaleX": [
+                  {
+                    "t": 0,
+                    "v": 0,
+                    "ease": "none"
+                  },
+                  {
+                    "t": 0.68,
+                    "v": 0,
+                    "ease": "power2.out"
+                  },
+                  {
+                    "t": 0.93,
+                    "v": 1
+                  }
+                ]
+              }
+            },
+            {
+              "id": "logo-line-3",
+              "name": "Breeze line 3",
+              "type": "shape",
+              "shape": "rect",
+              "fill": "#ffffff",
+              "cornerRadius": 2,
+              "size": {
+                "width": 14,
+                "height": 4
+              },
+              "transform": {
+                "x": 39,
+                "y": 58,
+                "anchorX": 0,
+                "anchorY": 0.5
+              },
+              "keyframes": {
+                "scaleX": [
+                  {
+                    "t": 0,
+                    "v": 0,
+                    "ease": "none"
+                  },
+                  {
+                    "t": 0.76,
+                    "v": 0,
+                    "ease": "power2.out"
+                  },
+                  {
+                    "t": 1.01,
+                    "v": 1
+                  }
+                ]
+              }
+            },
+            {
+              "id": "logo-word",
+              "name": "Wordmark",
+              "type": "text",
+              "text": "BREEZE",
+              "style": {
+                "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+                "fontSize": 26,
+                "fontWeight": 700,
+                "fill": "#ffffff",
+                "letterSpacing": 3,
+                "align": "left",
+                "verticalAlign": "middle",
+                "textTransform": "uppercase"
+              },
+              "textAnimPreset": {
+                "id": "chars-up",
+                "stagger": 0.035
+              },
+              "size": {
+                "width": 150,
+                "height": 32
+              },
+              "transform": {
+                "x": 100,
+                "y": 24,
+                "anchorX": 0,
+                "anchorY": 0
+              },
+              "in": 0.55,
+              "keyframes": {
+                "opacity": [
+                  {
+                    "t": 1.5,
+                    "v": 1,
+                    "ease": "power2.in"
+                  },
+                  {
+                    "t": 1.85,
+                    "v": 0
+                  }
+                ]
+              }
+            },
+            {
+              "id": "logo-sub",
+              "name": "Wordmark sub",
+              "type": "text",
+              "text": "OVERLAY",
+              "style": {
+                "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+                "fontSize": 13,
+                "fontWeight": 500,
+                "fill": "#9fb3c8",
+                "letterSpacing": 3,
+                "align": "left",
+                "verticalAlign": "middle",
+                "textTransform": "uppercase"
+              },
+              "textAnimPreset": {
+                "id": "words-fade"
+              },
+              "size": {
+                "width": 150,
+                "height": 18
+              },
+              "transform": {
+                "x": 100,
+                "y": 58,
+                "anchorX": 0,
+                "anchorY": 0
+              },
+              "in": 0.72,
+              "keyframes": {
+                "opacity": [
+                  {
+                    "t": 1.5,
+                    "v": 1,
+                    "ease": "power2.in"
+                  },
+                  {
+                    "t": 1.8,
+                    "v": 0
+                  }
+                ]
+              }
+            },
+            {
+              "id": "info-bar",
+              "name": "Time & temp bar",
+              "type": "shape",
+              "shape": "rect",
+              "fill": "#0b1f33",
+              "cornerRadius": 4,
+              "size": {
+                "width": 280,
+                "height": 44
+              },
+              "transform": {
+                "x": 0,
+                "y": 108,
+                "anchorX": 1,
+                "anchorY": 0
+              },
+              "keyframes": {
+                "scaleX": [
+                  {
+                    "t": 0,
+                    "v": 0,
+                    "ease": "none"
+                  },
+                  {
+                    "t": 0.55,
+                    "v": 0,
+                    "ease": "power3.out"
+                  },
+                  {
+                    "t": 0.95,
+                    "v": 1
+                  }
+                ]
+              }
+            },
+            {
+              "id": "bug-time",
+              "name": "Time",
+              "type": "text",
+              "text": "6:42 PM",
+              "style": {
+                "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+                "fontSize": 24,
+                "fontWeight": 700,
+                "fill": "#ffffff",
+                "letterSpacing": 0.5,
+                "align": "left",
+                "verticalAlign": "middle"
+              },
+              "fit": {
+                "mode": "width",
+                "maxWidth": 118,
+                "minScale": 0.6
+              },
+              "size": {
+                "width": 118,
+                "height": 44
+              },
+              "transform": {
+                "x": 16,
+                "y": 108,
+                "anchorX": 0,
+                "anchorY": 0
+              },
+              "keyframes": {
+                "opacity": [
+                  {
+                    "t": 0,
+                    "v": 0,
+                    "ease": "none"
+                  },
+                  {
+                    "t": 0.85,
+                    "v": 0,
+                    "ease": "power2.out"
+                  },
+                  {
+                    "t": 1.05,
+                    "v": 1,
+                    "ease": "none"
+                  },
+                  {
+                    "t": 1.5,
+                    "v": 1,
+                    "ease": "power2.in"
+                  },
+                  {
+                    "t": 1.8,
+                    "v": 0
+                  }
+                ]
+              },
+              "clock": {
+                "format": "h:mm A",
+                "timezone": "America/Phoenix"
+              }
+            },
+            {
+              "id": "bug-divider",
+              "name": "Divider",
+              "type": "shape",
+              "shape": "rect",
+              "fill": "rgba(159,179,200,0.35)",
+              "size": {
+                "width": 2,
+                "height": 20
+              },
+              "transform": {
+                "x": 146,
+                "y": 120,
+                "anchorX": 0.5,
+                "anchorY": 0.5
+              },
+              "keyframes": {
+                "scaleY": [
+                  {
+                    "t": 0,
+                    "v": 0,
+                    "ease": "none"
+                  },
+                  {
+                    "t": 0.85,
+                    "v": 0,
+                    "ease": "power2.out"
+                  },
+                  {
+                    "t": 1.05,
+                    "v": 1,
+                    "ease": "none"
+                  },
+                  {
+                    "t": 1.5,
+                    "v": 1,
+                    "ease": "power2.in"
+                  },
+                  {
+                    "t": 1.8,
+                    "v": 0
+                  }
+                ]
+              }
+            },
+            {
+              "id": "bug-temp",
+              "name": "Temperature",
+              "type": "table",
+              "source": "wx-current",
+              "size": {
+                "width": 96,
+                "height": 44
+              },
+              "transform": {
+                "x": 168,
+                "y": 108,
+                "anchorX": 0,
+                "anchorY": 0
+              },
+              "rowsPerPage": 1,
+              "rowAnim": {
+                "id": "rows-fade",
+                "duration": 0.35,
+                "stagger": 0
+              },
+              "row": {
+                "height": 44,
+                "cells": [
+                  {
+                    "id": "temp-value",
+                    "name": "Temp",
+                    "type": "text",
+                    "cell": "temp",
+                    "text": "96",
+                    "style": {
+                      "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+                      "fontSize": 24,
+                      "fontWeight": 700,
+                      "fill": "#ffffff",
+                      "align": "right",
+                      "verticalAlign": "middle"
+                    },
+                    "fit": {
+                      "mode": "width",
+                      "maxWidth": 56,
+                      "minScale": 0.7
+                    },
+                    "size": {
+                      "width": 56,
+                      "height": 44
+                    },
+                    "transform": {
+                      "x": 0,
+                      "y": 0,
+                      "anchorX": 0,
+                      "anchorY": 0
+                    }
+                  },
+                  {
+                    "id": "temp-unit",
+                    "name": "Unit",
+                    "type": "text",
+                    "text": "\u00b0F",
+                    "style": {
+                      "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+                      "fontSize": 24,
+                      "fontWeight": 700,
+                      "fill": "#9fb3c8",
+                      "align": "left",
+                      "verticalAlign": "middle"
+                    },
+                    "size": {
+                      "width": 36,
+                      "height": 44
+                    },
+                    "transform": {
+                      "x": 58,
+                      "y": 0,
+                      "anchorX": 0,
+                      "anchorY": 0
+                    }
+                  }
+                ]
+              },
+              "data": {
+                "columns": [
+                  {
+                    "key": "temp",
+                    "label": "Temp",
+                    "type": "number"
+                  }
+                ],
+                "rows": [
+                  {
+                    "temp": 96
+                  }
+                ]
+              },
+              "keyframes": {
+                "opacity": [
+                  {
+                    "t": 0,
+                    "v": 0,
+                    "ease": "none"
+                  },
+                  {
+                    "t": 0.85,
+                    "v": 0,
+                    "ease": "power2.out"
+                  },
+                  {
+                    "t": 1.05,
+                    "v": 1,
+                    "ease": "none"
+                  },
+                  {
+                    "t": 1.5,
+                    "v": 1,
+                    "ease": "power2.in"
+                  },
+                  {
+                    "t": 1.8,
+                    "v": 0
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
