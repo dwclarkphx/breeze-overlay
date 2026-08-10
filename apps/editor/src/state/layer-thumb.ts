@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Layer thumbnails — the pure half (DATA-SOURCES §5).
+ * Layer thumbnails — the pure half.
  *
  * Deliberately **not** a DOM-to-bitmap render. html2canvas is heavy, blocks on
  * layout, and lies about fonts — a preview that shows the wrong typeface is

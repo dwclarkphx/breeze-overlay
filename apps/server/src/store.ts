@@ -8,7 +8,7 @@
 /**
  * Project store — plain JSON on disk.
  *
- * ROADMAP §1 chose files over SQLite for v1: projects stay git-diffable and
+ * Files over SQLite for v1, deliberately: projects stay git-diffable and
  * portable, and a broadcast engineer can drop a project folder onto another
  * machine without an export step. Writes are atomic (tmp + rename) because a
  * half-written project.json during a save would take a graphic off air.

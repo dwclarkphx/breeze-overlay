@@ -8,7 +8,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * Phase 6 Wave 1 acceptance (DATA-SOURCES.md §3, §7): a standings table driven
+ * Phase 6 Wave 1 acceptance: a standings table driven
  * by a data source, re-sorting live on air.
  *
  * The unit tests cover the transform pipeline, the paging arithmetic and the
@@ -201,7 +201,7 @@ test('NEXT pages the table while the graphic holds', async ({ page }) => {
   expect(second[0]!.team).toBe('Peoria Pioneers');
 
   // Pages are not steps — a step is a STOP marker, so paging leaves the count
-  // alone (DATA-SOURCES §2) and the control panel still reads one hold.
+  // alone and the control panel still reads one hold.
   const steps = await page.evaluate(() => (window as any).breeze.runtime.stepCount as number);
   expect(steps).toBe(1);
 
@@ -255,7 +255,7 @@ test('the data API serves the seeded source with its health', async ({ request }
 
 test('the fetcher refuses a private address', async ({ request }) => {
   // This server sits on the same LAN as the switcher; "fetch any URL" is a
-  // request forgery primitive without this guard (DATA-SOURCES §6).
+  // request forgery primitive without this guard.
   const response = await request.post('/api/projects/demo/datasources-preview', {
     data: { def: { id: 'probe', name: 'probe', type: 'http-json', url: 'http://192.168.0.1/' } },
   });

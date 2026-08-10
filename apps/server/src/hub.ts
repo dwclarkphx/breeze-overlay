@@ -186,7 +186,7 @@ export class ControlHub {
        * from the standings feed replace the whole `$data` object and drop the
        * ticker's rows with it. This retained map is also what a reconnecting
        * browser source resyncs from — the reason we push whole DataSets rather
-       * than the revision-only tick DATA-SOURCES §1 sketched, since a page that
+       * than the revision-only tick originally sketched, since a page that
        * comes back holding a revision number and no rows is a blank graphic.
        */
       if (isRecord(command.data[DATA_KEY])) {

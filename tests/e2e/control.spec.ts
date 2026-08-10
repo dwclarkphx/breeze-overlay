@@ -8,7 +8,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * Phase 4 acceptance (ROADMAP §4): an operator fires a name strap into an
+ * Phase 4 acceptance: an operator fires a name strap into an
  * output and edits it live on air.
  *
  * Two real pages in two tabs — the operator panel and the transparent output

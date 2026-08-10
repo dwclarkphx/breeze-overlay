@@ -56,10 +56,13 @@ const LICENSE_BANNER = `/*! Breeze Overlay — Mozilla Public License 2.0
  * GSAP resolves to a global, not to the npm package — the same arrangement
  * `apps/server/scripts/build-client.mjs` sets up for the output page, for the
  * same reason: the library ships as a replaceable `gsap.min.js` an operator can
- * upgrade without rebuilding Breeze. See dev/docs/GSAP-EXTERNAL.md.
+ * upgrade without rebuilding Breeze. `scripts/vendor-gsap.mjs` stages the files
+ * and explains the arrangement; the operator-facing procedure is in
+ * docs/USER-GUIDE.md § "Upgrading the animation engine".
  *
- * Keeping both consumers on one arrangement is not tidiness. ROADMAP rule 1 is
- * that the editor preview and the served page run the *same* renderer; if only
+ * Keeping both consumers on one arrangement is not tidiness. The project's
+ * first rule is that the editor preview and the served page run the *same*
+ * renderer; if only
  * one of them took GSAP from a global, the two could end up animating against
  * different versions of the library and the preview would stop being a promise
  * about what goes to air.
@@ -100,8 +103,8 @@ const GSAP_ALIAS = [
  * production one Fastify process serves both /editor and /public; in dev the
  * `/public` proxy below forwards to it. One staged set means an operator who
  * upgrades GSAP cannot leave the editor preview on a different version from
- * air — which would quietly break ROADMAP rule 1's promise that the preview
- * shows what goes out.
+ * air — which would quietly break the promise that the preview shows what
+ * goes out.
  *
  * Classic (non-module) tags, and Vite leaves their absolute `/public/...` URLs
  * alone rather than rewriting them against `base`, which is what we want: they

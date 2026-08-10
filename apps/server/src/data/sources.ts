@@ -11,7 +11,8 @@
  * A separate file from `project.json` on purpose. Source defs are project
  * *infrastructure*: they hold URLs and secret ids, and they change on a
  * different clock from the graphics. Keeping them out of the composition is also
- * what makes DATA-SOURCES §6 enforceable — a composition gets exported, embedded
+ * what makes the no-secrets-in-a-composition rule enforceable — a composition
+ * gets exported, embedded
  * in a single-file template and handed to a playout server, and nothing that
  * travels that way may carry a URL that only works inside the venue.
  */

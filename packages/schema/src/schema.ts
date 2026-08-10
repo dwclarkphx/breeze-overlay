@@ -619,7 +619,7 @@ export const compositionSchema = {
  * A separate document from the composition on purpose. Source defs are project
  * infrastructure, not part of the graphic: they carry URLs and secret *ids*, so
  * they must not travel inside a composition that gets exported, embedded in a
- * single-file HTML template, or handed to a playout server (DATA-SOURCES §6).
+ * single-file HTML template, or handed to a playout server.
  */
 export const dataSourcesSchema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',

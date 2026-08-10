@@ -8,7 +8,7 @@
 /**
  * Editor store.
  *
- * Zustand over Redux for the reason ROADMAP §1 gives: a document editor needs
+ * Zustand over Redux, deliberately: a document editor needs
  * one mutable-feeling document plus a command layer, not a global action bus.
  * Every document mutation goes through `run()` so nothing can bypass history.
  */

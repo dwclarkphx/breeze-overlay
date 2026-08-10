@@ -9,9 +9,10 @@
  * Easing editor — preset picker plus a draggable cubic-bezier curve.
  *
  * The curve is plotted with `sampleEase` from `@breeze/runtime`, the exact
- * function the timeline evaluates at playback. ROADMAP §4 Phase 3 asks for a
- * bezier-easing preview feeding a GSAP CustomEase at runtime; using one solver
- * for both is strictly better — there is no second implementation to drift.
+ * function the timeline evaluates at playback. The obvious alternative — a
+ * separate bezier-easing preview feeding a GSAP CustomEase at playback — would
+ * mean two implementations of the same curve; one solver for both is strictly
+ * better, because there is nothing to drift.
  */
 
 import { useMemo, useRef, useState, type JSX } from 'react';

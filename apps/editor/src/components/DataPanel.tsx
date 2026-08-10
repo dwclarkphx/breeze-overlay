@@ -11,8 +11,7 @@
  * Two jobs, and the second is the one that matters at 19:55: build a source, and
  * tell an operator why a table is not updating. Per-source health — last fetch,
  * last change, last error — is on the row rather than behind a click, because a
- * dead feed should be diagnosed here and not by staring at a frozen graphic
- * (DATA-SOURCES §6).
+ * dead feed should be diagnosed here and not by staring at a frozen graphic.
  */
 
 import { useCallback, useEffect, useMemo, useState, type JSX } from 'react';

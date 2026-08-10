@@ -52,7 +52,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   /**
    * Optional shared secret. Output pages and the editor shell stay open so a
    * browser source never needs credentials; only mutating and control calls
-   * are gated. LAN-first, per ROADMAP §3.
+   * are gated. LAN-first by design.
    */
   app.addHook('onRequest', async (req, reply) => {
     if (!config.apiKey) return;
@@ -127,7 +127,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   /*
    * A changed DataSet goes out as an ordinary `update` on the existing hub —
    * no new socket protocol, and it converges with operator field edits on the
-   * one rebind path in the runtime (DATA-SOURCES §1).
+   * one rebind path in the runtime.
    *
    * Only to channels that exist: a channel is created the moment anything
    * subscribes, so this fans out to graphics that are actually open rather than

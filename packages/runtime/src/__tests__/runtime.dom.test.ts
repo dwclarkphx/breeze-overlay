@@ -15,8 +15,8 @@
  * behavior in Chromium, where the compositor and computed styles are real.
  *
  * Time is driven explicitly with `gsap.updateRoot()` rather than wall clock so
- * the assertions are deterministic — the same reason ROADMAP §2 rule 5 asks
- * for a timeline with no wall-clock dependence.
+ * the assertions are deterministic — the same reason the timeline itself is
+ * built with no wall-clock dependence.
  */
 
 import { readFileSync } from 'node:fs';

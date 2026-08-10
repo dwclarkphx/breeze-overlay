@@ -8,7 +8,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * Phase 6 Wave 2 acceptance (DATA-SOURCES.md §3): a ticker driven by a data
+ * Phase 6 Wave 2 acceptance: a ticker driven by a data
  * source rather than a typed list.
  *
  * The unit tests already cover the RSS and Atom normalization against real feed

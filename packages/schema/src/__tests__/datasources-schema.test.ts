@@ -165,7 +165,7 @@ describe('data sources schema rejections', () => {
 
   it('rejects a sheets source given a url instead of an id', () => {
     /*
-     * The rule from DATA-SOURCES §3: a Sheets def does not address an arbitrary
+     * The rule: a Sheets def does not address an arbitrary
      * origin. Accepting a `url` here would hand an operator a way to point a
      * server-held credential at something that is not Sheets.
      */

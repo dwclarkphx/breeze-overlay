@@ -8,7 +8,7 @@
 /**
  * Breeze Overlay — Phase 6 data model.
  *
- * DATA-SOURCES.md §1 rule: **one canonical data shape, many adapters.** Every
+ * One rule: **one canonical data shape, many adapters.** Every
  * source — a pasted table, an HTTP feed, later a scoreboard serial port —
  * normalizes into a `DataSet` before anything downstream sees it. Layers bind to
  * `DataSet` columns and never learn where the rows came from.
@@ -584,7 +584,7 @@ export interface HttpDataSourceBase extends DataSourceBase {
   url: string;
   /**
    * Names a secret in the server's config file — never the secret itself.
-   * Source defs are exported and shared; credentials are not (DATA-SOURCES §6).
+   * Source defs are exported and shared; credentials are not.
    */
   secretId?: string;
   /** Non-secret headers only, e.g. the User-Agent api.weather.gov requires. */
@@ -983,7 +983,7 @@ export interface FtpDataSource extends DataSourceBase {
   username?: string;
   /**
    * Names the server-side credential — a password, or a PEM private key for
-   * SFTP. Never the credential itself (DATA-SOURCES §6).
+   * SFTP. Never the credential itself.
    */
   secretId?: string;
   /* Parser options, mirroring the HTTP adapters field for field. */
@@ -1050,7 +1050,7 @@ export interface DataSourceStatus {
 /**
  * Reserved `update()` key carrying data-source payloads.
  *
- * DATA-SOURCES §1 sketched the tick as `{ sourceId, revision }` with the page
+ * The tick was originally sketched as `{ sourceId, revision }` with the page
  * holding rows from an earlier full push. We push the whole DataSet instead, for
  * one reason: the hub retains channel data and replays it on reconnect, which is
  * the property that stops a browser source coming back blank mid-show. A

@@ -113,9 +113,9 @@ export default defineConfig({
      * config lives in `tests/`. Left as `__dirname` every relative path in the
      * command above — the clean script, the workspace filters — resolves one
      * level too deep, and the server dies with a module-not-found before a
-     * single test runs. The container harness in `dev/build_test/` hit exactly
-     * this when it was the only config sitting below the root; moving this one
-     * down made it the normal case rather than the exception.
+     * single test runs. A container harness with its own config below the root
+     * hit exactly this when it was the only one in that position; moving this
+     * config down made it the normal case rather than the exception.
      */
     cwd: path.resolve(__dirname, '..'),
     url: `${ORIGIN}/healthz`,

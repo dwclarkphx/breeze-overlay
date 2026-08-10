@@ -12,7 +12,7 @@
  * `schema.ts` holds the JSON Schema used for validation; the two are kept in
  * sync by tests in `src/__tests__/schema.test.ts`.
  *
- * Design rules (see ROADMAP §2):
+ * Design rules:
  *  - Composition JSON is the product. Editor, runtime and every exporter
  *    read/write this and nothing else.
  *  - Times are ALWAYS in seconds (floats), never frames. `stage.fps` is a
@@ -528,8 +528,7 @@ export interface TableLayer extends LayerBase {
   binding?: string;
   /**
    * Rows carried in the composition itself — the authoring placeholder and the
-   * offline fallback when a fetched source answers with nothing
-   * (DATA-SOURCES §4).
+   * offline fallback when a fetched source answers with nothing.
    */
   data?: { columns: DataColumn[]; rows: DataRow[] };
   /** Sort/filter/limit/rank pipeline, applied in order. */
@@ -690,8 +689,8 @@ export interface AssetRef {
    *
    * Persisted rather than re-probed because it is the single fact that decides
    * whether a video works as a stinger, and `inspect()` was already computing
-   * it on demand and throwing it away. Note the VP9 subtlety recorded in
-   * ROADMAP Phase 7 Wave 1: ffprobe reports this server's own alpha output as
+   * it on demand and throwing it away. Note the VP9 subtlety:
+   * ffprobe reports this server's own alpha output as
    * `yuv420p`, because a VP9 alpha channel rides alongside the primary stream
    * rather than in it. `inspect()` reads the container's `alpha_mode` tag too.
    */

@@ -305,6 +305,67 @@ tests/e2e          Playwright suites driving the output page and the editor in C
 
 **One renderer, two consumers.** The editor preview and the served `/play` page both instantiate `BreezeRuntime`. There is no second rendering path, so what the operator sees in the editor is what goes to air.
 
+## Dependencies
+
+What Breeze Overlay runs on. Versions are the ones pinned in `pnpm-lock.yaml` as of 0.64.3; `pnpm install` resolves them exactly, and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) is the generated, always-current list including transitive packages.
+
+**Platform**
+
+| | Version | License | Project |
+|---|---|---|---|
+| **Node.js** | 24 or newer | MIT | [nodejs.org](https://nodejs.org) |
+| **pnpm** | 10.34.5 | MIT | [pnpm.io](https://pnpm.io) |
+| **ffmpeg** | any recent build, optional | LGPL/GPL | [ffmpeg.org](https://www.ffmpeg.org) |
+
+Node 24 is a floor, not a preference — the server uses `node:` builtins and language features below that version does not have. ffmpeg is looked up on `PATH` at runtime and only needed to transcode alpha video; everything else works without it, and it is never bundled or redistributed.
+
+**Animation**
+
+| | Version | License | Project |
+|---|---|---|---|
+| **GSAP** | 3.15.0 | [Standard "no charge" License](https://gsap.com/standard-license) | [gsap.com](https://gsap.com) — GreenSock, a [Webflow](https://webflow.com) company |
+
+The entire animation engine: every timeline, ease and text reveal. Not bundled — staged into `apps/server/public/vendor/gsap/` and loaded by a script tag, so it can be [upgraded without rebuilding](docs/USER-GUIDE.md#17-upgrading-the-animation-engine). Licensed separately from this project; free for commercial use.
+
+**Server**
+
+| | Version | License | Project |
+|---|---|---|---|
+| **Fastify** | 5.11.0 | MIT | [fastify.dev](https://fastify.dev) |
+| **@fastify/static** | 10.1.2 | MIT | [github.com/fastify/fastify-static](https://github.com/fastify/fastify-static) |
+| **@fastify/websocket** | 11.3.0 | MIT | [github.com/fastify/fastify-websocket](https://github.com/fastify/fastify-websocket) |
+| **Ajv** | 8.20.0 | MIT | [ajv.js.org](https://ajv.js.org) |
+| **marked** | 18.0.9 | MIT | [marked.js.org](https://marked.js.org) |
+| **basic-ftp** | 6.2.0 | MIT | [github.com/patrickjuchli/basic-ftp](https://github.com/patrickjuchli/basic-ftp) |
+| **ssh2-sftp-client** | 12.1.1 | Apache-2.0 | [github.com/theophilusx/ssh2-sftp-client](https://github.com/theophilusx/ssh2-sftp-client) |
+
+Ajv compiles the composition JSON Schema; the two FTP clients back the file-drop data sources and are the only reason the install has native build steps.
+
+**Editor**
+
+| | Version | License | Project |
+|---|---|---|---|
+| **React** | 19.2.8 | MIT | [react.dev](https://react.dev) |
+| **Zustand** | 5.0.14 | MIT | [github.com/pmndrs/zustand](https://github.com/pmndrs/zustand) |
+| **react-moveable** | 0.56.0 | MIT | [daybrush.com/moveable](https://daybrush.com/moveable) |
+
+react-moveable provides the stage's drag, resize and rotate handles.
+
+**Build and test** — not shipped, and not in the notices file:
+
+| | Version | License | Project |
+|---|---|---|---|
+| **TypeScript** | 7.0.2 | Apache-2.0 | [typescriptlang.org](https://www.typescriptlang.org) |
+| **Vite** | 8.2.0 | MIT | [vite.dev](https://vite.dev) |
+| **esbuild** | 0.28.1 | MIT | [esbuild.github.io](https://esbuild.github.io) |
+| **Vitest** | 4.1.10 | MIT | [vitest.dev](https://vitest.dev) |
+| **Playwright** | 1.62.1 | Apache-2.0 | [playwright.dev](https://playwright.dev) |
+| **happy-dom** | 20.11.1 | MIT | [github.com/capricorn86/happy-dom](https://github.com/capricorn86/happy-dom) |
+
+Everything here is MIT, Apache-2.0 or BSD except GSAP, whose licence restricts a category of *product* rather than a category of use. That is why it gets its own row above and its own section in the notices file.
+
+Weather and feed providers are services rather than dependencies, and their terms bind the operator of an installation rather than this project — see [Weather](#weather) for which permit commercial use.
+
 ## Control surface
 
 Four verbs, available everywhere — the vocabulary broadcast operators already know:
@@ -510,7 +571,7 @@ The properties panel reports the measured piece count and the reveal's real tota
 
 ## Data sources and tables
 
-One rule: **one canonical data shape, many adapters.** Every source — a pasted table, an HTTP feed, a news RSS URL, a private Google Sheet — normalizes into a `DataSet` before anything downstream sees it. Layers bind to columns and never learn where the rows came from. Full design in `dev/docs/DATA-SOURCES.md`.
+One rule: **one canonical data shape, many adapters.** Every source — a pasted table, an HTTP feed, a news RSS URL, a private Google Sheet — normalizes into a `DataSet` before anything downstream sees it. Layers bind to columns and never learn where the rows came from. The source types and their options are covered below; the operator's walkthrough is in [Data sources and tables](docs/USER-GUIDE.md#12-data-sources-and-tables).
 
 ```jsonc
 {
@@ -623,7 +684,7 @@ An RSS feed is a ticker, so a crawl layer can take one column of a source as its
 
 ### Data in the editor
 
-The stage preview is built with the project's DataSets, the same way `/play` is — ROADMAP §2 rule 1 is that the editor preview *is* the playout renderer, and a preview that could not see the data was the one place that stopped being true. `GET …/datasources?rows=N` carries rows alongside the definitions for this (capped server-side); the health poll omits it and gets counts only.
+The stage preview is built with the project's DataSets, the same way `/play` is — the project's first rule is that the editor preview *is* the playout renderer, and a preview that could not see the data was the one place that stopped being true. `GET …/datasources?rows=N` carries rows alongside the definitions for this (capped server-side); the health poll omits it and gets counts only.
 
 ### Credentials and SSRF
 

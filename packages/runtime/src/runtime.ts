@@ -8,7 +8,7 @@
 /**
  * @breeze/runtime — the single renderer.
  *
- * ROADMAP §2 rule 1: the editor preview and the served /play page both
+ * The project's first rule: the editor preview and the served /play page both
  * instantiate THIS class. There is no second rendering path, so what the
  * operator saw in the editor is bit-for-bit what goes to air.
  *
@@ -158,8 +158,8 @@ export interface RuntimeOptions {
   /**
    * Build for one paused frame rather than for playback.
    *
-   * Intended for composition and scene thumbnails (ROADMAP Phase 7.6) —
-   * anything that seeks once, paints, and never plays.
+   * Intended for composition and scene thumbnails — anything that seeks once,
+   * paints, and never plays.
    *
    * What it skips is the text *animation* scaffolding, not the text.
    * `buildTextAnims` splits a span into a row of per-character or per-word
@@ -392,7 +392,7 @@ export class BreezeRuntime {
      * indistinguishable from a table that failed to build, so the authored
      * snapshot has to be on screen before anything is played. That snapshot is
      * also what an export embeds and what covers a source outage — exports
-     * snapshot, they do not stream (DATA-SOURCES §4).
+     * snapshot, they do not stream.
      */
     for (const [id, node] of this.nodes) {
       if (node.layer.type !== 'table') continue;
@@ -1123,7 +1123,7 @@ export class BreezeRuntime {
      * A table with more rows than fit consumes NEXT before the timeline sees it.
      *
      * Only while holding. Pages are not steps — a step is a STOP marker, so
-     * `stepCount()` stays marker-only (DATA-SOURCES §2) — and the graphic
+     * `stepCount()` stays marker-only — and the graphic
      * advances internally on the same verb an operator is already pressing.
      * Gated on `holding` because during the intro NEXT means "skip to the next
      * marker", and a table quietly eating that press would strand the graphic
@@ -1202,7 +1202,7 @@ export class BreezeRuntime {
 
     /*
      * Data-source pushes ride the same verb as operator field edits — one
-     * rebind path, no second socket protocol (DATA-SOURCES §1). The reserved
+     * rebind path, no second socket protocol. The reserved
      * `$data` key carries `{ [sourceId]: DataSet }`; everything else is a
      * dynamic field and falls through to the layer loop below.
      */

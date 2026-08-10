@@ -28,7 +28,7 @@
  * `apps/server/public/vendor/gsap/`, staged by `scripts/vendor-gsap.mjs`, under
  * its own separate licence. A pnpm-derived list would omit it entirely and
  * quietly understate what a user receives, so it gets its own section above the
- * table — see dev/docs/GSAP-EXTERNAL.md.
+ * table.
  */
 
 import fs from 'node:fs';
@@ -193,15 +193,59 @@ function render(rows) {
 
 const content = render(readLicenses());
 
+/**
+ * Report *what* differs, not just that something does.
+ *
+ * This check fails inside CI, where nobody can poke at the tree — so a bare
+ * "out of date" turns a one-line fix into a local reproduction. Package rows
+ * are the interesting diff (something was added, removed or bumped), and
+ * they are what the summary leads with.
+ */
+function describeDiff(current, expected) {
+  const rows = (text) =>
+    new Map(
+      text
+        .split('\n')
+        .map((line) => /^\| `([^`]+)` \| ([^|]*) \|/.exec(line))
+        .filter(Boolean)
+        .map((m) => [m[1], m[2].trim()]),
+    );
+
+  const before = rows(current);
+  const after = rows(expected);
+  const notes = [];
+
+  for (const [name, version] of after) {
+    if (!before.has(name)) notes.push(`  + ${name} ${version}`);
+    else if (before.get(name) !== version) {
+      notes.push(`  ~ ${name} ${before.get(name)} → ${version}`);
+    }
+  }
+  for (const name of before.keys()) {
+    if (!after.has(name)) notes.push(`  - ${name} ${before.get(name)}`);
+  }
+
+  if (notes.length === 0) {
+    /*
+     * The prose changed but the package table did not — almost always because
+     * the generator's own wording was edited. Worth saying plainly, because
+     * "no packages changed" otherwise reads as a false positive.
+     */
+    return '         The package list is unchanged; the surrounding text differs.';
+  }
+  return notes.slice(0, 40).join('\n') + (notes.length > 40 ? `\n  … and ${notes.length - 40} more` : '');
+}
+
 if (check) {
   const current = fs.existsSync(outPath) ? fs.readFileSync(outPath, 'utf8') : null;
   if (current !== content) {
     console.error(
       current === null
         ? '[breeze] THIRD-PARTY-NOTICES.md is missing. Run: pnpm notices'
-        : '[breeze] THIRD-PARTY-NOTICES.md is out of date — the installed ' +
-            'dependency tree has changed since it was generated.\n' +
-            '         Run: pnpm notices',
+        : '[breeze] THIRD-PARTY-NOTICES.md is out of date — the installed\n' +
+            '         dependency tree no longer matches the generated file.\n' +
+            '         Run: pnpm notices\n\n' +
+            describeDiff(current, content),
     );
     process.exit(1);
   }

@@ -1,6 +1,6 @@
 {
   "name": "@breeze/editor",
-  "version": "0.64.2",
+  "version": "0.64.3",
   "private": true,
   "license": "MPL-2.0",
   "type": "module",
@@ -19,7 +19,7 @@
     "react-moveable": "^0.56.0",
     "zustand": "^5.0.2"
   },
-  "//gsap": "Kept only so Vite can resolve the alias target and the types when it builds @breeze/runtime's dist. Nothing under src/ imports GSAP directly. Keep the ~3.15.0 pin equal to packages/runtime's — two different resolutions in one workspace would give the editor preview and the /play page different animation engines, which is precisely the drift ROADMAP rule 1 exists to prevent.",
+  "//gsap": "Kept only so Vite can resolve the alias target and the types when it builds @breeze/runtime's dist. Nothing under src/ imports GSAP directly. Keep the ~3.15.0 pin equal to packages/runtime's — two different resolutions in one workspace would give the editor preview and the /play page different animation engines, and the whole point of one shared renderer is that the preview shows what goes to air.",
   "devDependencies": {
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",

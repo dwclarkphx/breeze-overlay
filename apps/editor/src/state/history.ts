@@ -9,8 +9,8 @@
  * Undo/redo.
  *
  * Two representations are kept deliberately:
- *  - a log of serializable `Command`s, which is what ROADMAP §4 asks for and
- *    what a future scripting or collaboration layer will consume
+ *  - a log of serializable `Command`s, which a future scripting or
+ *    collaboration layer will consume
  *  - the document snapshot from *before* each command, which is what undo
  *    actually restores
  *

@@ -8,7 +8,7 @@
 /**
  * Editor commands.
  *
- * ROADMAP §4 Phase 2: "every mutation is a serializable command". Two reasons
+ * The Phase 2 rule: every mutation is a serializable command. Two reasons
  * that matters beyond undo — a command log can later drive scripted template
  * generation and collaborative editing, and it makes the whole mutation layer
  * testable in Node with no React and no DOM.

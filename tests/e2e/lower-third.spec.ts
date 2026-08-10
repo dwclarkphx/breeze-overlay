@@ -8,7 +8,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * Phase 1 acceptance (ROADMAP §4): a hand-written lower-third JSON plays
+ * Phase 1 acceptance: a hand-written lower-third JSON plays
  * intro → holds → outro correctly in a plain browser page.
  *
  * Assertions read the composited transform matrix rather than any internal

@@ -384,7 +384,7 @@ export class TableBlock {
    * Returns false when there is only one page, which is how the runtime knows
    * `next()` was *not* consumed and should fall through to the STOP-marker
    * behavior. Pages are not steps: a step is a STOP marker, so `stepCount()`
-   * stays marker-only (DATA-SOURCES §2).
+   * stays marker-only.
    */
   nextPage(): boolean {
     if (this.destroyed || this.paging.pageCount <= 1) return false;

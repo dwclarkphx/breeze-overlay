@@ -9,7 +9,7 @@
  * Transcode queue — ProRes 4444 (and anything else ffmpeg reads) → VP9/WebM
  * with alpha.
  *
- * ROADMAP §4 Phase 7: the acceptance criterion for the phase is "an animated
+ * The Phase 7 acceptance criterion was "an animated
  * alpha stinger plays inside a graphic in OBS with clean edges". A ProRes 4444
  * `.mov` is what a motion designer delivers and what no browser will play, so
  * this is the conversion that makes the format usable at all.
@@ -338,7 +338,7 @@ export class TranscodeQueue {
      * transcode is transparency, and `hasAlpha` here is read from the
      * container's `alpha_mode` tag rather than the pixel format — ffprobe
      * reports this file's primary stream as `yuv420p` even when it is fully
-     * transparent (ROADMAP Phase 7 Wave 1). A cheap probe of a file we just
+     * transparent. A cheap probe of a file we just
      * finished writing turns "did that work?" into a fact on the row.
      */
     const info = await inspect(output);

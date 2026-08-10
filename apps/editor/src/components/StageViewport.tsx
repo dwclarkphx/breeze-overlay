@@ -8,9 +8,9 @@
 /**
  * Stage viewport — the live preview and the direct-manipulation surface.
  *
- * The preview is an actual `BreezeRuntime`, not a re-implementation. ROADMAP §2
- * rule 1: the editor preview *is* the playout renderer, which is the only way
- * to guarantee what the operator builds is what goes to air.
+ * The preview is an actual `BreezeRuntime`, not a re-implementation. This is
+ * the project's first rule: the editor preview *is* the playout renderer, which
+ * is the only way to guarantee what the operator builds is what goes to air.
  *
  * The runtime is rebuilt when the document changes and seeked when only the
  * playhead moves. Rebuilding is debounced because constructing a GSAP timeline

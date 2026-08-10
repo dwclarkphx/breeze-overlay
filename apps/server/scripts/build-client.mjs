@@ -44,8 +44,8 @@ const LICENSE_BANNER = `/*! Breeze Overlay — Mozilla Public License 2.0
  * `packages/runtime` imports `gsap` and `gsap/SplitText` normally; these two
  * entries redirect both to shims that read `window.gsap` / `window.SplitText`,
  * which the vendor script tags populate ahead of this bundle. The library
- * therefore ships as a replaceable file rather than as inlined bytes — see
- * dev/docs/GSAP-EXTERNAL.md.
+ * therefore ships as a replaceable file rather than as inlined bytes;
+ * `scripts/vendor-gsap.mjs` is where that is set up and explained.
  *
  * esbuild's own `external` is deliberately not used: in `iife` format an
  * external bare specifier becomes a bare `require("gsap")` call at runtime,

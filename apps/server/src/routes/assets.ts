@@ -8,7 +8,7 @@
 /**
  * Asset routes — upload, list, delete.
  *
- * ROADMAP §4 Phase 2 listed an "asset bin (upload images/fonts)" and it never
+ * Phase 2 accepted an asset bin for uploading images and fonts, and it never
  * landed: `registerAsset` and `assetPath` have sat in the store with no caller,
  * and every image, video and font has been referenced by a path typed into a
  * text field and copied into the project directory by hand. That is workable

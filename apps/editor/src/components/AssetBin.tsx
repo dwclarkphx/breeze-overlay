@@ -8,7 +8,7 @@
 /**
  * Asset bin — the project's uploaded images, videos and fonts.
  *
- * Promised by ROADMAP §4 Phase 2 and never built: until now every asset was a
+ * Accepted as part of Phase 2 and never built: until now every asset was a
  * path typed into a text field, with the file copied into the project directory
  * by hand. That works for one demo on one machine and fails everywhere else —
  * an operator has no shell on the graphics box, and a typo produces a layer

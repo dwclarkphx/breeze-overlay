@@ -8,7 +8,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * Phase 5 acceptance (ROADMAP §4): an animated name strap with one-click
+ * Phase 5 acceptance: an animated name strap with one-click
  * presets, and a news ticker.
  *
  * The unit tests cover the preset table and the wiring in happy-dom. What only a

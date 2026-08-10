@@ -31,7 +31,7 @@ export interface Config {
    * Hosts the data fetcher may reach even though they resolve to private
    * addresses. A leading dot matches subdomains. Empty by default: this server
    * runs on the same LAN as the switcher, so "fetch any URL" is a request
-   * forgery primitive until an operator says otherwise (DATA-SOURCES §6).
+   * forgery primitive until an operator says otherwise.
    */
   dataAllowHosts: string[];
   /**

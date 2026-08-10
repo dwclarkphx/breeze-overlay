@@ -13,7 +13,7 @@
  * who can open the editor. That makes an unguarded fetcher a request forgery
  * primitive pointed at the most sensitive network in the building, so private
  * and link-local ranges are refused by default and opened only by explicit
- * config (DATA-SOURCES §6).
+ * config.
  */
 
 import dns from 'node:dns/promises';

@@ -11,7 +11,8 @@
  * GSAP is not bundled into the client — it is copied there verbatim by
  * `scripts/vendor-gsap.mjs` and loaded by a script tag, precisely so that an
  * operator can replace `gsap.min.js` with a newer release and reload the
- * browser source without rebuilding Breeze (dev/docs/GSAP-EXTERNAL.md).
+ * browser source without rebuilding Breeze. The procedure they follow is in
+ * docs/USER-GUIDE.md § "Upgrading the animation engine".
  *
  * That upgrade path needs the server to know what is on disk, for two reasons,
  * and both of them are failure modes rather than niceties:

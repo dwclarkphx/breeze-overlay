@@ -14,7 +14,8 @@
  * GSAP is not bundled into anything Breeze ships. It is copied here unmodified
  * and loaded by a script tag, so upgrading it is replacing one file and
  * reloading the browser source — not a `pnpm install` and a rebuild. That is
- * the whole reason this script exists; see dev/docs/GSAP-EXTERNAL.md.
+ * the whole reason this script exists; the operator-facing procedure is in
+ * docs/USER-GUIDE.md § "Upgrading the animation engine".
  *
  * Copied from node_modules rather than downloaded, so the version staged is the
  * one pnpm-lock.yaml pinned and an install stays offline-capable. A Breeze
@@ -24,7 +25,7 @@
  * One staged copy, not one per app: the editor loads these through /public too
  * (via the dev proxy, and directly in production, where one Fastify server
  * hosts both). Two copies could diverge, and a preview animating against a
- * different GSAP than air is exactly the drift ROADMAP rule 1 forbids.
+ * different GSAP than air is exactly the drift the one-renderer rule forbids.
  *
  * The files are copied byte-for-byte. Each carries its own GreenSock license
  * banner, and the npm tarball ships no LICENSE file — the banner *is* the
