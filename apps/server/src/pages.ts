@@ -22,6 +22,73 @@ import {
   type SceneElement,
 } from '@breeze/schema';
 
+import { GSAP_VENDOR_URL, GSAP_VERSION } from './vendor.js';
+
+/**
+ * The GSAP versions this build of the runtime is known to work against.
+ *
+ * The floor is 3.13 because that is the release where SplitText became free and
+ * shipped inside the public `gsap` package; below it, `gsap/SplitText` resolves
+ * to nothing and every text reveal is dead. The ceiling is the next major,
+ * which GreenSock has not shipped and which would not be assumed compatible.
+ *
+ * This range is the price of making GSAP replaceable: the file on disk and the
+ * types the runtime was compiled against are now two separate things, and the
+ * range is what stops them drifting silently.
+ */
+const GSAP_MIN = [3, 13, 0] as const;
+const GSAP_MAX_EXCLUSIVE = [4, 0, 0] as const;
+
+/**
+ * Script tags for the vendored GSAP, plus the guard that checks what arrived.
+ *
+ * Classic scripts, not modules, and not deferred: they must have executed
+ * before `player.js` — itself a classic IIFE — reads `window.gsap`. SplitText
+ * follows the core because it resolves the core through `window.gsap` at load.
+ *
+ * The guard is inline and runs *here* rather than inside the bundle because by
+ * the time the bundle evaluates, the import that needs GSAP has already thrown
+ * and taken the page with it. Running ahead of it is what buys a legible
+ * message instead of a black output and an empty console.
+ *
+ * It writes to `document.title` and the console rather than rendering anything:
+ * this page can be live on air, and a Breeze error card composited over a
+ * programme feed would be a worse outcome than a missing graphic. The title is
+ * visible in the OBS/vMix source list, which is where an operator looks.
+ */
+function gsapTags(): string {
+  const v = encodeURIComponent(GSAP_VERSION);
+  return `<script src="${GSAP_VENDOR_URL}/gsap.min.js?v=${v}"></script>
+<script src="${GSAP_VENDOR_URL}/SplitText.min.js?v=${v}"></script>
+<script>
+(function () {
+  var min = ${JSON.stringify(GSAP_MIN)}, max = ${JSON.stringify(GSAP_MAX_EXCLUSIVE)};
+  var g = window.gsap;
+  function fail(msg) {
+    document.title = 'GSAP problem — Breeze';
+    console.error('[breeze] ' + msg +
+      '\\n[breeze] GSAP is loaded from ${GSAP_VENDOR_URL}/ and is not bundled. ' +
+      'Staged version per the server: ${GSAP_VERSION}.');
+  }
+  if (!g) return fail('GSAP did not load — the graphic will not animate.');
+  if (!window.SplitText) fail('GSAP loaded but SplitText did not — text reveals will fail.');
+  var p = String(g.version || '').split('.').map(Number);
+  function lt(a, b) {
+    for (var i = 0; i < 3; i++) {
+      if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) < (b[i] || 0);
+    }
+    return false;
+  }
+  if (p.length < 2 || p.some(isNaN)) {
+    fail('GSAP reports an unreadable version (' + g.version + ').');
+  } else if (lt(p, min) || !lt(p, max)) {
+    fail('GSAP ' + g.version + ' is outside the supported range ' +
+      min.join('.') + ' <= v < ' + max.join('.') + '. Playback may misbehave.');
+  }
+})();
+</script>`;
+}
+
 /** Source types whose rows come from a fetch rather than from an operator. */
 const FETCHED_SOURCE_TYPES = new Set(['http-json', 'http-csv', 'rss', 'xml', 'sheets', 'weather', 'ftp']);
 
@@ -99,6 +166,7 @@ window.__BREEZE__ = {
   autoPlay: false
 };
 </script>
+${gsapTags()}
 <script src="/public/player.js?v=${encodeURIComponent(cacheBust)}"></script>
 </body>
 </html>`;

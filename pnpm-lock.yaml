@@ -29,9 +29,6 @@ importers:
       '@breeze/schema':
         specifier: workspace:*
         version: link:../../packages/schema
-      gsap:
-        specifier: ^3.13.0
-        version: 3.15.0
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -54,6 +51,9 @@ importers:
       '@vitejs/plugin-react':
         specifier: ^6.0.5
         version: 6.0.5(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(tsx@4.23.1))
+      gsap:
+        specifier: ~3.15.0
+        version: 3.15.0
       happy-dom:
         specifier: ^20.11.1
         version: 20.11.1
@@ -118,10 +118,10 @@ importers:
       '@breeze/schema':
         specifier: workspace:*
         version: link:../schema
-      gsap:
-        specifier: ^3.13.0
-        version: 3.15.0
     devDependencies:
+      gsap:
+        specifier: ~3.15.0
+        version: 3.15.0
       happy-dom:
         specifier: ^20.11.1
         version: 20.11.1

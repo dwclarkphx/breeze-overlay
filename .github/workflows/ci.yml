@@ -34,10 +34,28 @@ jobs:
       - name: License headers
         run: pnpm license:check
 
+      # Attribution for what a user receives, generated from the installed
+      # production tree. Runs before the build for the same reason as the two
+      # checks above — it needs only the install, and a dependency added
+      # without regenerating this is a licensing miss, not a test failure.
+      - name: Third-party notices
+        run: pnpm notices:check
+
       # Build FIRST — dev/test do not rebuild workspace deps,
       # so skipping this tests a stale bundle.
+      #
+      # This is also what stages GSAP into apps/server/public/vendor/: it is no
+      # longer bundled, so a build that did not run would leave the e2e suite
+      # loading a script tag that 404s, and every playback assertion failing
+      # for a reason no test name would mention.
       - name: Build
         run: pnpm build
+
+      # Confirms the staged GSAP matches the pinned version. Separate from the
+      # build so that a mismatch reads as "GSAP is not staged" rather than
+      # surfacing later as a graphic that will not animate.
+      - name: GSAP staged
+        run: pnpm vendor:check
 
       - name: Typecheck
         run: pnpm typecheck

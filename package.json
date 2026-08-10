@@ -1,6 +1,6 @@
 {
   "name": "breeze-overlay",
-  "version": "0.64.1",
+  "version": "0.64.2",
   "private": true,
   "description": "Self-hosted broadcast overlay/graphics builder — HTML5 + GSAP, serving live graphics to vMix / OBS.",
   "license": "MPL-2.0",
@@ -28,6 +28,12 @@
     "clean": "pnpm -r exec rm -rf dist node_modules/.cache",
     "license:check": "node scripts/check-license-headers.mjs",
     "license:fix": "node scripts/check-license-headers.mjs --fix",
+    "//notices": "Attribution for what a user actually receives, generated from the installed production tree. `notices:check` belongs in CI next to license:check: the two answer different questions — one that every source file carries its MPL notice, the other that the third-party list matches the dependencies that shipped.",
+    "notices": "node scripts/third-party-notices.mjs",
+    "notices:check": "node scripts/third-party-notices.mjs --check",
+    "//vendor": "Stages GSAP into apps/server/public/vendor/. Normally run by @breeze/server's build; exposed here so it can be run on its own after changing the pin.",
+    "vendor": "node scripts/vendor-gsap.mjs",
+    "vendor:check": "node scripts/vendor-gsap.mjs --check",
     "version:sync": "node scripts/sync-version.mjs",
     "version:check": "node scripts/sync-version.mjs --check",
     "release:copy": "node dev/make-release.mjs"

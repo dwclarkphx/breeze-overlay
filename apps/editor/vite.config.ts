@@ -6,8 +6,11 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
+import path from 'node:path';
 
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
 /**
@@ -44,9 +47,115 @@ const APP_VERSION = (createRequire(import.meta.url)('./package.json') as { versi
  */
 const LICENSE_BANNER = `/*! Breeze Overlay — Mozilla Public License 2.0
  *  Source: https://github.com/dwclarkphx/breeze-overlay
- *  Includes GSAP (GreenSock Animation Platform), (C) Webflow.
+ *  Requires GSAP (GreenSock Animation Platform), (C) Webflow — loaded
+ *  separately from /vendor/gsap/, not included in these chunks.
  *  GSAP is licensed separately — https://gsap.com/standard-license
  */`;
+
+/**
+ * GSAP resolves to a global, not to the npm package — the same arrangement
+ * `apps/server/scripts/build-client.mjs` sets up for the output page, for the
+ * same reason: the library ships as a replaceable `gsap.min.js` an operator can
+ * upgrade without rebuilding Breeze. See dev/docs/GSAP-EXTERNAL.md.
+ *
+ * Keeping both consumers on one arrangement is not tidiness. ROADMAP rule 1 is
+ * that the editor preview and the served page run the *same* renderer; if only
+ * one of them took GSAP from a global, the two could end up animating against
+ * different versions of the library and the preview would stop being a promise
+ * about what goes to air.
+ *
+ * Regex `find`s, not strings: Vite's string form matches by prefix, so a plain
+ * `'gsap'` entry would also swallow `'gsap/SplitText'` and send both imports to
+ * the core shim. Anchoring each pattern is what keeps them apart.
+ *
+ * Vite's `rollupOptions.external` is deliberately not used. The editor is built
+ * as ESM, where an external bare specifier survives into the output as a literal
+ * `import ... from 'gsap'` — unresolvable in a browser without an import map.
+ */
+const RUNTIME_VENDOR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  'packages',
+  'runtime',
+  'src',
+  'vendor',
+);
+
+const GSAP_ALIAS = [
+  { find: /^gsap$/, replacement: path.join(RUNTIME_VENDOR, 'gsap-global.ts') },
+  { find: /^gsap\/SplitText$/, replacement: path.join(RUNTIME_VENDOR, 'splittext-global.ts') },
+];
+
+/**
+ * Inject the vendored GSAP script tags into index.html.
+ *
+ * Injected rather than written into `index.html` by hand so the cache-busting
+ * version cannot be forgotten on a bump — the same reason `APP_VERSION` above is
+ * read from a manifest rather than typed as a literal. Nothing in the editor
+ * imports GSAP directly, but `@breeze/runtime` does, and the alias sends that
+ * import to a global these tags are what populate.
+ *
+ * The URL is the *server's* staged copy, not one of the editor's own. In
+ * production one Fastify process serves both /editor and /public; in dev the
+ * `/public` proxy below forwards to it. One staged set means an operator who
+ * upgrades GSAP cannot leave the editor preview on a different version from
+ * air — which would quietly break ROADMAP rule 1's promise that the preview
+ * shows what goes out.
+ *
+ * Classic (non-module) tags, and Vite leaves their absolute `/public/...` URLs
+ * alone rather than rewriting them against `base`, which is what we want: they
+ * are server routes, not editor build assets.
+ */
+function gsapVendorTags(): Plugin {
+  const stamp = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '..',
+    'server',
+    'public',
+    'vendor',
+    'gsap',
+    'VERSION',
+  );
+
+  return {
+    name: 'breeze-gsap-vendor-tags',
+    transformIndexHtml() {
+      /*
+       * Read per transform, not once at module load: `pnpm --filter
+       * @breeze/server dev` may stage GSAP after the editor's dev server is
+       * already up, and a version read too early would pin the query string to
+       * a stale value for the life of the process.
+       */
+      let version = 'unstaged';
+      try {
+        version = fs.readFileSync(stamp, 'utf8').trim() || 'unstaged';
+      } catch {
+        /*
+         * Not fatal, and deliberately quiet at this point. The editor is
+         * routinely started before the server has ever built, and a warning
+         * here would fire on every ordinary first run. The tags still emit; if
+         * GSAP genuinely is missing, the shim's thrown error names the file and
+         * the command that stages it, which is more use than a build-time
+         * warning nobody reads.
+         */
+      }
+      const v = encodeURIComponent(version);
+      return [
+        {
+          tag: 'script',
+          attrs: { src: `/public/vendor/gsap/gsap.min.js?v=${v}` },
+          injectTo: 'head' as const,
+        },
+        {
+          tag: 'script',
+          attrs: { src: `/public/vendor/gsap/SplitText.min.js?v=${v}` },
+          injectTo: 'head' as const,
+        },
+      ];
+    },
+  };
+}
 
 const REACT_PKGS = new Set(['react', 'react-dom', 'scheduler']);
 
@@ -98,10 +207,23 @@ function packageOf(id: string): string | undefined {
  * silently perturb the other.
  */
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), gsapVendorTags()],
   base: '/editor/',
   define: {
     __APP_VERSION__: JSON.stringify(APP_VERSION),
+  },
+  resolve: {
+    alias: GSAP_ALIAS,
+  },
+  /*
+   * Without this, Vite's dev-time optimizer still pre-bundles `gsap` on the
+   * strength of it appearing in `@breeze/runtime`'s imports — work that produces
+   * a chunk the alias guarantees nothing will ever import. Excluding it keeps
+   * the dev server from doing it and, more usefully, keeps a stale optimizer
+   * cache from being a candidate explanation the next time something looks off.
+   */
+  optimizeDeps: {
+    exclude: ['gsap'],
   },
   build: {
     outDir: 'dist',
@@ -118,11 +240,15 @@ export default defineConfig({
          * approximately never, so isolating it means a rebuild of the editor
          * only invalidates the small app chunk rather than forcing every
          * operator's browser to re-fetch the lot.
+         *
+         * There is no `vendor-gsap` entry any more, and its absence is the
+         * point rather than an omission: GSAP is aliased to a global, so no
+         * module id here can ever resolve to it. The chunk it used to name is
+         * now a separate, operator-replaceable file served from /vendor/gsap/.
          */
         manualChunks(id: string): string | undefined {
           const pkg = packageOf(id);
           if (!pkg) return undefined;
-          if (pkg === 'gsap') return 'vendor-gsap';
           if (REACT_PKGS.has(pkg)) return 'vendor-react';
           if (MOVEABLE_PKGS.has(pkg)) return 'vendor-moveable';
           return undefined;
@@ -138,6 +264,15 @@ export default defineConfig({
       '/api': 'http://127.0.0.1:7331',
       '/assets': 'http://127.0.0.1:7331',
       '/play': 'http://127.0.0.1:7331',
+      /*
+       * The vendored GSAP files. The editor deliberately does not stage its own
+       * copy: one staged set under `apps/server/public/vendor/gsap/` serves both
+       * the output page and the editor, so an operator who upgrades GSAP cannot
+       * end up with a preview running one version and air running another.
+       * In production the same Fastify server hosts /editor and /public, so
+       * this proxy is the only place the arrangement needs stating twice.
+       */
+      '/public': 'http://127.0.0.1:7331',
       /*
        * The control hub. Needs `ws: true` and a `ws://` target — without it
        * Vite proxies the upgrade request as plain HTTP and the socket fails to

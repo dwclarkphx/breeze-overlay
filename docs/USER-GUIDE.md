@@ -24,6 +24,7 @@ No coding required. If you have used After Effects, Photoshop or any NLE, the mo
 14a. [Remote control — the HTTP API](#14a-remote-control--the-http-api)
 15. [Keyboard shortcuts](#15-keyboard-shortcuts)
 16. [When something looks wrong](#16-when-something-looks-wrong)
+17. [Upgrading the animation engine](#17-upgrading-the-animation-engine)
 
 ---
 
@@ -1084,3 +1085,40 @@ If the second returns `"delivered": 0`, the URL is right and the browser source 
 **A file drop is showing yesterday's results.** It takes the newest file that matches. If today's file was written with a different name — a typo, or a different date format — it will not match the pattern and yesterday's will still be the newest match. Widen the pattern, or fix the name.
 
 **A file drop asks for a credential I do not have.** Leave **Credential id** blank for an anonymous drop. If the server needs a login, whoever runs the Breeze server stores the password or SSH key and gives you the *name* to type in — you never enter the password itself.
+
+**Nothing animates at all — every graphic sits still, or the page is blank.** Look at the browser source's name in OBS or vMix: if it reads *GSAP problem — Breeze*, the animation engine did not load. See [section 17](#17-upgrading-the-animation-engine); the browser console names the exact problem. This is the one failure that affects every graphic at once, so a single one misbehaving is not this.
+
+**I replaced `gsap.min.js` and nothing changed.** Restart the Breeze server. Pages ask for the file with the version number the server read at startup, so until it restarts, browsers are still being pointed at the old one and serving it from cache. Section 17 has the full sequence.
+
+---
+
+## 17. Upgrading the animation engine
+
+Every movement in Breeze — every keyframe, every ease, every text reveal — is played by **GSAP**, an animation library made by GreenSock. It is not part of Breeze and is not compiled into it: it sits in the installation as two ordinary files, which is what makes this section possible at all.
+
+You almost certainly do not need to do this. Breeze ships with a version that has been tested against it, and there is no benefit to being on the newest one. The reason to upgrade is a specific one — a bug in GSAP that a new release fixes, or a security note about the version you have.
+
+**Where the files live**
+
+```
+apps/server/public/vendor/gsap/
+    gsap.min.js          the engine
+    SplitText.min.js     the part that splits text into characters and words
+    VERSION              which release is staged
+```
+
+**To upgrade**
+
+1. Download the release you want from [gsap.com](https://gsap.com) and take `gsap.min.js` and `SplitText.min.js` from its `dist` folder. Take both, from the same release — they are a matched pair, and mixing versions is its own class of problem.
+2. Stop the Breeze server.
+3. Replace the two files. Keep the names exactly as they are.
+4. Put the new version number into `VERSION`, on its own line — for example `3.15.1`. This is what tells browsers the file has changed; skip it and they will keep using the copy they already have.
+5. Start the server and reload one browser source.
+
+**To check it worked**, open a graphic's play URL in a browser, open the developer console (F12) and type `gsap.version`. It will report what is actually loaded. Then play a graphic with a text reveal in it — that exercises both files, not just one.
+
+**If something is wrong**, the page says so rather than going quietly black. The browser source's name changes to *GSAP problem — Breeze*, which is visible in the OBS and vMix source lists without opening anything, and the console explains: the version is outside the range this build of Breeze supports (3.13 or newer, below 4.0), or a file did not load, or SplitText is missing. Put the old files back and restart — nothing else on the installation has changed, so that is a complete undo.
+
+**Two things this does not survive.** Rebuilding Breeze restages the version it was built against, overwriting your files; that is deliberate, so a rebuilt installation is always in a known state. And upgrading Breeze itself brings its own tested GSAP. If you need a particular GSAP release permanently, tell whoever maintains your installation — it is a one-line change in the project's configuration, and better recorded there than reapplied by hand after every build.
+
+GSAP is licensed separately from Breeze, under GreenSock's [Standard License](https://gsap.com/standard-license). Breeze's own licence does not cover it, and replacing these files does not change that.

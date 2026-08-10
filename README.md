@@ -230,9 +230,14 @@ and remember the logged URLs are then wrong.
 Two stages. The builder installs the full workspace and compiles
 `packages/schema`, `packages/runtime`, the server and the React editor. The
 runtime stage carries compiled output plus production dependencies only — no
-TypeScript, no Vite, no Playwright. The editor's React and GSAP trees are
-skipped too: Vite already bundled them into `apps/editor/dist`, so installing
-them again would add about 90 MB nothing imports.
+TypeScript, no Vite, no Playwright. The editor's React tree is skipped too:
+Vite already bundled it into `apps/editor/dist`, so installing it again would
+add about 90 MB nothing imports.
+
+GSAP is not installed in the runtime stage at all — it is a devDependency, and
+nothing bundles it. The two files the pages actually load were staged into
+`apps/server/public/vendor/gsap/` by the builder and travel with the rest of
+that directory, which the runtime stage already copies wholesale.
 
 The workspace directory layout is reproduced inside the image rather than
 flattened. `apps/server/src/config.ts` derives `REPO_ROOT` from where the
@@ -639,6 +644,10 @@ Still open from Phase 7, deferred deliberately: PSD import via ag-psd, image seq
 
 Breeze Overlay is licensed under the [Mozilla Public License 2.0](LICENSE). Every source file carries the MPL notice; modifications to those files must stay under MPL-2.0, while new files combined with them may be licensed as you choose (MPL §3.3). Source lives at https://github.com/dwclarkphx/breeze-overlay.
 
-Breeze embeds [GSAP](https://gsap.com) (GreenSock Animation Platform), (C) Webflow, which is licensed separately under the [GSAP Standard License](https://gsap.com/standard-license) — free for commercial use, with its own terms that are not part of the MPL.
+Breeze **requires** [GSAP](https://gsap.com) (GreenSock Animation Platform), (C) Webflow, but does not bundle it. `gsap.min.js` and `SplitText.min.js` are copied verbatim from the npm package into `apps/server/public/vendor/gsap/` at build time and loaded by a script tag — so no GreenSock code is compiled into any Breeze bundle, and the files can be replaced with a different GSAP release without rebuilding Breeze (see [Upgrading the animation engine](docs/USER-GUIDE.md#17-upgrading-the-animation-engine)).
+
+GSAP is licensed separately under the [GSAP Standard License](https://gsap.com/standard-license) — free for commercial use, with its own terms that are not part of the MPL.
+
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) lists every third-party package distributed with Breeze, generated from the installed production dependency tree rather than maintained by hand.
 
 
