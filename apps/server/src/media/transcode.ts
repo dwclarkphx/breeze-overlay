@@ -27,8 +27,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { config, projectAssetsDir } from '../config.js';
-import { assetPath, listAssets, registerAsset, readProject } from '../store.js';
+import { assetFilename, assetPath, listAssets, registerAsset, readProject } from '../store.js';
 import { capabilities, inspect } from './ffmpeg.js';
+import { discardStaged } from './sequence.js';
 import type { AssetRef } from '@breeze/schema';
 
 export type JobState = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
@@ -36,9 +37,27 @@ export type JobState = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
 export interface TranscodeJob {
   id: string;
   projectId: string;
-  /** Asset this job reads. */
+  /**
+   * What this job reads.
+   *
+   * `asset` is a single file in the bin — the ProRes path. `sequence` is a
+   * staged directory of ordered frames that is not in the bin and never will
+   * be. They share everything downstream of the input flags: the same encoder
+   * settings, the same progress stream, the same cache-by-source-key rule, the
+   * same concurrency-of-1 broadcast argument.
+   */
+  kind: 'asset' | 'sequence';
+  /**
+   * Asset this job reads, or for a sequence the synthetic `seq-<manifest>` id
+   * that keys its output. Either way it is the *source* key the output is
+   * named after, which is what makes the queue a cache.
+   */
   sourceAssetId: string;
   sourceName: string;
+  /** Sequence only: staging directory, removed once the output is registered. */
+  stagingDir?: string;
+  /** Sequence only: frames per second the stills are assembled at. */
+  fps?: number;
   state: JobState;
   /** 0..1, or null when the source duration could not be read. */
   progress: number | null;
@@ -53,12 +72,34 @@ export interface TranscodeJob {
 /**
  * Encoder settings.
  *
- * `yuva420p` is the whole point — it is what carries the alpha channel through
- * to the WebM, and without it the transcode succeeds and silently produces an
- * opaque video. `auto-alt-ref 0` is required alongside it: libvpx's alternate
- * reference frames are incompatible with alpha, and leaving them on produces a
- * file whose transparency breaks up in motion, which is far worse than losing it
- * outright because it survives a spot-check on the first frame.
+ * **Both alpha flags are defensive, not load-bearing on a current ffmpeg, and
+ * this comment used to say otherwise.** Measured against ffmpeg 8.0.1 /
+ * libvpx-vp9 by `dev/transcode-check.mjs`: dropping `-pix_fmt yuva420p` still
+ * produced alpha, because ffmpeg negotiates `yuva420p` from an alpha-bearing
+ * source; and encoding with and without `-auto-alt-ref 0` produced
+ * **byte-identical** output, including on a 75-frame source with fast,
+ * high-frequency moving alpha — precisely the case the flag is supposed to
+ * protect. The claim that transparency "breaks up in motion" without it does
+ * not reproduce and should not be repeated without re-measuring.
+ *
+ * They are kept because an operator's `PATH` may hold something much older —
+ * Ubuntu 22.04 ships ffmpeg 4.4, where the alt-ref interaction was real — and
+ * stating the pixel format explicitly costs nothing against a source ffmpeg
+ * would have had to guess from.
+ *
+ * **The image-sequence path does not change this, though it was written here
+ * for a day claiming it did.** The reasoning looked sound — PNG frames decode
+ * as `rgba` and arrive through the concat demuxer, so the negotiation that
+ * saves the ProRes path is a different negotiation — and it is wrong.
+ * `dev/sequence-check.mjs` encoded a 24-frame rgba sequence with the flag
+ * removed and got `alpha_mode=1` and an alpha plane that decodes to the same
+ * ramp, left 62.0 / right 191.0 of 255, identical to the flagged encode.
+ * ffmpeg negotiates `yuva420p` here too.
+ *
+ * Recorded rather than quietly deleted because it is the second time on this
+ * file that a plausible claim about these flags survived review by sounding
+ * right. Neither flag is load-bearing on 8.0.1 for any input this server
+ * takes; both stay for the old ffmpeg on an operator's `PATH`.
  *
  * CRF 30 with `-b:v 0` is constant-quality VP9. A stinger is short and plays
  * over live pictures, so quality matters more than a predictable bitrate.
@@ -112,10 +153,60 @@ export class TranscodeQueue {
     const job: TranscodeJob = {
       id: `job${nextId++}`,
       projectId,
+      kind: 'asset',
       sourceAssetId,
       sourceName: source.originalName ?? source.path,
       state: 'queued',
       progress: null,
+      queuedAt: new Date().toISOString(),
+    };
+
+    this.jobs.set(job.id, job);
+    this.waiting.push(job.id);
+    void this.pump();
+    return job;
+  }
+
+  /**
+   * Enqueue a staged image sequence.
+   *
+   * Deduplicated on the manifest key rather than on an asset id, which gives
+   * the sequence path the same property the asset path has for free: the same
+   * frames in the same order are the same job, so a re-upload of an archive
+   * that is already encoding joins the running job instead of starting a
+   * second ffmpeg over the same output path.
+   */
+  async enqueueSequence(
+    projectId: string,
+    name: string,
+    staged: { key: string; dir: string; frameCount: number },
+    fps: number,
+  ): Promise<TranscodeJob> {
+    const sourceAssetId = `seq-${staged.key}`;
+
+    const existing = [...this.jobs.values()].find(
+      (j) =>
+        j.projectId === projectId &&
+        j.sourceAssetId === sourceAssetId &&
+        (j.state === 'queued' || j.state === 'running'),
+    );
+    if (existing) return existing;
+
+    await readProject(projectId);
+
+    const job: TranscodeJob = {
+      id: `job${nextId++}`,
+      projectId,
+      kind: 'sequence',
+      sourceAssetId,
+      sourceName: name,
+      stagingDir: staged.dir,
+      fps,
+      state: 'queued',
+      // A sequence knows its own length before a frame is encoded, so progress
+      // starts determinate — unlike a source whose duration ffprobe could not
+      // read.
+      progress: 0,
       queuedAt: new Date().toISOString(),
     };
 
@@ -196,20 +287,42 @@ export class TranscodeQueue {
     let output: string;
     let outputName: string;
     try {
-      const source = (await listAssets(job.projectId)).find((a) => a.id === job.sourceAssetId);
-      if (!source) throw new Error('source asset has been deleted');
+      if (job.kind === 'sequence') {
+        /*
+         * The list file, and ffmpeg is run with the staging directory as its
+         * cwd so the relative names inside it resolve — see `sequence.ts` for
+         * why they are relative rather than absolute.
+         */
+        input = path.join(job.stagingDir!, 'frames.txt');
+        /*
+         * Named after the manifest key for the same reason the asset path is
+         * named after the source hash: the same frames in the same order must
+         * land on the same output, or the cache check below can never hit.
+         *
+         * Built through `assetFilename` rather than by hand so the archive's
+         * name goes through the same allowlist rewrite every other uploaded
+         * name does — it arrived in a query string and is no more trustworthy
+         * here than it was there.
+         */
+        const stem = path.basename(job.sourceName, path.extname(job.sourceName));
+        outputName = assetFilename(`${stem}-alpha.webm`, job.sourceAssetId.replace(/^seq-/, ''));
+        output = await assetPath(job.projectId, outputName);
+      } else {
+        const source = (await listAssets(job.projectId)).find((a) => a.id === job.sourceAssetId);
+        if (!source) throw new Error('source asset has been deleted');
 
-      input = await assetPath(job.projectId, source.path.replace(/^assets\//, ''));
-      /*
-       * The output name carries the *source* hash, not its own.
-       *
-       * That is what makes this a cache: the same source transcoded again lands
-       * on the same path, so the check below finds it and skips minutes of CPU.
-       * Hashing the output instead would mean encoding the file to discover
-       * what to call it, which is the entire cost this avoids.
-       */
-      outputName = `${path.basename(source.path, path.extname(source.path))}-alpha.webm`;
-      output = await assetPath(job.projectId, outputName);
+        input = await assetPath(job.projectId, source.path.replace(/^assets\//, ''));
+        /*
+         * The output name carries the *source* hash, not its own.
+         *
+         * That is what makes this a cache: the same source transcoded again lands
+         * on the same path, so the check below finds it and skips minutes of CPU.
+         * Hashing the output instead would mean encoding the file to discover
+         * what to call it, which is the entire cost this avoids.
+         */
+        outputName = `${path.basename(source.path, path.extname(source.path))}-alpha.webm`;
+        output = await assetPath(job.projectId, outputName);
+      }
     } catch (err) {
       this.fail(job, err instanceof Error ? err.message : String(err));
       return;
@@ -236,8 +349,21 @@ export class TranscodeQueue {
      * editor reports `hasAlpha` before the job is queued, which is where that
      * decision belongs.
      */
-    const info = await inspect(input);
-    const total = info?.durationSeconds ?? null;
+    /*
+     * A sequence's duration is arithmetic, not a probe.
+     *
+     * ffprobe cannot read a duration off a concat list, so probing here would
+     * report an indeterminate bar for the one input whose length is known
+     * exactly before the encode starts.
+     */
+    let total: number | null;
+    if (job.kind === 'sequence') {
+      const frames = await countStagedFrames(job.stagingDir!);
+      total = frames > 0 && job.fps ? frames / job.fps : null;
+    } else {
+      const info = await inspect(input);
+      total = info?.durationSeconds ?? null;
+    }
     job.progress = total === null ? null : 0;
 
     /*
@@ -251,13 +377,31 @@ export class TranscodeQueue {
     const tmp = `${output}.${process.pid}.part`;
     await fs.mkdir(projectAssetsDir(job.projectId), { recursive: true });
 
+    /*
+     * A sequence is read through the concat demuxer at a stated frame rate.
+     *
+     * `-r` before `-i` sets the *input* rate — how long each still is held —
+     * which is the number the operator chose. After `-i` it would mean output
+     * frame rate and ffmpeg would duplicate or drop stills to reach it, which
+     * on a 12fps hand-drawn burst asked to be 30fps produces a subtly stuttery
+     * animation that looks like a bad encode rather than a wrong flag.
+     *
+     * `-safe` is left at its default. The list names are relative and the
+     * process runs with the staging directory as its cwd, so there is nothing
+     * for `-safe 0` to permit — see `sequence.ts`.
+     */
+    const inputArgs =
+      job.kind === 'sequence'
+        ? ['-f', 'concat', '-r', String(job.fps ?? 30), '-i', input]
+        : ['-i', input];
+
     const args = [
       '-hide_banner',
       '-nostdin',
       // Overwrite the temp file: a previous crashed run may have left one, and
       // ffmpeg would otherwise sit waiting for a confirmation nobody can type.
       '-y',
-      '-i', input,
+      ...inputArgs,
       ...ENCODER_ARGS,
       // Machine-readable progress on stdout. Parsing the human stderr output
       // is the usual approach and it changes between ffmpeg releases; this is
@@ -269,7 +413,12 @@ export class TranscodeQueue {
     ];
 
     const code = await new Promise<number | null>((resolve) => {
-      const child = spawn(caps.ffmpeg, args, { shell: false });
+      const child = spawn(caps.ffmpeg, args, {
+        shell: false,
+        // The concat list names its frames relatively, so the demuxer resolves
+        // them against the process's cwd. Nothing else depends on it.
+        ...(job.kind === 'sequence' ? { cwd: job.stagingDir! } : {}),
+      });
       this.children.set(job.id, child);
 
       let stderr = '';
@@ -327,6 +476,7 @@ export class TranscodeQueue {
     await this.finish(job, outputName, output);
   }
 
+
   private async finish(job: TranscodeJob, outputName: string, output: string): Promise<void> {
     const stat = await fs.stat(output);
 
@@ -364,6 +514,20 @@ export class TranscodeQueue {
     };
 
     await registerAsset(job.projectId, asset);
+
+    /*
+     * The staged frames go once the output is registered, not before.
+     *
+     * Registration is the point after which the encode can be repeated for
+     * free — the cache check finds the finished file — so deleting earlier
+     * would trade a recoverable state for an unrecoverable one if the write
+     * failed. Three hundred PNGs are inputs; keeping them costs disk that grows
+     * with every sequence an operator ever uploads.
+     */
+    if (job.kind === 'sequence' && job.stagingDir) {
+      await discardStaged(job.stagingDir);
+    }
+
     job.outputAsset = asset;
     job.progress = 1;
     job.state = 'done';
@@ -389,6 +553,22 @@ export class TranscodeQueue {
  */
 function wasCancelled(job: TranscodeJob): boolean {
   return job.state === 'cancelled';
+}
+
+/**
+ * How many stills a staged sequence holds.
+ *
+ * Counted off the directory rather than carried on the job, so the dedupe path
+ * — a job that joined an already-staged directory — gets the right answer
+ * without the caller having to re-read the archive to supply it.
+ */
+async function countStagedFrames(dir: string): Promise<number> {
+  try {
+    const names = await fs.readdir(dir);
+    return names.filter((n) => n !== 'frames.txt' && !n.endsWith('.part')).length;
+  } catch {
+    return 0;
+  }
 }
 
 /**

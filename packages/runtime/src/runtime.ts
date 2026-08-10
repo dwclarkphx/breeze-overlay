@@ -57,6 +57,7 @@ import {
   type TableAnimator,
 } from './table.js';
 import { resolveTextAnim, type ResolvedTextAnim } from './textanim.js';
+import { SpriteSync } from './sprite.js';
 import { VideoSync } from './video.js';
 
 /*
@@ -225,6 +226,7 @@ export class BreezeRuntime {
   private masks = new Map<string, MaskHandle>();
   private fitResults = new Map<string, FitResult>();
   private videos = new VideoSync();
+  private sprites = new SpriteSync();
   private crawls = new Map<string, CrawlLoop>();
   private tables = new Map<string, TableHandle>();
   private textAnims = new Map<string, TextAnimHandle>();
@@ -326,6 +328,10 @@ export class BreezeRuntime {
 
       if (nodes.video && instance.layer.type === 'video') {
         this.videos.add({ el: nodes.video, layer: instance.layer, offset: instance.offset });
+      }
+
+      if (nodes.sprite && instance.layer.type === 'sprite') {
+        this.sprites.add({ el: nodes.sprite, layer: instance.layer, offset: instance.offset });
       }
     }
 
@@ -453,6 +459,7 @@ export class BreezeRuntime {
     this.renderAt(0);
     this.applyVisibilityWindows(0);
     this.videos.syncTo(0);
+    this.sprites.syncTo(0);
 
     /**
      * Fonts land after first paint. Straps mis-measure until then, and a crawl
@@ -1020,11 +1027,13 @@ export class BreezeRuntime {
       this.tl.pause();
       this.tl.time(holdAt, false);
       this.videos.tick(holdAt);
+      this.sprites.tick(holdAt);
       this.emit('hold');
       return;
     }
 
     if (this.videos.size) this.videos.tick(t);
+    if (this.sprites.size) this.sprites.tick(t);
     this.emit('timeupdate');
   }
 
@@ -1085,6 +1094,7 @@ export class BreezeRuntime {
     this.state = 'playing-in';
     this.startCrawls();
     this.videos.play(this.tl.time());
+    this.sprites.syncTo(this.tl.time());
     this.tl.play();
     this.emit('play');
   }
@@ -1111,6 +1121,7 @@ export class BreezeRuntime {
     this.pendingHold = null;
     this.state = 'playing-out';
     this.videos.play(this.tl.time());
+    this.sprites.syncTo(this.tl.time());
     this.tl.play();
     this.emit('stop');
   }
@@ -1143,6 +1154,7 @@ export class BreezeRuntime {
     this.state = 'playing-in';
     this.startCrawls();
     this.videos.play(this.tl.time());
+    this.sprites.syncTo(this.tl.time());
     this.tl.play();
     this.emit('play');
   }
@@ -1168,6 +1180,7 @@ export class BreezeRuntime {
     this.state = 'playing-in';
     this.startCrawls();
     this.videos.play(this.tl.time());
+    this.sprites.syncTo(this.tl.time());
     this.tl.play();
     this.emit('play');
   }
@@ -1180,6 +1193,7 @@ export class BreezeRuntime {
     this.renderAt(0);
     this.stopCrawls();
     this.videos.syncTo(0);
+    this.sprites.syncTo(0);
     this.applyVisibilityWindows(0);
     this.emit('stop');
   }
@@ -1190,6 +1204,7 @@ export class BreezeRuntime {
     this.renderAt(time);
     this.applyVisibilityWindows(this.tl.time());
     this.videos.syncTo(this.tl.time());
+    this.sprites.syncTo(this.tl.time());
     this.emit('timeupdate');
   }
 
@@ -1592,6 +1607,7 @@ export class BreezeRuntime {
     this.clocks?.destroy();
     this.clocks = null;
     this.videos.destroy();
+    this.sprites.destroy();
     for (const mask of this.masks.values()) mask.destroy();
     this.masks.clear();
     /*

@@ -1,6 +1,6 @@
 {
   "name": "breeze-overlay",
-  "version": "0.64.3",
+  "version": "0.65.0",
   "private": true,
   "description": "Self-hosted broadcast overlay/graphics builder — HTML5 + GSAP, serving live graphics to vMix / OBS.",
   "license": "MPL-2.0",

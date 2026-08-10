@@ -15,6 +15,7 @@ export * from './fit.js';
 export * from './table.js';
 export * from './textanim.js';
 export * from './mask.js';
+export * from './sprite.js';
 export * from './video.js';
 export * from './styles.js';
 export * from './runtime.js';

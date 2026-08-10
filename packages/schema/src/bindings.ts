@@ -67,6 +67,12 @@ export function collectBindings(comp: Composition): BindingDescriptor[] {
     if (layer.type === 'text') defaultValue = layer.text;
     else if (layer.type === 'image') { kind = 'image'; defaultValue = layer.src; }
     else if (layer.type === 'video') { kind = 'video'; defaultValue = layer.src; }
+    // A sprite binds as an `image` because what travels over the wire is a
+    // still sheet, and the panel should offer an image picker rather than a
+    // video one. Only reachable on a 1×1 grid — `validate.ts` refuses a binding
+    // on a multi-frame sprite, since the replacement sheet would be stepped
+    // through the outgoing sheet's geometry.
+    else if (layer.type === 'sprite') { kind = 'image'; defaultValue = layer.src; }
     else if (layer.type === 'crawl') {
       kind = 'stringList';
       defaultValue = layer.items;

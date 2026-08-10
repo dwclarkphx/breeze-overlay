@@ -142,15 +142,23 @@ export function PropertiesPanel(): JSX.Element {
    * what stops a layer already on a retired asset having its own path vanish
    * out of the picker and read as unset.
    */
-  // Narrowed once: `src` lives on the image and video variants, not on `Layer`.
-  const currentSrc = layer.type === 'image' || layer.type === 'video' ? layer.src : undefined;
+  // Narrowed once: `src` lives on the image, video and sprite variants, not on `Layer`.
+  const currentSrc =
+    layer.type === 'image' || layer.type === 'video' || layer.type === 'sprite'
+      ? layer.src
+      : undefined;
 
   const assetsOfKind = assets.filter(
     (a) =>
       (a.state !== 'retired' || a.path === currentSrc) &&
       (a.kind === 'other' ||
         (layer.type === 'image' && a.kind === 'image') ||
-        (layer.type === 'video' && a.kind === 'video')),
+        (layer.type === 'video' && a.kind === 'video') ||
+        // A sheet is an ordinary still image as far as the bin is concerned —
+        // nothing at ingest can tell a sprite sheet from a photograph, and a
+        // separate asset kind would mean asking the operator to classify a file
+        // the server cannot verify the answer for.
+        (layer.type === 'sprite' && a.kind === 'image')),
   );
 
   /**
@@ -609,7 +617,7 @@ export function PropertiesPanel(): JSX.Element {
           />
         )}
 
-        {(layer.type === 'image' || layer.type === 'video') && (
+        {(layer.type === 'image' || layer.type === 'video' || layer.type === 'sprite') && (
           <Section title="Source">
             {/*
               A picker over the asset bin, with the free-text path kept below it.
@@ -630,7 +638,12 @@ export function PropertiesPanel(): JSX.Element {
                 }}
               >
                 <option value="">
-                  {assetsOfKind.length ? '— pick an asset —' : `no ${layer.type} assets uploaded`}
+                  {assetsOfKind.length
+                    ? '— pick an asset —'
+                    // A sprite draws from the image assets, so "no sprite
+                    // assets uploaded" would send the operator looking for a
+                    // kind of file the bin does not have.
+                    : `no ${layer.type === 'sprite' ? 'image' : layer.type} assets uploaded`}
                 </option>
                 {assetsOfKind.map((a) => (
                   <option key={a.id} value={a.path}>{a.originalName ?? a.path}</option>
@@ -654,13 +667,101 @@ export function PropertiesPanel(): JSX.Element {
             {layer.src && !assets.some((a) => a.path === layer.src) && (
               <p className="hint">Not in the asset bin — check the file exists in the project.</p>
             )}
-            <Field label="Binding">
-              <input
-                value={layer.binding ?? ''}
-                onChange={(e) => patch({ binding: e.target.value || undefined } as Partial<Layer>)}
-              />
-            </Field>
-            {layer.type === 'video' && (
+            {/*
+              Withheld from a multi-frame sprite rather than shown and rejected
+              on save. `validate.ts` refuses the combination because a bound
+              sheet arrives with its own geometry and would be stepped through
+              the outgoing sheet's grid — sliced quarters of two frames at once.
+              A field that can only ever produce an invalid document should not
+              be offered.
+            */}
+            {!(layer.type === 'sprite' && layer.cols * layer.rows > 1) && (
+              <Field label="Binding">
+                <input
+                  value={layer.binding ?? ''}
+                  onChange={(e) => patch({ binding: e.target.value || undefined } as Partial<Layer>)}
+                />
+              </Field>
+            )}
+            {layer.type === 'sprite' && layer.cols * layer.rows > 1 && (
+              <p className="hint">
+                A multi-frame sheet cannot be bound — the incoming sheet would be
+                stepped through this one&rsquo;s grid.
+              </p>
+            )}
+
+            {layer.type === 'sprite' && (
+              <>
+                <Field label="Columns">
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={layer.cols}
+                    onChange={(e) => patch({ cols: Math.max(1, Math.round(Number(e.target.value))) } as Partial<Layer>)}
+                  />
+                </Field>
+                <Field label="Rows">
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={layer.rows}
+                    onChange={(e) => patch({ rows: Math.max(1, Math.round(Number(e.target.value))) } as Partial<Layer>)}
+                  />
+                </Field>
+                {/*
+                  Blank means "the whole grid". Stated that way rather than
+                  pre-filled with `cols * rows`, because a pre-filled number
+                  stops tracking the grid the moment the operator changes a
+                  dimension — and a frame count one export behind is six frames
+                  of empty cells at the end of the animation.
+                */}
+                <Field label="Frames">
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    placeholder={String(layer.cols * layer.rows)}
+                    value={layer.frameCount ?? ''}
+                    onChange={(e) =>
+                      patch({
+                        frameCount: e.target.value ? Math.max(1, Math.round(Number(e.target.value))) : undefined,
+                      } as Partial<Layer>)
+                    }
+                  />
+                </Field>
+                {layer.frameCount !== undefined && layer.frameCount > layer.cols * layer.rows && (
+                  <p className="hint">
+                    Only {layer.cols * layer.rows} cells in a {layer.cols}×{layer.rows} grid.
+                  </p>
+                )}
+                <Field label="FPS">
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={layer.fps}
+                    onChange={(e) => patch({ fps: Math.max(1, Number(e.target.value)) } as Partial<Layer>)}
+                  />
+                </Field>
+                {/*
+                  The sheet's own rate, not the layer's. Worth saying out loud:
+                  the obvious assumption is that a sprite fills its lifetime bar
+                  the way a keyframed property does, and an author who believes
+                  that will drag the bar to retime the animation and watch
+                  nothing change.
+                */}
+                <p className="hint">
+                  {(layer.frameCount ?? layer.cols * layer.rows)} frames at {layer.fps}fps
+                  {' — '}
+                  {((layer.frameCount ?? layer.cols * layer.rows) / layer.fps).toFixed(2)}s.
+                  Independent of the layer&rsquo;s in/out points.
+                </p>
+              </>
+            )}
+
+            {(layer.type === 'video' || layer.type === 'sprite') && (
               <>
                 <Field label="Start at">
                   <input

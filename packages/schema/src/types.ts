@@ -100,6 +100,7 @@ export type LayerType =
   | 'text'
   | 'image'
   | 'video'
+  | 'sprite'
   | 'crawl'
   | 'table'
   | 'composition'
@@ -375,6 +376,59 @@ export interface VideoLayer extends LayerBase {
 }
 
 /**
+ * A sprite sheet — one image holding a uniform grid of frames, stepped through
+ * on the composition timeline.
+ *
+ * This is a layer type rather than a flag on `ImageLayer` because the two
+ * render through different mechanisms and share almost nothing at playout: an
+ * image is an `<img>` with `object-fit`, a sprite is a box with a
+ * `background-image` offset every frame. Folding them together would mean an
+ * `ImageLayer` whose `fit` silently stops meaning anything the moment a second
+ * field is set, which is the kind of invalidation that is discovered on air.
+ *
+ * The grid is uniform by construction and there is no atlas-descriptor import.
+ * A per-frame rect file would be a second parser on an upload path, and the
+ * non-uniform sheets it exists to serve are a games problem — a broadcast
+ * burst, sting or animated bug comes off an After Effects or sprite-tool
+ * export as an even grid.
+ */
+export interface SpriteLayer extends LayerBase {
+  type: 'sprite';
+  /** Asset-relative path to the sheet, e.g. `assets/burst.png`. */
+  src: string;
+  binding?: string;
+  /** Grid columns. */
+  cols: number;
+  /** Grid rows. */
+  rows: number;
+  /**
+   * Frames actually used, read left-to-right then top-to-bottom.
+   *
+   * Separate from `cols * rows` because the last row of a sheet is usually
+   * padded — a 30-frame burst on a 6×6 grid has six empty cells, and stepping
+   * through them plays six frames of nothing at the end of the animation.
+   * Defaults to `cols * rows` when absent.
+   */
+  frameCount?: number;
+  /**
+   * Playback rate. Intrinsic to the sheet rather than derived from the layer's
+   * lifetime: an animation authored at 30fps looks wrong at any other rate, and
+   * tying it to `in`/`out` would silently retime it whenever the operator
+   * dragged the layer's bar.
+   */
+  fps: number;
+  /** Composition time at which frame 0 shows. Mirrors `VideoLayer.startAt`. */
+  startAt?: number;
+  loop?: boolean;
+  /**
+   * What the layer shows once the sequence has played out. Ignored when `loop`.
+   * Same argument as `VideoLayer.onEnd`, and the same default for the same
+   * reason: `hold` is what the runtime did before the field existed.
+   */
+  onEnd?: 'hold' | 'clear';
+}
+
+/**
  * What a ticker prints between items, and again between the last and the first.
  *
  * Defined here rather than in the editor because three places have to agree on
@@ -600,6 +654,7 @@ export type Layer =
   | TextLayer
   | ImageLayer
   | VideoLayer
+  | SpriteLayer
   | CrawlLayer
   | TableLayer
   | CompositionLayer

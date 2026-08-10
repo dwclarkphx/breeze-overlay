@@ -32,6 +32,9 @@
 import type { FastifyInstance } from 'fastify';
 
 import { capabilities, inspect } from '../media/ffmpeg.js';
+import { ArchiveError, readArchive } from '../archive/zip.js';
+import { SequenceError, orderFrames, stageSequence } from '../media/sequence.js';
+import { REFUSED, refusedExtension } from '../refused.js';
 import type { TranscodeQueue } from '../media/transcode.js';
 import { EDITABLE_ASSET_FIELDS, type AssetEdit, type AssetRef } from '@breeze/schema';
 
@@ -63,26 +66,34 @@ import {
 const MAX_ASSET_BYTES = 1024 * 1024 * 1024;
 
 /**
- * Extensions refused outright.
+ * Ceilings on a sequence archive.
  *
- * Not a virus check and not pretending to be one. The assets directory is
- * served as static files, so the only thing that matters here is that nothing
- * lands in it which a browser would execute in the server's origin — an
- * uploaded `.html` runs with the editor's cookies and the operator's session.
- * `assetKindFor` already returns `other` for these; this is the separate
- * question of whether `other` is allowed to be *served*.
+ * Three separate caps because they stop three different things, and any one of
+ * them alone leaves a hole. `maxTotalBytes` is the decompression bomb — a few
+ * kilobytes of zip inflating to fill the disk under the server that is feeding
+ * a switcher. `maxEntries` is the archive of a million empty files, which
+ * inflates to nothing and still costs an hour of syscalls. `maxEntryBytes` is
+ * the single frame that is not a frame.
+ *
+ * Sized generously against real work rather than tightly against the attack: a
+ * ten-second 60fps sequence is 600 frames, and a 4K PNG with alpha runs to
+ * tens of megabytes. A cap that refuses an honest stinger would be routed
+ * around by the operator, and a cap nobody can live with protects nothing.
  */
-const REFUSED = new Set([
-  '.html', '.htm', '.xhtml', '.svgz', '.js', '.mjs', '.cjs', '.wasm',
-  '.php', '.jsp', '.asp', '.aspx', '.exe', '.dll', '.so', '.sh', '.bat', '.cmd',
-]);
+const SEQUENCE_LIMITS = {
+  maxEntries: 2000,
+  maxTotalBytes: 4 * 1024 * 1024 * 1024,
+  maxEntryBytes: 128 * 1024 * 1024,
+};
 
-function refusedExtension(name: string): string | null {
-  const dot = name.lastIndexOf('.');
-  if (dot === -1) return null;
-  const ext = name.slice(dot).toLowerCase();
-  return REFUSED.has(ext) ? ext : null;
-}
+/*
+ * `REFUSED` and `refusedExtension` now live in `../refused.js`.
+ *
+ * Moved when the sequence archive reader arrived: the rule belongs to the
+ * assets *directory*, not to this route, and anything that unpacks files into
+ * it has to apply the same list. `assetKindFor` already returns `other` for
+ * these; this is the separate question of whether `other` may be *served*.
+ */
 
 export async function registerAssetRoutes(
   app: FastifyInstance,
@@ -211,6 +222,84 @@ export async function registerAssetRoutes(
           reply.code(201);
           return { asset: await enrich(req.params.id, asset) };
         } catch (err) {
+          if (err instanceof NotFoundError) {
+            reply.code(404);
+            return { error: err.message };
+          }
+          throw err;
+        }
+      },
+    );
+
+    /**
+     * Upload a PNG sequence as one zip and queue it for transcoding.
+     *
+     * Inside the same plugin scope as the asset upload, so it inherits the
+     * catch-all buffer parser and the 1 GB cap rather than restating them.
+     *
+     * **One archive, not one request per frame.** The alternative — frames
+     * POSTed individually to a staging area — keeps the no-parser rule intact
+     * and was seriously considered. It loses on the failure it creates: a
+     * staging area needs a lifetime, a cleanup pass and an answer for the
+     * sequence abandoned halfway, and a half-uploaded 300-frame sequence over a
+     * venue LAN is exactly the thing that is *not* cheap to repeat. The zip is
+     * also how the sequence left After Effects.
+     *
+     * The archive itself is never registered as an asset. What lands in the bin
+     * is the encoded WebM; the frames are inputs and are deleted when the job
+     * finishes.
+     */
+    scope.post<{ Params: { id: string }; Querystring: { name?: string; fps?: string } }>(
+      '/api/projects/:id/sequences',
+      { bodyLimit: MAX_ASSET_BYTES },
+      async (req, reply) => {
+        const name = req.query.name?.trim();
+        if (!name) {
+          reply.code(400);
+          return { error: 'a ?name= query parameter carrying the archive filename is required' };
+        }
+
+        /*
+         * The rate is required rather than defaulted.
+         *
+         * A sequence carries no frame rate — that is the difference between it
+         * and every other input this server transcodes — so a default would be
+         * the server guessing at the one number that decides how the animation
+         * plays, and guessing silently. 24, 25, 30 and 60 are all ordinary
+         * answers and none of them is safe to assume.
+         */
+        const fps = Number(req.query.fps);
+        if (!Number.isFinite(fps) || fps <= 0 || fps > 240) {
+          reply.code(400);
+          return { error: 'a ?fps= query parameter between 1 and 240 is required — a sequence carries no frame rate of its own' };
+        }
+
+        const body = req.body;
+        if (!Buffer.isBuffer(body) || body.byteLength === 0) {
+          reply.code(400);
+          return { error: 'the request body must be the zip archive itself, sent raw' };
+        }
+
+        const caps = await capabilities();
+        if (!caps.available || !caps.vp9Alpha) {
+          // Refused before the archive is unpacked rather than after: there is
+          // no point writing 300 files for a job that cannot run.
+          reply.code(503);
+          return { error: caps.reason ?? 'ffmpeg with libvpx-vp9 is unavailable' };
+        }
+
+        try {
+          const entries = readArchive(body, SEQUENCE_LIMITS);
+          const frames = orderFrames(entries);
+          const staged = await stageSequence(req.params.id, frames);
+          const job = await transcodes.enqueueSequence(req.params.id, name, staged, fps);
+          reply.code(202);
+          return { job, frames: frames.length };
+        } catch (err) {
+          if (err instanceof ArchiveError || err instanceof SequenceError) {
+            reply.code(400);
+            return { error: err.message };
+          }
           if (err instanceof NotFoundError) {
             reply.code(404);
             return { error: err.message };

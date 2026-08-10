@@ -149,7 +149,7 @@ export function assetReferences(layers: readonly Layer[]): AssetReference[] {
   const out: AssetReference[] = [];
 
   const visit = (layer: Layer): void => {
-    if ((layer.type === 'image' || layer.type === 'video') && layer.src) {
+    if ((layer.type === 'image' || layer.type === 'video' || layer.type === 'sprite') && layer.src) {
       out.push({
         src: layer.src,
         layerId: layer.id,
@@ -223,7 +223,7 @@ export function rewriteAssetReferences(
 
     // `next === layer` until something actually changes, then a shallow copy
     // that later branches keep writing into. One copy per touched layer.
-    if ((next.type === 'image' || next.type === 'video') && next.src === from) {
+    if ((next.type === 'image' || next.type === 'video' || next.type === 'sprite') && next.src === from) {
       next = { ...next, src: to };
       count += 1;
     }

@@ -186,6 +186,7 @@ export function LayersPanel(): JSX.Element {
             <option value="shape">Shape</option>
             <option value="image">Image</option>
             <option value="video">Video</option>
+            <option value="sprite">Sprite sheet</option>
             <option value="crawl">Crawl</option>
             <option value="table">Table</option>
             <option value="group">Group</option>

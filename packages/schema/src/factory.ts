@@ -262,6 +262,13 @@ export function createLayer(type: LayerType): Layer {
       // `onEnd: 'hold'` stated rather than left to the runtime default, so the
       // choice is visible in the JSON the moment a video layer is created.
       return { id: makeId('vid'), type: 'video', name: 'Video', src: '', size: { width: 640, height: 360 }, transform: { x: 0, y: 0 }, opacity: 1, loop: false, muted: true, onEnd: 'hold' };
+    case 'sprite':
+      // 1×1 is the only grid that is meaningful before a sheet has been picked:
+      // it renders the whole image as a single frame, so a fresh sprite layer
+      // looks like the asset the operator is about to choose rather than a
+      // fragment of it. `fps` matches the stage default rather than the sheet's
+      // real rate, which nothing can know yet.
+      return { id: makeId('spr'), type: 'sprite', name: 'Sprite', src: '', cols: 1, rows: 1, fps: 30, size: { width: 320, height: 180 }, transform: { x: 0, y: 0 }, opacity: 1, loop: false, onEnd: 'hold' };
     case 'crawl':
       return {
         id: makeId('crawl'),

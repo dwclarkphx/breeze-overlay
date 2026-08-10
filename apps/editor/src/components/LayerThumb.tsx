@@ -106,6 +106,31 @@ function render(thumb: Thumb, size: number, assetBase: string | undefined): JSX.
     case 'video':
       return <VideoThumb src={resolve(thumb.src, assetBase)} size={size} />;
 
+    /*
+     * Frame 0 of the sheet, by the same percentage rule the runtime uses.
+     *
+     * No canvas and no draw — a background-image sized to the grid crops to one
+     * cell for free, so unlike the video poster there is nothing async to fail
+     * and nothing to taint. `0% 0%` is frame 0 under
+     * `applySpriteFrame`'s `(col / (cols - 1)) * 100` for every grid, including
+     * the single-column case it pins to zero.
+     */
+    case 'sprite':
+      return (
+        <span
+          className="layer-thumb"
+          style={{
+            display: 'inline-block',
+            width: size,
+            height: size,
+            backgroundImage: `url("${resolve(thumb.src, assetBase)}")`,
+            backgroundSize: `${thumb.cols * 100}% ${thumb.rows * 100}%`,
+            backgroundPosition: '0% 0%',
+            backgroundRepeat: 'no-repeat',
+          }}
+        />
+      );
+
     case 'shape':
       return (
         <span

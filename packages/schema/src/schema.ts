@@ -449,6 +449,28 @@ const layerSchema = {
     {
       properties: {
         ...layerBaseProps,
+        type: { const: 'sprite' },
+        src: { type: 'string' },
+        binding: { type: 'string' },
+        // A zero-column grid is a division by zero in the frame solver and a
+        // blank graphic on air, so the floor is 1 here rather than a guard at
+        // playout.
+        cols: { type: 'integer', minimum: 1 },
+        rows: { type: 'integer', minimum: 1 },
+        // Not bounded against `cols * rows` here — JSON Schema cannot express a
+        // relation between two siblings. `validate.ts` carries that rule.
+        frameCount: { type: 'integer', minimum: 1 },
+        fps: { type: 'number', exclusiveMinimum: 0 },
+        startAt: { type: 'number', minimum: 0 },
+        loop: { type: 'boolean' },
+        onEnd: { enum: ['hold', 'clear'] },
+      },
+      required: ['src', 'cols', 'rows', 'fps'],
+      additionalProperties: false,
+    },
+    {
+      properties: {
+        ...layerBaseProps,
         type: { const: 'crawl' },
         speed: { type: 'number' },
         direction: { enum: ['left', 'right'] },

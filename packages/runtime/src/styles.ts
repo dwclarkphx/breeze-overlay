@@ -45,7 +45,7 @@ export const RUNTIME_CSS = `
   display: flex;
 }
 .bz-shape { position: absolute; inset: 0; }
-.bz-image, .bz-video { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.bz-image, .bz-video, .bz-sprite { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .bz-text {
   position: absolute;
   inset: 0;

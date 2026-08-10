@@ -60,17 +60,64 @@ function gsapVersion() {
  * reimplemented: walking a pnpm store to reconstruct the production subtree is
  * a resolver, and there is already a correct one on the machine.
  */
+/**
+ * How to invoke pnpm without going through a shell.
+ *
+ * Windows is the whole problem. `pnpm` there is `pnpm.cmd`, and since the fix
+ * for CVE-2024-27980 Node refuses to `execFile` a `.cmd` or `.bat` at all —
+ * `EINVAL` before the process is even created. The obvious repair is
+ * `shell: true`, and it works, but Node then warns DEP0190: with a shell, an
+ * args array is *concatenated rather than escaped*. That is harmless for this
+ * particular command line, where every argument is a fixed literal, and it is
+ * still the wrong shape to leave in a repo — the day someone interpolates a
+ * path into these args the warning becomes the bug, and by then the comment
+ * explaining why it was safe will be describing code that has changed.
+ *
+ * So: run pnpm's own JavaScript entry point under the Node we are already in.
+ * `npm_execpath` is set by pnpm for any script it launches — which is how this
+ * one is meant to be run — and points at a `.cjs`, not a shim. No shell, no
+ * deprecation, no `.cmd`, and the same resolution on every platform.
+ *
+ * The shell fallback stays for the case `npm_execpath` is absent: someone
+ * running `node scripts/third-party-notices.mjs` directly rather than through
+ * `pnpm notices`. That path still warns, and it is the path nobody uses in CI.
+ */
+function pnpmCommand() {
+  const viaPnpm = process.env.npm_execpath;
+  if (viaPnpm && /\.(c?js|mjs)$/i.test(viaPnpm)) {
+    return { bin: process.execPath, prefix: [viaPnpm], shell: false };
+  }
+  const win = process.platform === 'win32';
+  return { bin: win ? 'pnpm.cmd' : 'pnpm', prefix: [], shell: win };
+}
+
 function readLicenses() {
-  const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+  const { bin, prefix, shell } = pnpmCommand();
   let raw;
   try {
-    raw = execFileSync(pnpm, ['licenses', 'list', '--json', '--prod'], {
+    raw = execFileSync(bin, [...prefix, 'licenses', 'list', '--json', '--prod'], {
       cwd: repoRoot,
       encoding: 'utf8',
       maxBuffer: 32 * 1024 * 1024,
       stdio: ['ignore', 'pipe', 'pipe'],
+      shell,
     });
   } catch (err) {
+    /*
+     * The EINVAL case gets its own message.
+     *
+     * The generic advice below — "run pnpm install, put pnpm on PATH" — is
+     * actively misleading for it: both are already true, and following it means
+     * re-running a ten-minute install to fix something an install cannot touch.
+     */
+    if (err.code === 'EINVAL') {
+      throw new Error(
+        `could not spawn ${bin}. On Windows this is Node refusing to run a .cmd ` +
+          'without a shell (the CVE-2024-27980 fix) — not a missing install. ' +
+          'Run this through `pnpm notices` rather than `node` directly, so ' +
+          'pnpm sets npm_execpath and the shell is not needed at all.',
+      );
+    }
     throw new Error(
       '`pnpm licenses list` failed. It needs a completed `pnpm install` and pnpm ' +
         `on PATH.\n${err.stderr || err.message}`,

@@ -1,6 +1,6 @@
 {
   "name": "@breeze/server",
-  "version": "0.64.3",
+  "version": "0.65.0",
   "private": true,
   "license": "MPL-2.0",
   "type": "module",
@@ -22,6 +22,7 @@
     "@fastify/websocket": "^11.0.1",
     "basic-ftp": "^6.2.0",
     "fastify": "^5.2.0",
+    "fflate": "^0.8.2",
     "marked": "^18.0.9",
     "ssh2-sftp-client": "^12.1.1"
   },

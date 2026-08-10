@@ -210,6 +210,39 @@ export function validateCompositionSemantics(comp: Composition): ValidationIssue
       }
     }
 
+    if (layer.type === 'sprite') {
+      /*
+       * `frameCount` above the grid is rejected rather than clamped. Clamping
+       * would play the sheet and stop early with no explanation, which reads as
+       * a corrupt asset; the number is almost always a typo or a sheet that was
+       * re-exported at a different grid, and both are worth naming while the
+       * operator still has the export open.
+       */
+      const capacity = layer.cols * layer.rows;
+      if (layer.frameCount !== undefined && layer.frameCount > capacity) {
+        issues.push({
+          path: `${path}/frameCount`,
+          message: `frameCount ${layer.frameCount} exceeds the ${layer.cols}×${layer.rows} grid's ${capacity} cells`,
+        });
+      }
+
+      /*
+       * A binding on a sprite replaces `src` — the whole sheet — and the grid
+       * describing it stays behind. Swapping a 6×5 burst for an 8×4 one through
+       * a control-panel field would step through the new sheet on the old
+       * geometry and render sliced quarters of two frames at once. Refused for
+       * the same reason fed fields are read-only on the panel: the failure is
+       * invisible in the editor and only appears once live data arrives.
+       */
+      if (layer.binding !== undefined && capacity > 1) {
+        issues.push({
+          path: `${path}/binding`,
+          message:
+            'a sprite layer with a multi-frame grid cannot be bound — the incoming sheet would be stepped through the outgoing sheet\'s grid',
+        });
+      }
+    }
+
     if (layer.type === 'table') {
       /*
        * Cells are leaf visuals. Groups, tables and nested compositions inside a

@@ -32,7 +32,7 @@ with a different GSAP release without rebuilding Breeze.
 
 ## Bundled and installed dependencies
 
-118 packages. Licences present: MIT (100), ISC (7), BlueOak-1.0.0 (5), BSD-3-Clause (4), Apache-2.0 (1), Unlicense (1).
+119 packages. Licences present: MIT (101), ISC (7), BlueOak-1.0.0 (5), BSD-3-Clause (4), Apache-2.0 (1), Unlicense (1).
 
 | Package | Version | License | Author | Homepage |
 | --- | --- | --- | --- | --- |
@@ -90,6 +90,7 @@ with a different GSAP release without rebuilding Breeze.
 | `fastify` | 5.11.0 | MIT | Matteo Collina | <https://fastify.dev/> |
 | `fastify-plugin` | 6.0.0 | MIT | Tomas Della Vedova - @delvedor | <https://github.com/fastify/fastify-plugin#readme> |
 | `fastq` | 1.20.1 | ISC | Matteo Collina | <https://github.com/mcollina/fastq#readme> |
+| `fflate` | 0.8.3 | MIT | Arjun Barrett | <https://101arrowz.github.io/fflate> |
 | `find-my-way` | 9.7.0 | MIT | Tomas Della Vedova - @delvedor | <https://github.com/delvedor/find-my-way#readme> |
 | `framework-utils` | 1.1.0 | MIT | Daybrush | <https://github.com/daybrush/framework-utils#readme> |
 | `gesto` | 1.19.4 | MIT | Daybrush | <https://github.com/daybrush/gesto#readme> |

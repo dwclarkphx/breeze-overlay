@@ -24,6 +24,7 @@ import {
   type ImageLayer,
   type Layer,
   type ShapeLayer,
+  type SpriteLayer,
   type TextLayer,
   type TextStyle,
   type VideoLayer,
@@ -44,6 +45,8 @@ export interface LayerNodes {
   crawlTrack?: HTMLElement;
   media?: HTMLImageElement | HTMLVideoElement;
   video?: HTMLVideoElement;
+  /** Sprite-only: the box carrying the sheet as a background. */
+  sprite?: HTMLElement;
 }
 
 export interface BuildContext {
@@ -160,6 +163,54 @@ function buildImage(layer: ImageLayer, ctx: BuildContext): HTMLImageElement {
   return img;
 }
 
+/**
+ * A sprite sheet renders as a box with a `background-image`, not an `<img>`.
+ *
+ * An `<img>` can only show a whole file, so stepping frames would mean either
+ * a clipping wrapper with the image offset by `transform` — which collides
+ * head-on with the rule that GSAP owns the transform of anything it animates,
+ * since it rewrites the whole string — or a canvas, which costs a draw per
+ * frame and a second surface to keep in sync with the timeline.
+ * `background-position` is a property nothing else on the layer touches.
+ *
+ * `background-size` states the *sheet* size as a multiple of the layer box, so
+ * one cell exactly fills the box regardless of the sheet's pixel dimensions.
+ * That means the frame solver only ever writes percentages, and a sheet
+ * re-exported at twice the resolution needs no change to the layer.
+ */
+function buildSprite(layer: SpriteLayer, ctx: BuildContext): HTMLElement {
+  const el = ctx.doc.createElement('div');
+  el.className = 'bz-sprite';
+  el.style.backgroundRepeat = 'no-repeat';
+  el.style.backgroundSize = `${layer.cols * 100}% ${layer.rows * 100}%`;
+  if (layer.src) el.style.backgroundImage = `url("${ctx.resolveAsset(layer.src)}")`;
+  // Frame 0 up front rather than waiting for the first tick: a graphic that is
+  // built but not yet playing — the editor canvas, a still, a page holding
+  // before its trigger — should show the first frame, not the whole sheet.
+  applySpriteFrame(el, layer, 0);
+  return el;
+}
+
+/**
+ * Point a sprite element at frame `index`.
+ *
+ * The percentage form of `background-position` divides by `n - 1`, not by `n`:
+ * at 100% the *image's* right edge meets the *box's* right edge, so with a
+ * 6-wide sheet the six columns land at 0%, 20%, 40%, 60%, 80%, 100%. Dividing
+ * by `cols` instead is the off-by-one that shows the last frame half-cropped
+ * with the neighbouring column bleeding in beside it.
+ *
+ * A single-column or single-row grid divides by zero under that rule, so it is
+ * pinned to 0% — one column has nowhere to scroll to.
+ */
+export function applySpriteFrame(el: HTMLElement, layer: SpriteLayer, index: number): void {
+  const col = index % layer.cols;
+  const row = Math.floor(index / layer.cols);
+  const x = layer.cols > 1 ? (col / (layer.cols - 1)) * 100 : 0;
+  const y = layer.rows > 1 ? (row / (layer.rows - 1)) * 100 : 0;
+  el.style.backgroundPosition = `${x}% ${y}%`;
+}
+
 function buildVideo(layer: VideoLayer, ctx: BuildContext): HTMLVideoElement {
   const video = ctx.doc.createElement('video');
   video.className = 'bz-video';
@@ -239,6 +290,12 @@ export function buildLayerElement(instance: LayerInstance, ctx: BuildContext): L
       content.appendChild(video);
       nodes.media = video;
       nodes.video = video;
+      break;
+    }
+    case 'sprite': {
+      const sprite = buildSprite(layer, ctx);
+      content.appendChild(sprite);
+      nodes.sprite = sprite;
       break;
     }
     case 'crawl': {

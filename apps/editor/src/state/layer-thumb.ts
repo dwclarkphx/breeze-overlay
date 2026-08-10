@@ -24,6 +24,7 @@ import type { Fill, Layer } from '@breeze/schema';
 export type LayerThumb =
   | { kind: 'image'; src: string; fit: string }
   | { kind: 'video'; src: string }
+  | { kind: 'sprite'; src: string; cols: number; rows: number }
   | { kind: 'shape'; fill: string; stroke?: { color: string; width: number }; radius: number; ellipse: boolean }
   | { kind: 'text'; sample: string; fontFamily: string; color: string; weight: string; italic: boolean }
   | { kind: 'stack'; children: LayerThumb[]; count: number }
@@ -36,6 +37,7 @@ export const TYPE_GLYPH: Record<Layer['type'], string> = {
   text: 'T',
   image: '▣',
   video: '▶',
+  sprite: '⊞',
   crawl: '⇄',
   table: '▦',
   composition: '⧉',
@@ -69,6 +71,21 @@ export function layerThumb(layer: Layer): LayerThumb {
       return layer.src
         ? { kind: 'video', src: layer.src }
         : { kind: 'glyph', glyph: TYPE_GLYPH.video };
+
+    /*
+     * A sprite thumbnails as its *first frame*, not as the sheet.
+     *
+     * Rendering the whole sheet shrunk into a 32px box is a grey smear that
+     * cannot be told apart from any other sheet, which fails the test Phase 7.6
+     * set for thumbnails — two graphics that look the same in the panel have
+     * failed at the only job they have. The frame maths is the same percentage
+     * form `applySpriteFrame` writes, so the panel and the stage agree by
+     * construction rather than by two implementations that happen to match.
+     */
+    case 'sprite':
+      return layer.src
+        ? { kind: 'sprite', src: layer.src, cols: layer.cols, rows: layer.rows }
+        : { kind: 'glyph', glyph: TYPE_GLYPH.sprite };
 
     case 'shape':
       return {
