@@ -29,7 +29,7 @@
  * upload.
  */
 
-import { unzipSync } from 'fflate';
+import { unzipSync, zipSync } from 'fflate';
 
 import { refusedExtension } from '../refused.js';
 
@@ -151,6 +151,34 @@ export function readArchive(buffer: Buffer, limits: ZipLimits): ZipEntry[] {
 
   if (out.length === 0) throw new ArchiveError('archive holds no usable files');
   return out;
+}
+
+/**
+ * Write an archive.
+ *
+ * The counterpart the reader shipped without, added when backup and restore
+ * arrived. Deliberately much smaller than the reader, and that asymmetry is the
+ * point: reading is where the danger is, because the bytes come from outside.
+ * Everything written here was assembled by this server from its own data
+ * directory.
+ *
+ * **Assets are stored, not deflated.** A project's bulk is PNGs, WebMs and
+ * fonts, all of which are already compressed — running deflate over them costs
+ * CPU on a box that may be feeding a switcher and typically *adds* a percent or
+ * two. The JSON is compressed, because that is where the redundancy is and it
+ * is small enough to be free.
+ */
+export function writeArchive(files: Record<string, Uint8Array>): Buffer {
+  const shaped: Record<string, [Uint8Array, { level: 0 | 6 }]> = {};
+  for (const [name, bytes] of Object.entries(files)) {
+    // A bundle we wrote should still not be able to name something that a
+    // restore would refuse — better to fail here, where the developer sees it,
+    // than to ship an archive nobody can read back.
+    const unsafe = unsafeEntryName(name);
+    if (unsafe) throw new ArchiveError(`refusing to write ${unsafe}`);
+    shaped[name] = [bytes, { level: name.endsWith('.json') ? 6 : 0 }];
+  }
+  return Buffer.from(zipSync(shaped));
 }
 
 /**

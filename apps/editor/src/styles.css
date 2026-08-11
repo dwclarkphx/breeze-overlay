@@ -185,6 +185,36 @@ input[type='checkbox'] { width: auto; }
 }
 .panel-sub { color: var(--muted); font-weight: 400; font-size: 11px; }
 .panel-actions { display: flex; gap: 4px; }
+
+/* PSD import progress and report. Both sit above the layer list rather than
+   over it: an import that covers the thing it is changing hides the only
+   evidence that it worked. */
+.psd-progress {
+  position: relative; margin: 6px 8px; padding: 5px 8px; border-radius: 5px;
+  background: #161b22; border: 1px solid #21262d; font-size: 11px; color: #8b949e;
+  overflow: hidden;
+}
+.psd-progress .bar {
+  position: absolute; inset: 0 auto 0 0; background: rgba(31, 111, 235, .25);
+  transition: width .15s linear;
+}
+.psd-progress span { position: relative; }
+
+.psd-report {
+  margin: 6px 8px; padding: 8px 10px; border-radius: 5px;
+  background: #161b22; border: 1px solid #21262d; font-size: 11px; color: #8b949e;
+  max-height: 190px; overflow: auto;
+}
+.psd-report.error { border-color: rgba(248, 81, 73, .5); }
+.psd-report-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.psd-report-head strong { color: #c9d1d9; font-size: 12px; }
+.psd-report-head button {
+  background: none; border: 0; color: #8b949e; cursor: pointer; font-size: 12px; padding: 0 2px;
+}
+.psd-report p { margin: 6px 0 4px; }
+.psd-report ul { margin: 0; padding-left: 16px; }
+.psd-report li { margin: 2px 0; }
+.psd-report li strong { color: #c9d1d9; font-weight: 600; }
 .panel-body { padding: 8px 10px; overflow: auto; }
 .panel-empty { padding: 20px; color: var(--muted); }
 .hint { color: var(--muted); font-size: 11px; }

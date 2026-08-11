@@ -67,6 +67,7 @@ const options = {
     path.join(appRoot, 'client', 'player.ts'),
     path.join(appRoot, 'client', 'control.ts'),
     path.join(appRoot, 'client', 'portal.ts'),
+    path.join(appRoot, 'client', 'backup.ts'),
   ],
   outdir: path.join(appRoot, 'public'),
   bundle: true,

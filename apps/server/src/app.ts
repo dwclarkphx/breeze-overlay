@@ -18,6 +18,7 @@ import { portalPage } from './pages.js';
 import { ControlHub } from './hub.js';
 import { TranscodeQueue } from './media/transcode.js';
 import { registerAssetRoutes } from './routes/assets.js';
+import { registerBackupRoutes } from './routes/backup.js';
 import { registerControlRoutes } from './routes/control.js';
 import { registerDataSourceRoutes } from './routes/datasources.js';
 import { registerDocsRoutes } from './routes/docs.js';
@@ -174,6 +175,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   await registerProjectRoutes(app);
   await registerAssetRoutes(app, transcodes);
+  await registerBackupRoutes(app);
   await registerPlayRoutes(app, data);
   await registerControlRoutes(app, hub, data);
   await registerDataSourceRoutes(app, data);

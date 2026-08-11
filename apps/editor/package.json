@@ -1,6 +1,6 @@
 {
   "name": "@breeze/editor",
-  "version": "0.65.0",
+  "version": "0.67.0",
   "private": true,
   "license": "MPL-2.0",
   "type": "module",
@@ -14,11 +14,13 @@
   "dependencies": {
     "@breeze/runtime": "workspace:*",
     "@breeze/schema": "workspace:*",
+    "ag-psd": "^28.0.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-moveable": "^0.56.0",
     "zustand": "^5.0.2"
   },
+  "//ag-psd": "PSD import, loaded through a dynamic import in state/psd-file.ts so it lands in its own chunk. It is large and most sessions never open a PSD; a static import would put it in the main bundle for everyone. Parsing client-side is deliberate — it keeps a rich binary format parser off the server's upload path, which is the Wave 0 rule the sequence zip reader is the only exception to. NOTE: these `//name` notes belong at the top level of the manifest, never inside `dependencies` — pnpm validates every key in there as a package name and refuses the whole workspace.",
   "//gsap": "Kept only so Vite can resolve the alias target and the types when it builds @breeze/runtime's dist. Nothing under src/ imports GSAP directly. Keep the ~3.15.0 pin equal to packages/runtime's — two different resolutions in one workspace would give the editor preview and the /play page different animation engines, and the whole point of one shared renderer is that the preview shows what goes to air.",
   "devDependencies": {
     "@types/react": "^19.2.18",

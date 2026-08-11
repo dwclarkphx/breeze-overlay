@@ -606,6 +606,7 @@ export function portalPage(
   <a class="pill primary" href="/editor/" target="_blank" rel="noreferrer">Open the editor &#8599;</a>
   <a class="pill" href="/docs" target="_blank" rel="noreferrer">User guide &#8599;</a>
   <a class="pill" href="/activity">Activity</a>
+  <a class="pill" href="/backup">Backup</a>
 </div>
 
 <div class="status" id="status">
@@ -662,6 +663,106 @@ ${tiles || '<p class="hint">No projects yet. Open the editor and choose <strong>
  * A 140-character UA in a table cell makes the table unreadable, and the thing
  * being scanned for is almost always the address.
  */
+/**
+ * Backup and restore.
+ *
+ * A page rather than a modal on the portal, on the argument that moved the
+ * asset library out of the docked bin: a project picker plus a drop zone plus a
+ * "this bundle contains…" report needs room, and the portal is tiles and a
+ * status strip.
+ *
+ * Server-rendered project list with the script doing the rest, so the page
+ * still *says* what it would back up with JavaScript unavailable — the same
+ * degradation rule the portal follows. Restore genuinely needs the script and
+ * says so rather than presenting a drop zone that silently does nothing.
+ */
+export function backupPage(
+  projects: Array<{ id: string; name: string; compositions: number }>,
+): string {
+  const rows = projects
+    .map(
+      (p) => `<tr>
+      <td><input type="checkbox" class="pick" value="${escapeHtml(p.id)}" checked></td>
+      <td>${escapeHtml(p.name)}</td>
+      <td><code>${escapeHtml(p.id)}</code></td>
+      <td class="num">${p.compositions}</td>
+      <td><a class="pill small" href="/api/projects/${encodeURIComponent(p.id)}/backup">Download</a></td>
+    </tr>`,
+    )
+    .join('');
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Backup — Breeze Overlay</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<style>${SHELL_CSS}
+  header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+  h2{font-size:15px;margin:26px 0 10px}
+  table{border-collapse:collapse;width:100%;max-width:900px}
+  th{text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;
+     letter-spacing:.6px;font-weight:600;padding:0 12px 8px 0;border-bottom:1px solid var(--border)}
+  td{padding:9px 12px 9px 0;border-bottom:1px solid #21262d;vertical-align:middle;font-size:13px}
+  .num{text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+  .pill.small{padding:4px 10px;font-size:12px}
+  .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}
+  button{font:inherit;padding:7px 15px;border-radius:999px;border:1px solid var(--border);
+         background:var(--panel);color:var(--fg);cursor:pointer}
+  button:hover:not(:disabled){border-color:var(--accent)}
+  button.primary{background:#1f6feb;border-color:#388bfd;color:#fff}
+  button:disabled{opacity:.5;cursor:default}
+  #drop{border:1px dashed var(--border);border-radius:10px;padding:26px;text-align:center;
+        color:var(--muted);max-width:900px;background:var(--panel)}
+  #drop.over{border-color:var(--accent);color:var(--fg)}
+  #report{max-width:900px;margin-top:14px}
+  .warn{color:#d29922}
+  .err{color:#f85149}
+  footer{margin-top:28px;color:var(--muted);font-size:12px;max-width:820px}
+</style>
+</head>
+<body>
+<header>
+  <a class="pill" href="/">&larr; Portal</a>
+  <h1>Backup</h1>
+</header>
+
+<h2>Back up</h2>
+${
+  projects.length === 0
+    ? '<p class="hint">No projects yet. There is nothing to back up.</p>'
+    : `<table>
+  <tr><th></th><th>Project</th><th>Id</th><th class="num">Comps</th><th></th></tr>
+  ${rows}
+</table>
+<div class="bar">
+  <button id="all">Select all</button>
+  <button id="none">Select none</button>
+  <button id="download" class="primary">Download selected</button>
+  <span class="hint" id="count"></span>
+</div>`
+}
+
+<h2>Restore</h2>
+<div id="drop">
+  Drop a <code>.zip</code> bundle here, or <label class="pill small" style="cursor:pointer">
+  choose a file<input type="file" id="file" accept=".zip,application/zip" hidden></label>
+  <div class="hint" style="margin-top:8px">Nothing is written until you confirm what it contains.</div>
+</div>
+<div id="report"></div>
+
+<footer>
+  <p>A bundle carries composition JSON, the asset index, referenced asset files and data-source
+  definitions. It never carries the Breeze runtime, so it is inert without an install — and it
+  never carries credentials. A restored data source keeps its secret <em>id</em> and loses its
+  keys and tokens, so it will need them re-entered on the machine it lands on.</p>
+</footer>
+<script src="/public/backup.js"></script>
+</body>
+</html>`;
+}
+
 export function activityPage(
   entries: Array<{
     at: string;

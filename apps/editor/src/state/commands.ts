@@ -29,6 +29,16 @@ import {
 
 export type Command =
   | { kind: 'addLayer'; layer: Layer; index?: number; parentId?: string }
+  /*
+   * A whole document's worth of layers, landing as one history entry.
+   *
+   * Not `addLayer` repeated: a PSD with forty layers would be forty undo steps,
+   * and an operator who decides the import was a mistake would have to press
+   * Ctrl-Z forty times to get back — while the assets it uploaded stay in the
+   * bin regardless. One command, one undo, matching what the operator thinks
+   * they did.
+   */
+  | { kind: 'importLayers'; layers: Layer[]; source: string }
   | { kind: 'deleteLayers'; layerIds: string[] }
   | { kind: 'reorderLayer'; layerId: string; toIndex: number }
   | { kind: 'patchLayer'; layerId: string; patch: Partial<Layer> }
@@ -75,6 +85,7 @@ export type Command =
 export function describeCommand(command: Command): string {
   switch (command.kind) {
     case 'addLayer': return `Add ${command.layer.type} layer`;
+    case 'importLayers': return `Import ${command.source}`;
     case 'deleteLayers': return command.layerIds.length > 1 ? `Delete ${command.layerIds.length} layers` : 'Delete layer';
     case 'reorderLayer': return 'Reorder layer';
     case 'patchLayer': return 'Change layer';
@@ -326,6 +337,18 @@ export function applyCommand(comp: Composition, command: Command): Composition {
       const layers = [...comp.layers];
       layers.splice(command.index ?? layers.length, 0, command.layer);
       return { ...comp, layers };
+    }
+
+    case 'importLayers': {
+      /*
+       * Appended, so an import lands on top of whatever is already there.
+       *
+       * Replacing the composition was considered and rejected: an operator who
+       * imports a PSD into a composition they have been building would lose it,
+       * and "import" does not mean "discard". A PSD imported into an empty
+       * composition — the ordinary case — looks identical either way.
+       */
+      return { ...comp, layers: [...comp.layers, ...command.layers] };
     }
 
     case 'deleteLayers': {

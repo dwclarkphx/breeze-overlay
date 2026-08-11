@@ -32,7 +32,7 @@ with a different GSAP release without rebuilding Breeze.
 
 ## Bundled and installed dependencies
 
-119 packages. Licences present: MIT (101), ISC (7), BlueOak-1.0.0 (5), BSD-3-Clause (4), Apache-2.0 (1), Unlicense (1).
+122 packages. Licences present: MIT (103), ISC (7), BlueOak-1.0.0 (5), BSD-3-Clause (4), (MIT AND Zlib) (1), Apache-2.0 (1), Unlicense (1).
 
 | Package | Version | License | Author | Homepage |
 | --- | --- | --- | --- | --- |
@@ -59,12 +59,14 @@ with a different GSAP release without rebuilding Breeze.
 | `@scena/matrix` | 1.1.1 | MIT | Daybrush | <https://github.com/daybrush/matrix#readme> |
 | `@types/react` | 19.2.18 | MIT |  | <https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react> |
 | `abstract-logging` | 2.0.1 | MIT | James Sumners | <https://github.com/jsumners/abstract-logging#readme> |
+| `ag-psd` | 28.5.1 | MIT | Agamnentzar | <https://github.com/Agamnentzar/ag-psd#readme> |
 | `ajv` | 8.20.0 | MIT | Evgeny Poberezkin | <https://ajv.js.org> |
 | `ajv-formats` | 3.0.1 | MIT | Evgeny Poberezkin | <https://github.com/ajv-validator/ajv-formats#readme> |
 | `asn1` | 0.2.6 | MIT | Joyent | <https://github.com/joyent/node-asn1#readme> |
 | `atomic-sleep` | 1.0.0 | MIT | David Mark Clements | <https://github.com/davidmarkclements/atomic-sleep#readme> |
 | `avvio` | 9.3.0 | MIT | Matteo Collina | <https://github.com/fastify/avvio#readme> |
 | `balanced-match` | 4.0.4 | MIT |  | <https://github.com/juliangruber/balanced-match#readme> |
+| `base64-js` | 1.5.1 | MIT | T. Jameson Little | <https://github.com/beatgammit/base64-js> |
 | `basic-ftp` | 6.2.0 | MIT | Patrick Juchli | <https://github.com/patrickjuchli/basic-ftp#readme> |
 | `bcrypt-pbkdf` | 1.0.2 | BSD-3-Clause |  | <https://github.com/joyent/node-bcrypt-pbkdf#readme> |
 | `brace-expansion` | 5.0.9 | MIT |  | <https://github.com/juliangruber/brace-expansion#readme> |
@@ -112,6 +114,7 @@ with a different GSAP release without rebuilding Breeze.
 | `on-exit-leak-free` | 2.1.2 | MIT | Matteo Collina | <https://github.com/mcollina/on-exit-or-gc#readme> |
 | `once` | 1.4.0 | ISC | Isaac Z. Schlueter | <https://github.com/isaacs/once#readme> |
 | `overlap-area` | 1.1.0 | MIT | Daybrush | <https://github.com/daybrush/overlap-area#readme> |
+| `pako` | 2.1.0 | (MIT AND Zlib) |  | <https://github.com/nodeca/pako#readme> |
 | `path-scurry` | 2.0.2 | BlueOak-1.0.0 | Isaac Z. Schlueter | <https://github.com/isaacs/path-scurry#readme> |
 | `pino` | 10.3.1 | MIT | Matteo Collina | <https://getpino.io> |
 | `pino-abstract-transport` | 3.0.0 | MIT | Matteo Collina | <https://github.com/pinojs/pino-abstract-transport#readme> |

@@ -134,10 +134,27 @@ export interface ProjectSummary {
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  /*
+   * `content-type` is set only when there is a body to describe.
+   *
+   * Declaring `application/json` on a bodyless `DELETE` is a lie the server is
+   * entitled to believe, and Fastify does: it looks for the JSON the header
+   * promised, finds nothing, and answers `Body cannot be empty when
+   * content-type is set to 'application/json'`. Every `DELETE` this helper
+   * sends — project, composition, asset, data source, transcode job — went out
+   * that way, so all five were broken in the browser.
+   *
+   * They passed their tests because `app.inject` sets no content-type unless a
+   * payload is given, so the suite exercised a request the editor never
+   * actually makes. Testing through the same helper the editor uses is the fix
+   * for *that*, and is what `client.test.ts` now does.
+   */
+  const hasBody = init?.body !== undefined && init?.body !== null;
+
   const response = await fetch(url, {
     ...init,
     headers: {
-      'content-type': 'application/json',
+      ...(hasBody ? { 'content-type': 'application/json' } : {}),
       ...(init?.headers ?? {}),
     },
   });

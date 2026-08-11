@@ -13,7 +13,7 @@
  * the classic layer-panel bug.
  */
 
-import { useState, type JSX } from 'react';
+import { useRef, useState, type JSX } from 'react';
 import type { Layer, LayerType } from '@breeze/schema';
 
 import { useEditor } from '../state/store.js';
@@ -29,6 +29,11 @@ export function LayersPanel(): JSX.Element {
   const deleteSelected = useEditor((s) => s.deleteSelectedLayers);
 
   const addCell = useEditor((s) => s.addCell);
+  const importPsdFile = useEditor((s) => s.importPsdFile);
+  const psdImport = useEditor((s) => s.psdImport);
+  const psdReport = useEditor((s) => s.psdReport);
+  const dismissPsdReport = useEditor((s) => s.dismissPsdReport);
+  const psdInput = useRef<HTMLInputElement>(null);
   const activeLayer = useEditor((s) => s.activeLayer());
   const cellOwner = useEditor((s) => s.activeCellOwner());
 
@@ -174,6 +179,11 @@ export function LayersPanel(): JSX.Element {
               e.target.value = '';
               if (!value) return;
 
+              if (value === 'import:psd') {
+                psdInput.current?.click();
+                return;
+              }
+
               if (value.startsWith('cell:')) {
                 if (targetTable) addCell(targetTable.id, value.slice(5) as LayerType);
                 return;
@@ -188,6 +198,13 @@ export function LayersPanel(): JSX.Element {
             <option value="video">Video</option>
             <option value="sprite">Sprite sheet</option>
             <option value="crawl">Crawl</option>
+            {/*
+              Import sits in the add menu rather than beside it, because from
+              the operator's side "put a PSD in this composition" is a way of
+              adding layers — the fact that it goes through a file picker and an
+              upload is our problem, not theirs.
+            */}
+            <option value="import:psd">From a .psd file…</option>
             <option value="table">Table</option>
             <option value="group">Group</option>
             {/*
@@ -205,8 +222,77 @@ export function LayersPanel(): JSX.Element {
             )}
           </select>
           <button onClick={deleteSelected} disabled={selected.length === 0} title="Delete selected">🗑</button>
+          {/*
+            Kept out of the layout rather than conditionally rendered: a file
+            input that unmounts between the click and the dialog closing loses
+            the selection, and the picker is opened programmatically from the
+            select above.
+          */}
+          <input
+            ref={psdInput}
+            type="file"
+            accept=".psd,image/vnd.adobe.photoshop"
+            hidden
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              // Cleared so re-importing the same file fires `change` again;
+              // without it the second attempt looks like nothing happened.
+              e.target.value = '';
+              if (file) void importPsdFile(file);
+            }}
+          />
         </span>
       </div>
+
+      {psdImport && (
+        <div className="psd-progress">
+          <div className="bar" style={{ width: `${Math.round(psdImport.fraction * 100)}%` }} />
+          <span>{psdImport.label}</span>
+        </div>
+      )}
+
+      {psdReport && (
+        <div className={`psd-report${psdReport.error ? ' error' : ''}`}>
+          <div className="psd-report-head">
+            <strong>{psdReport.error ? 'Import failed' : `Imported ${psdReport.source}`}</strong>
+            <button onClick={dismissPsdReport} title="Dismiss">✕</button>
+          </div>
+          {psdReport.error && <p>{psdReport.error}</p>}
+          {psdReport.documentSize && (
+            <p>
+              The file is {psdReport.documentSize.width}×{psdReport.documentSize.height};
+              this stage is not. Layers keep their original positions — resize the stage in
+              Composition settings if you want them to line up.
+            </p>
+          )}
+          {/*
+            Named rather than counted. "3 layers were flattened" invites a bug
+            report; "Title — has layer effects" invites deleting the effect and
+            importing again.
+          */}
+          {psdReport.rasterReasons.length > 0 && (
+            <>
+              <p>Flattened to images, so they cannot be edited or bound:</p>
+              <ul>
+                {psdReport.rasterReasons.map((r) => (
+                  <li key={r.name}><strong>{r.name}</strong> — {r.reason}</li>
+                ))}
+              </ul>
+            </>
+          )}
+          {psdReport.skipped.length > 0 && (
+            <>
+              <p>Not imported:</p>
+              <ul>
+                {psdReport.skipped.map((r) => (
+                  <li key={r.name}><strong>{r.name}</strong> — {r.reason}</li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="layer-list">{ordered.map((layer) => renderRow(layer, 0))}</div>
     </div>
   );

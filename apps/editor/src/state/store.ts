@@ -261,6 +261,24 @@ export interface EditorState {
   toggleLayerSelection: (id: string) => void;
   selectKeyframes: (refs: KeyframeRef[]) => void;
   addLayer: (type: LayerType) => void;
+  /** Progress while a PSD is being parsed and its layers uploaded, or null. */
+  psdImport: { fraction: number; label: string } | null;
+  /**
+   * What the last import did that the operator would not otherwise see.
+   *
+   * Held in the store rather than shown as a transient toast because the
+   * interesting part — which layers were flattened and why — is exactly what
+   * someone wants to re-read after looking at the result.
+   */
+  psdReport: {
+    source: string;
+    rasterReasons: Array<{ name: string; reason: string }>;
+    skipped: Array<{ name: string; reason: string }>;
+    documentSize?: { width: number; height: number };
+    error?: string;
+  } | null;
+  importPsdFile: (file: File) => Promise<void>;
+  dismissPsdReport: () => void;
   /**
    * Add a cell to a table's row template.
    *
@@ -505,6 +523,8 @@ export const useEditor = create<EditorState>((set, get) => ({
   selectedLayerIds: [],
   selectedKeyframes: [],
   clipboard: null,
+  psdImport: null,
+  psdReport: null,
   textPieces: {},
   overflowingText: [],
   overflowingTables: [],
@@ -964,6 +984,63 @@ export const useEditor = create<EditorState>((set, get) => ({
 
     get().run({ kind: 'addLayer', layer: centred });
     set({ selectedLayerIds: [centred.id] });
+  },
+
+  /**
+   * Import a `.psd`, uploading its rasterised layers as assets.
+   *
+   * The parse and the uploads happen in `psd-file.ts`; this only lands the
+   * result. Deliberately *not* wrapped in a try/catch that swallows: an import
+   * that half-worked has already put assets in the bin, and telling the
+   * operator nothing happened would be a lie they discover in the asset
+   * library.
+   */
+  async importPsdFile(file) {
+    const { projectId, composition } = get();
+    if (!projectId || !composition) return;
+
+    set({ psdImport: { fraction: 0, label: 'Starting…' } });
+    try {
+      const { importPsd } = await import('./psd-file.js');
+      const result = await importPsd(projectId, file, (p) => set({ psdImport: p }));
+
+      get().run({ kind: 'importLayers', layers: result.layers, source: file.name });
+      set({
+        selectedLayerIds: result.layers.map((l) => l.id),
+        psdImport: null,
+        /*
+         * The stage is *not* resized to match the PSD, and the mismatch is
+         * reported instead.
+         *
+         * A comp built at 1920×1080 imported into a 1280×720 stage is the
+         * ordinary case and resizing would silently change every other graphic
+         * in the project. Naming it lets the operator decide.
+         */
+        psdReport: {
+          source: file.name,
+          rasterReasons: result.rasterReasons,
+          skipped: result.skipped,
+          ...(result.document.width !== composition.stage.width ||
+          result.document.height !== composition.stage.height
+            ? { documentSize: result.document }
+            : {}),
+        },
+      });
+    } catch (err) {
+      set({
+        psdImport: null,
+        psdReport: {
+          source: file.name,
+          rasterReasons: [],
+          skipped: [],
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
+    }
+  },
+
+  dismissPsdReport() {
+    set({ psdReport: null });
   },
 
   addCell(tableId, type, column) {

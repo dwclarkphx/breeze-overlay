@@ -20,8 +20,23 @@ jobs:
           node-version: 24
           cache: pnpm
 
+      # Before the install, deliberately. `--frozen-lockfile` below already
+      # refuses a stale lockfile, but it reports the failure as an install
+      # error partway through resolution; this names the package and says how
+      # to regenerate it. Costs a second and turns a confusing CI failure into
+      # an instruction.
+      - name: Lockfile up to date
+        run: node scripts/check-lockfile.mjs
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Belt to the frozen install's braces. On a clean CI checkout this can
+      # only fail if the lockfile and the manifests disagree in a way
+      # --frozen-lockfile tolerated, which would be worth knowing about here
+      # rather than as a bundler error in the build step below.
+      - name: Dependencies installed
+        run: node scripts/check-installed.mjs
 
       # Cheap, and first: a bump that only landed in the root package.json is
       # the kind of mistake that otherwise ships and then gets quoted back in a

@@ -35,6 +35,14 @@ import { capabilities, inspect } from '../media/ffmpeg.js';
 import { ArchiveError, readArchive } from '../archive/zip.js';
 import { SequenceError, orderFrames, stageSequence } from '../media/sequence.js';
 import { REFUSED, refusedExtension } from '../refused.js';
+import {
+  SharedStoreError,
+  deleteShared,
+  promoteAsset,
+  pullIntoProject,
+  readSharedIndex,
+  staleAssets,
+} from '../shared-store.js';
 import type { TranscodeQueue } from '../media/transcode.js';
 import { EDITABLE_ASSET_FIELDS, type AssetEdit, type AssetRef } from '@breeze/schema';
 
@@ -95,6 +103,48 @@ const SEQUENCE_LIMITS = {
  * these; this is the separate question of whether `other` may be *served*.
  */
 
+/**
+ * Probe time-based media and fold the result into the row.
+ *
+ * `saveAsset` reads image dimensions off the header of the buffer it is
+ * already holding, but duration, codec and alpha need ffprobe — a subprocess,
+ * which the store deliberately knows nothing about. Doing it inline means the
+ * row arrives in the bin already carrying its duration, rather than appearing
+ * bare and filling in later or never.
+ *
+ * Cheap enough to be worth blocking on: ffprobe reads a header, not a file, and
+ * `inspect` returns null immediately on a machine with no ffmpeg — the
+ * capability answer is cached from boot. Returns the original row on any
+ * failure, because a probe that fails is not an upload that fails: the bytes
+ * are already safely on disk and the row is already correct without it.
+ *
+ * At module scope rather than inside the upload plugin, since the shared-store
+ * pull route needs it too — a copy that arrived from the store should carry the
+ * same metadata as one that arrived by upload, or the bin has two kinds of
+ * asset and will eventually find a way to treat them differently.
+ */
+async function enrich(projectId: string, asset: AssetRef): Promise<AssetRef> {
+  if (asset.kind !== 'video' && asset.kind !== 'audio') return asset;
+
+  try {
+    const file = await assetPath(projectId, asset.path.replace(/^assets\//, ''));
+    const info = await inspect(file);
+    if (!info) return asset;
+
+    const enriched = await recordAssetProbe(projectId, asset.id, {
+      ...(info.width !== null ? { width: info.width } : {}),
+      ...(info.height !== null ? { height: info.height } : {}),
+      ...(info.durationSeconds !== null ? { duration: info.durationSeconds } : {}),
+      ...(info.codec !== null ? { codec: info.codec } : {}),
+      hasAlpha: info.hasAlpha,
+    });
+    return enriched ?? asset;
+  } catch {
+    /* Metadata is a nicety; the upload succeeded. */
+    return asset;
+  }
+}
+
 export async function registerAssetRoutes(
   app: FastifyInstance,
   transcodes: TranscodeQueue,
@@ -121,43 +171,6 @@ export async function registerAssetRoutes(
       done(null, body);
     });
 
-    /**
-     * Probe time-based media and fold the result into the row.
-     *
-     * `saveAsset` reads image dimensions off the header of the buffer it is
-     * already holding, but duration, codec and alpha need ffprobe — a
-     * subprocess, which the store deliberately knows nothing about. Doing it
-     * here and inline means the row arrives in the bin already carrying its
-     * duration, rather than appearing bare and filling in later or never.
-     *
-     * Cheap enough to be worth blocking on: ffprobe reads a header, not a file,
-     * and `inspect` returns null immediately on a machine with no ffmpeg — the
-     * capability answer is cached from boot. Returns the original row on any
-     * failure, because a probe that fails is not an upload that fails: the
-     * bytes are already safely on disk and the row is already correct without
-     * it.
-     */
-    async function enrich(projectId: string, asset: AssetRef): Promise<AssetRef> {
-      if (asset.kind !== 'video' && asset.kind !== 'audio') return asset;
-
-      try {
-        const file = await assetPath(projectId, asset.path.replace(/^assets\//, ''));
-        const info = await inspect(file);
-        if (!info) return asset;
-
-        const enriched = await recordAssetProbe(projectId, asset.id, {
-          ...(info.width !== null ? { width: info.width } : {}),
-          ...(info.height !== null ? { height: info.height } : {}),
-          ...(info.durationSeconds !== null ? { duration: info.durationSeconds } : {}),
-          ...(info.codec !== null ? { codec: info.codec } : {}),
-          hasAlpha: info.hasAlpha,
-        });
-        return enriched ?? asset;
-      } catch {
-        /* Metadata is a nicety; the upload succeeded. */
-        return asset;
-      }
-    }
 
     scope.post<{ Params: { id: string }; Querystring: { name?: string; replaces?: string } }>(
       '/api/projects/:id/assets',
@@ -577,6 +590,95 @@ export async function registerAssetRoutes(
    * points at, which is correct — that ProRes is exactly the file an operator
    * wants to find and archive off the graphics box.
    */
+  /* ------------------------------------------------------ the shared store */
+
+  app.get('/api/shared', async () => ({ assets: (await readSharedIndex()).assets }));
+
+  /**
+   * Promote a project asset into the shared store.
+   *
+   * Promotion rather than a second upload path: the file has already been
+   * uploaded, hashed and probed by the time anyone knows it is worth keeping,
+   * and a direct-upload route would duplicate all of that and have to be kept
+   * in step with it forever.
+   */
+  app.post<{ Params: { id: string; assetId: string }; Body: { slug?: string; title?: string } }>(
+    '/api/projects/:id/assets/:assetId/promote',
+    async (req, reply) => {
+      try {
+        const entry = await promoteAsset(req.params.id, req.params.assetId, req.body ?? {});
+        reply.code(201);
+        return { shared: entry };
+      } catch (err) {
+        if (err instanceof NotFoundError) {
+          reply.code(404);
+          return { error: err.message };
+        }
+        if (err instanceof SharedStoreError) {
+          reply.code(400);
+          return { error: err.message };
+        }
+        throw err;
+      }
+    },
+  );
+
+  /** Copy a shared asset into a project. Copies bytes; never links. */
+  app.post<{ Params: { id: string }; Body: { slug?: string } }>(
+    '/api/projects/:id/shared/pull',
+    async (req, reply) => {
+      const slug = req.body?.slug?.trim();
+      if (!slug) {
+        reply.code(400);
+        return { error: 'a slug is required' };
+      }
+      try {
+        const asset = await pullIntoProject(req.params.id, slug, saveAsset);
+        reply.code(201);
+        return { asset: await enrich(req.params.id, asset) };
+      } catch (err) {
+        if (err instanceof NotFoundError) {
+          reply.code(404);
+          return { error: err.message };
+        }
+        throw err;
+      }
+    },
+  );
+
+  /**
+   * Which of this project's assets are behind the shared store.
+   *
+   * Same slug, different hash. Reported, never applied — propagation is
+   * deliberate, because the graphics on air tonight should not change under
+   * the show.
+   */
+  app.get<{ Params: { id: string } }>('/api/projects/:id/shared/stale', async (req, reply) => {
+    try {
+      return { stale: await staleAssets(req.params.id) };
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        reply.code(404);
+        return { error: err.message };
+      }
+      throw err;
+    }
+  });
+
+  app.delete<{ Params: { slug: string } }>('/api/shared/:slug', async (req, reply) => {
+    try {
+      await deleteShared(req.params.slug);
+      reply.code(204);
+      return null;
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        reply.code(404);
+        return { error: err.message };
+      }
+      throw err;
+    }
+  });
+
   app.get<{ Params: { id: string } }>('/api/projects/:id/assets/orphans', async (req, reply) => {
     try {
       return { assets: await orphanAssets(req.params.id) };
