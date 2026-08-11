@@ -4,7 +4,16 @@ Self-hosted broadcast overlay/graphics builder. Motion graphics served as live H
 
 Built for the one-person production — school events, church services, community broadcasts — run on your own machine, on your own network.
 
-**Status: Phases 0–7.5 complete.** Schema, runtime, server, the React editor (stage, layers, properties, timeline, keyframes, easing) and the operator control panel + external-trigger API are in place and tested. The lower-third demo has been confirmed working in real OBS — transparent background and live control-panel updates both behave correctly (2026-07-28). vMix and sustained load/reconnect behavior still need a real-world pass (see [Known gaps](#known-gaps)). Phase 5 adds [text reveals](#text-reveals). Phase 6 adds [data sources and tables](#data-sources-and-tables) — live feeds normalized to one canonical shape, weather from four providers, a `table` layer that re-sorts on air, and tickers fed from those feeds — plus scenes: several independently triggered graphics on one browser source. Phase 7/7.5 add media and asset management: upload bin, ProRes 4444 → VP9/WebM-alpha transcode with a job queue, asset library with search/tags/folders, Replace, and backup bundles. Masks, effects and in-place nesting are next, as Phase 8.
+**Status: pre-1.0, and in use.** The editor — stage, layers, properties, timeline, keyframes, easing — the operator control panel and the external-trigger API are all in place and tested. So is the rest of it:
+
+- [Text reveals](#text-reveals): per-character, per-word and per-line entrance presets.
+- [Data sources and tables](#data-sources-and-tables): live feeds normalized to one canonical shape, weather from four providers, a `table` layer that re-sorts on air, and tickers fed from those feeds.
+- Scenes: several independently triggered graphics on one browser source.
+- Media and assets: an upload bin, ProRes 4444 → VP9/WebM-alpha transcode, PSD import, image sequences and sprites, an asset library with search, tags and folders, and backup bundles.
+
+The lower-third demo is confirmed working in real OBS: transparent background and live control-panel updates both behave correctly (2026-07-28). vMix and sustained load/reconnect behavior still need a real-world pass — see [Known gaps](#known-gaps), which is an honest list rather than a short one.
+
+The leading `0` in the version number is doing real work. Until 1.0.0 the project file format may still change between releases; from 1.0.0 on, anything that stops an existing project loading is a major version bump.
 
 ---
 
@@ -12,13 +21,13 @@ Built for the one-person production — school events, church services, communit
 
 ### Prerequisites
 
-| | Minimum | Why that floor | Vendor |
+| | Minimum | Notes | Vendor |
 |---|---|---|---|
-| **Node.js** | **24.0.0** | Enforced by the root `engines` field. 24 is the active LTS line, supported to April 2028 | [nodejs.org](https://nodejs.org) · [releases](https://nodejs.org/en/about/previous-releases) |
-| **pnpm** | **10** | Workspace protocol + the lockfile format this repo ships. The `packageManager` field pins **10.34.5**, so Corepack fetches that exact version whatever else is installed | [pnpm.io](https://pnpm.io) · [install](https://pnpm.io/installation) |
-| **Corepack** | bundled with Node | Ships with Node 24; the pin above only works through it | [Corepack docs](https://nodejs.org/api/corepack.html) |
-| **Git** | any current | Cloning and the release workflow | [git-scm.com](https://git-scm.com) |
-| Docker Engine | 24+ | Optional — only for the [container](#docker). 24 is where BuildKit became the default builder, which the Dockerfile's cache mounts need | [docker.com](https://www.docker.com) · [install](https://docs.docker.com/engine/install/) |
+| **Node.js** | **24.0.0** | A hard floor, not a preference — the install refuses anything older | [nodejs.org](https://nodejs.org) · [releases](https://nodejs.org/en/about/previous-releases) |
+| **pnpm** | **10** | Don't install a version by hand; Corepack fetches the right one | [pnpm.io](https://pnpm.io) · [install](https://pnpm.io/installation) |
+| **Corepack** | bundled with Node | Ships with Node 24. `corepack enable` is the whole setup | [Corepack docs](https://nodejs.org/api/corepack.html) |
+| **Git** | any current | For cloning | [git-scm.com](https://git-scm.com) |
+| Docker Engine | 24+ | Optional — only for the [container](#docker) | [docker.com](https://www.docker.com) · [install](https://docs.docker.com/engine/install/) |
 | Docker Compose | v2+ | Optional — the `docker compose` subcommand, not the retired `docker-compose` script | [Compose docs](https://docs.docker.com/compose/) |
 
 Downstream, for output: [OBS Studio](https://obsproject.com) 28+ (browser source with
@@ -53,10 +62,9 @@ pnpm --filter @breeze/server start
 ```
 
 Install Node with `winget install OpenJS.NodeJS` or from <https://nodejs.org>.
-Under WSL2, follow the Linux steps inside the distro rather than these —
-crossing the `/mnt/<drive>` boundary makes `pnpm install` several times slower
-and breaks file watching in `pnpm dev`. Keep the checkout on the Linux
-filesystem, not on a mounted Windows drive, if you work in WSL2.
+Under WSL2, follow the Linux steps inside the distro rather than these, and keep
+the checkout on the Linux filesystem — crossing the `/mnt/<drive>` boundary
+makes `pnpm install` several times slower.
 
 **macOS** (Apple silicon and Intel)
 
@@ -96,12 +104,6 @@ Ports below 1024 need root; 7331 does not, so run the server as an ordinary
 user. For an unattended install, run it under systemd rather than a login
 shell — or use the container, which handles restart-on-boot already.
 
-**All platforms.** On pnpm 9 under Node 22+, `pnpm install` emits a `DEP0169
-url.parse()` deprecation warning from pnpm's own bundled `npm-package-arg` and
-`normalize-package-data` — harmless, but noisy, and gone in pnpm 10. The
-`packageManager` field pins the version, so `corepack enable` gets the right one
-automatically.
-
 Then open `http://<host>:7331/`. On first run the server seeds a demo project from `examples/lower-third.json`.
 
 `<host>` is whatever reaches the machine running the server — `localhost` if
@@ -123,16 +125,6 @@ this at [About addresses](docs/USER-GUIDE.md#about-addresses).
 | `…/play/demo/l3rd-name?autoplay=1` | Roll the graphic as soon as the page loads |
 
 An output page shows **nothing** until it is told to play. Adding a Browser Source in OBS, or opening the URL to check it, must not put a graphic to air — that is the control panel's job, or a REST trigger's. `?autoplay=1` opts back in for the simple workflow where the source appearing in the switcher *is* the cue.
-
-Dev mode with rebuild-on-save: `pnpm dev` for the server. For editor hot reload run `pnpm dev:editor` in a second terminal and open <http://localhost:7332/> — it proxies the API to the real server, so dev and production cannot drift.
-
-This one really is `localhost` and not `<host>`. Vite's dev server binds
-loopback unless told otherwise, and its proxy targets `127.0.0.1:7331`, so the
-dev editor has to run on the same machine as the server and is not reachable
-from another one. That is a development convenience, not a deployment: point
-switchers at the built editor on port 7331. To reach it from elsewhere anyway —
-a tablet on the bench, say — run `pnpm dev:editor -- --host` and expect the
-proxy to still look for the API on its own loopback.
 
 ### Editor
 
@@ -193,23 +185,13 @@ docker compose logs -f
 Needs Docker Engine 24+ with the Compose v2 plugin. Nothing else — Node, pnpm
 and the toolchain live in the build stage and never touch the host.
 
-`env.breeze` is the tracked template and holds placeholders only; `.env` is
-gitignored and is what Compose loads automatically. If you would rather edit
-`env.breeze` in place, pass it explicitly — and add it to `.gitignore` first,
-or your API key ships to GitHub with the next push:
-
-```bash
-docker compose --env-file env.breeze up -d --build
-```
-
-It has to be the `--env-file` flag rather than an `env_file:` key in the compose
-file. `env_file:` passes variables into the container, but Compose interpolates
-`${BREEZE_PORT}` in the `ports:` mapping before the container exists — so
-`env_file:` alone would publish 7331 whatever the file said.
+`env.breeze` is a template of placeholders; `.env` is the copy you edit, and the
+one Compose loads automatically. Every setting — and every credential — goes
+there.
 
 ### Changing the listen port
 
-Edit one line in `.env` (or `env.breeze`, if you took the second route above):
+Edit one line in `.env`:
 
 ```ini
 BREEZE_PORT=8080
@@ -224,31 +206,6 @@ straight into vMix or OBS — publishing `8080:7331` would print
 `http://192.168.1.20:7331/play/...`, which does not answer from the switcher
 machine. If you genuinely need them to differ, change the `ports:` line by hand
 and remember the logged URLs are then wrong.
-
-### What is in the image
-
-Two stages. The builder installs the full workspace and compiles
-`packages/schema`, `packages/runtime`, the server and the React editor. The
-runtime stage carries compiled output plus production dependencies only — no
-TypeScript, no Vite, no Playwright. The editor's React tree is skipped too:
-Vite already bundled it into `apps/editor/dist`, so installing it again would
-add about 90 MB nothing imports.
-
-GSAP is not installed in the runtime stage at all — it is a devDependency, and
-nothing bundles it. The two files the pages actually load were staged into
-`apps/server/public/vendor/gsap/` by the builder and travel with the rest of
-that directory, which the runtime stage already copies wholesale.
-
-The workspace directory layout is reproduced inside the image rather than
-flattened. `apps/server/src/config.ts` derives `REPO_ROOT` from where the
-server's own `dist/` sits and finds `examples/` and `apps/editor/dist` relative
-to it, so collapsing the tree breaks the first-run seed and the editor mount —
-and does it silently, at run time, not at build.
-
-Base image is `node:24-slim` rather than Alpine because `ssh2` (the SFTP drop
-source) and `esbuild` both resolve platform-specific binaries, and glibc is the
-variant those publish first. Alpine works if the ~60 MB matters to you: swap
-both `FROM` lines and add `apk add --no-cache libc6-compat`.
 
 ### Data, fonts and credentials
 
@@ -288,81 +245,19 @@ docker run -d --name breeze -p 7331:7331 \
 
 ---
 
-## Layout
+## What it runs on
 
-```
-packages/schema    Composition format: TS types, JSON Schema, Ajv validation, bindings, factories
-packages/runtime   The single renderer — composition JSON → DOM + GSAP timeline
-apps/server        Fastify: project CRUD, /play output pages, asset serving, editor hosting
-apps/editor        React editor — stage, layers, properties, timeline, easing
-examples/          Hand-authored demo project (lower third + badge + news ticker)
-tests/e2e          Playwright suites driving the output page and the editor in Chromium
-```
+| | | License |
+|---|---|---|
+| **Node.js** | 24 or newer | MIT |
+| **GSAP** | 3.15.0 — the entire animation engine | [Standard "no charge" License](https://gsap.com/standard-license) |
+| **ffmpeg** | optional; only for transcoding alpha video | LGPL/GPL |
 
-**Validation is a subpath import.** `@breeze/schema` gives you types, factories, bindings and timing helpers; `@breeze/schema/validate` gives you Ajv-backed validation. They are separate because `validate` instantiates Ajv and compiles the schemas at module load — an untree-shakeable side effect that no browser consumer should inherit. The server and tooling import the subpath; the editor and runtime do not.
+ffmpeg is looked up on `PATH` at runtime. Everything except alpha transcode works without it, and it is never bundled or redistributed.
 
-**Every document mutation is a serializable command.** `apps/editor/src/state/commands.ts` holds pure reducers from `(composition, command)` to a new composition; nothing mutates the document directly. Undo restores the pre-command snapshot rather than inverting the command — inverting would need a correct inverse for every command kind, and one wrong inverse corrupts a document silently. Rapid same-property commands coalesce, so a drag is one undo step.
+GSAP is not bundled either: it is staged into `apps/server/public/vendor/gsap/` and loaded by a script tag, so it can be [upgraded without rebuilding](docs/USER-GUIDE.md#17-upgrading-the-animation-engine). It is licensed separately from this project and is free for commercial use.
 
-**One renderer, two consumers.** The editor preview and the served `/play` page both instantiate `BreezeRuntime`. There is no second rendering path, so what the operator sees in the editor is what goes to air.
-
-## Dependencies
-
-What Breeze Overlay runs on. Versions are the ones pinned in `pnpm-lock.yaml` as of 0.64.3; `pnpm install` resolves them exactly, and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) is the generated, always-current list including transitive packages.
-
-**Platform**
-
-| | Version | License | Project |
-|---|---|---|---|
-| **Node.js** | 24 or newer | MIT | [nodejs.org](https://nodejs.org) |
-| **pnpm** | 10.34.5 | MIT | [pnpm.io](https://pnpm.io) |
-| **ffmpeg** | any recent build, optional | LGPL/GPL | [ffmpeg.org](https://www.ffmpeg.org) |
-
-Node 24 is a floor, not a preference — the server uses `node:` builtins and language features below that version does not have. ffmpeg is looked up on `PATH` at runtime and only needed to transcode alpha video; everything else works without it, and it is never bundled or redistributed.
-
-**Animation**
-
-| | Version | License | Project |
-|---|---|---|---|
-| **GSAP** | 3.15.0 | [Standard "no charge" License](https://gsap.com/standard-license) | [gsap.com](https://gsap.com) — GreenSock, a [Webflow](https://webflow.com) company |
-
-The entire animation engine: every timeline, ease and text reveal. Not bundled — staged into `apps/server/public/vendor/gsap/` and loaded by a script tag, so it can be [upgraded without rebuilding](docs/USER-GUIDE.md#17-upgrading-the-animation-engine). Licensed separately from this project; free for commercial use.
-
-**Server**
-
-| | Version | License | Project |
-|---|---|---|---|
-| **Fastify** | 5.11.0 | MIT | [fastify.dev](https://fastify.dev) |
-| **@fastify/static** | 10.1.2 | MIT | [github.com/fastify/fastify-static](https://github.com/fastify/fastify-static) |
-| **@fastify/websocket** | 11.3.0 | MIT | [github.com/fastify/fastify-websocket](https://github.com/fastify/fastify-websocket) |
-| **Ajv** | 8.20.0 | MIT | [ajv.js.org](https://ajv.js.org) |
-| **marked** | 18.0.9 | MIT | [marked.js.org](https://marked.js.org) |
-| **basic-ftp** | 6.2.0 | MIT | [github.com/patrickjuchli/basic-ftp](https://github.com/patrickjuchli/basic-ftp) |
-| **ssh2-sftp-client** | 12.1.1 | Apache-2.0 | [github.com/theophilusx/ssh2-sftp-client](https://github.com/theophilusx/ssh2-sftp-client) |
-
-Ajv compiles the composition JSON Schema; the two FTP clients back the file-drop data sources and are the only reason the install has native build steps.
-
-**Editor**
-
-| | Version | License | Project |
-|---|---|---|---|
-| **React** | 19.2.8 | MIT | [react.dev](https://react.dev) |
-| **Zustand** | 5.0.14 | MIT | [github.com/pmndrs/zustand](https://github.com/pmndrs/zustand) |
-| **react-moveable** | 0.56.0 | MIT | [daybrush.com/moveable](https://daybrush.com/moveable) |
-
-react-moveable provides the stage's drag, resize and rotate handles.
-
-**Build and test** — not shipped, and not in the notices file:
-
-| | Version | License | Project |
-|---|---|---|---|
-| **TypeScript** | 7.0.2 | Apache-2.0 | [typescriptlang.org](https://www.typescriptlang.org) |
-| **Vite** | 8.2.0 | MIT | [vite.dev](https://vite.dev) |
-| **esbuild** | 0.28.1 | MIT | [esbuild.github.io](https://esbuild.github.io) |
-| **Vitest** | 4.1.10 | MIT | [vitest.dev](https://vitest.dev) |
-| **Playwright** | 1.62.1 | Apache-2.0 | [playwright.dev](https://playwright.dev) |
-| **happy-dom** | 20.11.1 | MIT | [github.com/capricorn86/happy-dom](https://github.com/capricorn86/happy-dom) |
-
-Everything here is MIT, Apache-2.0 or BSD except GSAP, whose licence restricts a category of *product* rather than a category of use. That is why it gets its own row above and its own section in the notices file.
+Everything else — Fastify, Ajv, React and the rest — is MIT, Apache-2.0 or BSD. [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) is the generated, always-current list, including transitive packages.
 
 Weather and feed providers are services rather than dependencies, and their terms bind the operator of an installation rather than this project — see [Weather](#weather) for which permit commercial use.
 
@@ -495,34 +390,18 @@ Definitions and health come back together from `GET …/datasources` on purpose:
 
 `datasources-preview` and the two `inspect` routes answer `200` with `{ ok: false, error }` rather than a 4xx. A URL that is wrong while it is being typed is the normal case, not an exception — the panel renders the message beside the field.
 
-## Tests
-
-```powershell
-pnpm test             # 676 unit + integration tests (Vitest)
-pnpm typecheck
-pnpm test:e2e         # 186 Playwright tests — needs `pnpm exec playwright install chromium` once
-pnpm test:e2e:only diagnostics   # one spec, by name
-```
-
-The Playwright config lives with the suite it configures, at `tests/playwright.config.ts`. Both scripts above pass it with `-c`; a bare `pnpm exec playwright test` reports no tests found, because Playwright only auto-discovers a config at the repo root.
-
-`typecheck` and `test:e2e` build `packages/*` first, on purpose. `start` and `dev` run whatever is already in `dist/` and `public/`, so a harness that skips the build silently tests the *previous* bundle — a green run that proves nothing.
-
-The runtime suite drives GSAP with `gsap.updateRoot()` rather than wall clock, so lifecycle assertions are deterministic. The Playwright suite then re-checks the same behavior in Chromium against real computed transforms — the same engine family vMix and OBS embed.
-
 ## Known gaps
 
 - **Not validated in real vMix.** OBS is confirmed working (transparency and live control-panel updates both correct, 2026-07-28) — vMix, sustained 60fps under GPU load, and browser-source reconnect behavior still need a real-world pass; headless Chromium cannot prove any of them.
-- **Pen tool / bezier path shapes** are Phase 8; only rect and ellipse exist.
-- **Text reveals do not animate out.** A preset covers the entrance; the exit is the layer's own keyframes, as the demos do it. A mirrored out-reveal has to negotiate with hand-authored outro keyframes on the same layer, which is a Phase 9 question.
-- **Reveal pieces are unmasked.** `chars-up` and its siblings slide and fade rather than rising from behind a hard edge. Masking each piece means a wrapper element per character for Fit Width to measure through; revisit with the Phase 8 mask system.
 - **A transcoded stinger has not yet been confirmed in a real OBS Browser Source.** The encode is proven correct at the file level — alpha decodes back 0→255, monotonic — but "clean edges in OBS" is a claim only OBS can settle.
-- **PSD import, image sequences and sprite-sheet playback** are the remaining pieces of Phase 7; video layers otherwise play MP4 natively or transcoded WebM-alpha.
+- **Only rectangle and ellipse shapes exist.** No pen tool, no bezier paths.
+- **Text reveals do not animate out.** A preset covers the entrance; the exit is the layer's own keyframes, as the demos do it.
+- **Reveal pieces are unmasked.** `chars-up` and its siblings slide and fade rather than rising from behind a hard edge.
 - **Layer size cannot be animated.** Only `scaleX`/`scaleY` are keyframable; there is no `width`/`height` track.
-- **Rubber-band keyframe selection** is implemented and tested but not yet wired to a drag gesture in the timeline.
 - **Nested composition layers** render correctly in the preview but cannot be edited in place — open the nested project directly instead.
 - **A newly added layer's timeline row isn't scrolled into view**, so it's easy to lose track of if the playhead adds it off-screen.
-- **A dragged layer's position updates on release, not continuously during the gesture.**
+- **A dragged layer's position updates on release**, not continuously during the gesture.
+- **Rubber-band keyframe selection in the timeline is not available yet.**
 - **The control hub retains channel state indefinitely**, with no per-show reset — long-running installs accumulate state in memory.
 
 ## Operating a show
@@ -695,11 +574,9 @@ Two rules, both because this server sits on the same LAN as the switcher and acc
 
 A backup bundle carries the composition's authored rows, not a live feed. Restoring one on another machine gives you the graphic and its placeholder data; polling resumes from the source definitions once that install can reach the feed.
 
-## Next: Phase 8
+## What's next
 
-Masks (shape/path with feather, invert, animatable position), per-layer effects (blur, drop-shadow and the CSS filter family, keyframable), and editing nested compositions in place.
-
-Still open from Phase 7, deferred deliberately: PSD import via ag-psd, image sequences (PNG sequence → video-with-alpha), and sprite-sheet playback.
+Per-layer effects — blur, drop-shadow and the rest of the CSS filter family, keyframable like any other property — richer masking, and editing a nested composition in place instead of opening it on its own.
 
 ## License
 
