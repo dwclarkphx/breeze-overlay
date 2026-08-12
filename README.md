@@ -17,6 +17,22 @@ The leading `0` in the version number is doing real work. Until 1.0.0 the projec
 
 ---
 
+## What it runs on
+
+| | | License |
+|---|---|---|
+| **Node.js** | 24 or newer | MIT |
+| **GSAP** | 3.15.0 — the entire animation engine | [Standard "no charge" License](https://gsap.com/standard-license) |
+| **ffmpeg** | optional; only for transcoding alpha video | LGPL/GPL |
+
+ffmpeg is looked up on `PATH` at runtime, or wherever `BREEZE_FFMPEG_PATH` points. Everything except alpha transcode works without it, and it is never bundled or redistributed.
+
+GSAP is not bundled either: it is staged into `apps/server/public/vendor/gsap/` and loaded by a script tag, so it can be [upgraded without rebuilding](docs/USER-GUIDE.md#17-upgrading-the-animation-engine). It is licensed separately from this project and is free for commercial use.
+
+Everything else — Fastify, Ajv, React and the rest — is MIT, Apache-2.0 or BSD. [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) is the generated, always-current list, including transitive packages.
+
+Weather and feed providers are services rather than dependencies, and their terms bind the operator of an installation rather than this project — see [Weather](#weather) for which permit commercial use.
+
 ## Quick start
 
 ### Prerequisites
@@ -104,7 +120,7 @@ Ports below 1024 need root; 7331 does not, so run the server as an ordinary
 user. For an unattended install, run it under systemd rather than a login
 shell — or use the container, which handles restart-on-boot already.
 
-Then open `http://<host>:7331/`. On first run the server seeds a demo project from `examples/lower-third.json`.
+Then open `http://<host>:7331/`. You will have access to the [Editor](#editor), Project list, and the **[User Guide](docs/USER-GUIDE.md)**. On first run the server seeds a demo project from `examples/lower-third.json`.
 
 `<host>` is whatever reaches the machine running the server — `localhost` if
 that is the machine you are sitting at, otherwise its LAN address or hostname.
@@ -148,14 +164,6 @@ A new layer starts at the playhead, as in After Effects — so adding one with t
 
 Timeline: Ctrl+wheel zooms about the cursor, Shift+wheel scrolls. Dragged keyframes and markers snap to other keyframes, markers, the playhead and the composition bounds; failing all of those they snap to whole frames at the composition's fps.
 
-### Pointing vMix or OBS at it
-
-1. Note the LAN address the server logs on startup (it binds `0.0.0.0` by default).
-2. **vMix** → Add Input → Web Browser → URL `http://<host>:7331/play/demo/l3rd-name`, size 1920×1080.
-3. **OBS** → Sources → Browser → same URL, width 1920, height 1080. No custom CSS needed — the page is transparent by default.
-
-In a preview tab: `space` play · `→` next · `esc` stop · `backspace` clear.
-
 ### Environment
 
 | Variable | Default | Notes |
@@ -171,8 +179,28 @@ In a preview tab: `space` play · `→` next · `esc` stop · `backspace` clear.
 | `BREEZE_CONTACT` | *(empty)* | Who this server is, for the outgoing `User-Agent` — `mystation.com, ops@mystation.com`. **Set this.** See [User-Agent](#user-agent) |
 | `BREEZE_DATA_SECRETS` | *(empty)* | `id=value` pairs for data-source credentials — `sheets=AIza…,league=abc123` |
 | `BREEZE_DATA_SECRETS_FILE` | *(empty)* | Path to a JSON object of `id → credential`. Use this for anything with newlines in it, notably a Google service-account key; the comma-separated form above cannot represent one. Merged over `BREEZE_DATA_SECRETS` |
+| `BREEZE_FFMPEG_PATH` | `ffmpeg` | Full path to the binary, for when it is installed somewhere that isn't on `PATH` |
+| `BREEZE_FFPROBE_PATH` | `ffprobe` | As above. It normally installs alongside ffmpeg, so setting one usually means setting both |
+| `BREEZE_TRANSCODE_CONCURRENCY` | `1` | How many transcodes run at once. Raise it only on a machine that is not also playing graphics to air |
 
 ---
+
+### User-Agent
+
+Set `BREEZE_CONTACT` on any server that fetches data. It becomes the outgoing `User-Agent`:
+
+```
+BREEZE_CONTACT="mystation.com, ops@mystation.com"
+→ User-Agent: BreezeOverlay/0.67.0 (mystation.com, ops@mystation.com)
+```
+
+The product token carries the running version, so the string changes with each release — match on `BreezeOverlay/` rather than the whole token if you are filtering your own logs.
+
+api.weather.gov [requires](https://www.weather.gov/documentation/services-web-api) a User-Agent and documents why the value matters: *"the more unique to your application the less likely it will be affected by a security event. If you include contact information (website or email), we can contact you if your string is associated to a security event."*
+
+Leave it unset and you share Breeze's built-in fallback string with every other install, which is throttled as one — so set it.
+
+It applies to every outgoing fetch, not just weather — RSS feeds, JSON endpoints and CSV origins all get it. A weather source can override it per-source (**Contact** in the panel) for the rare case of one server acting for several stations; the server-wide setting is the one to reach for first. Resolution order is source → server → fallback.
 
 ## Docker
 
@@ -188,6 +216,15 @@ and the toolchain live in the build stage and never touch the host.
 `env.breeze` is a template of placeholders; `.env` is the copy you edit, and the
 one Compose loads automatically. Every setting — and every credential — goes
 there.
+
+### Building without Compose
+
+```bash
+docker build -t breeze-overlay:local .
+docker run -d --name breeze -p 7331:7331 \
+  -e BREEZE_CONTACT="mystation.com, ops@mystation.com" \
+  -v breeze-data:/app/data breeze-overlay:local
+```
 
 ### Changing the listen port
 
@@ -207,6 +244,9 @@ straight into vMix or OBS — publishing `8080:7331` would print
 machine. If you genuinely need them to differ, change the `ports:` line by hand
 and remember the logged URLs are then wrong.
 
+`/healthz` backs a container healthcheck that reads `BREEZE_PORT` at run time,
+so a remapped port does not leave a healthy server reported unhealthy.
+
 ### Data, fonts and credentials
 
 | Concern | How |
@@ -217,8 +257,13 @@ and remember the logged URLs are then wrong.
 | Credentials | `BREEZE_DATA_SECRETS` in `.env` for simple values; for a Google service-account key use the commented `BREEZE_DATA_SECRETS_FILE` bind mount — a multi-line key cannot go in the comma-separated form |
 | Fonts | **A font a graphic names must exist inside the container.** The base image ships almost none, so an unresolved family falls back silently and the graphic goes to air in the wrong typeface. Uncomment the `/usr/share/fonts` mount, or add the font files to the image |
 
-`/healthz` backs a container healthcheck that reads `BREEZE_PORT` at run time,
-so a remapped port does not leave a healthy server reported unhealthy.
+### Pointing vMix or OBS at it
+
+1. Note the LAN address the server logs on startup (it binds `0.0.0.0` by default).
+2. **vMix** → Add Input → Web Browser → URL `http://<host>:7331/play/demo/l3rd-name`, size 1920×1080.
+3. **OBS** → Sources → Browser → same URL, width 1920, height 1080. No custom CSS needed — the page is transparent by default.
+
+In a preview tab: `space` play · `→` next · `esc` stop · `backspace` clear.
 
 ### Pointing OBS or vMix at the container
 
@@ -227,39 +272,13 @@ on startup are the *container's* interfaces, not the host's. Use the Docker
 host's LAN address with the published port —
 `http://<docker-host>:7331/play/demo/l3rd-name`.
 
-Docker Desktop on Windows and macOS runs containers inside a VM, so a container
-port is reachable from the LAN only through the published mapping above; there
-is no container IP the switcher can route to. On Linux this is also why
-`network_mode: host` is tempting — it works, and it makes `BREEZE_PORT` the
-only port setting that matters, but it gives up the isolation and does nothing
-on Docker Desktop.
-
-### Building without Compose
-
-```bash
-docker build -t breeze-overlay:local .
-docker run -d --name breeze -p 7331:7331 \
-  -e BREEZE_CONTACT="mystation.com, ops@mystation.com" \
-  -v breeze-data:/app/data breeze-overlay:local
-```
-
 ---
 
-## What it runs on
+## Operating a show
 
-| | | License |
-|---|---|---|
-| **Node.js** | 24 or newer | MIT |
-| **GSAP** | 3.15.0 — the entire animation engine | [Standard "no charge" License](https://gsap.com/standard-license) |
-| **ffmpeg** | optional; only for transcoding alpha video | LGPL/GPL |
+Open `/control/<project>/<composition>` on a laptop or tablet. Type into the fields, hit **PLAY**, and the graphic rolls on every output page connected to that composition. Edits apply live — the graphic does not need re-playing — and **NEXT** appears only on graphics with more than one hold.
 
-ffmpeg is looked up on `PATH` at runtime. Everything except alpha transcode works without it, and it is never bundled or redistributed.
-
-GSAP is not bundled either: it is staged into `apps/server/public/vendor/gsap/` and loaded by a script tag, so it can be [upgraded without rebuilding](docs/USER-GUIDE.md#17-upgrading-the-animation-engine). It is licensed separately from this project and is free for commercial use.
-
-Everything else — Fastify, Ajv, React and the rest — is MIT, Apache-2.0 or BSD. [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) is the generated, always-current list, including transitive packages.
-
-Weather and feed providers are services rather than dependencies, and their terms bind the operator of an installation rather than this project — see [Weather](#weather) for which permit commercial use.
+Outputs and panels join a channel per composition over `/ws/control`. The hub retains each channel's field values, so a browser source that drops mid-show reconnects and comes back showing the name the operator typed rather than the placeholder baked into the composition.
 
 ## Control surface
 
@@ -292,73 +311,9 @@ The verbs are deliberately non-overlapping, and **PLAY can never take a graphic 
 
 Repeated PLAY therefore steps a graphic all the way through — the one-button workflow. The editor's transport is deliberately different: authoring wants to watch an animation end to end, so ▶ ignores holds unless the **Holds** toggle in the timeline toolbar is on.
 
-### Frame rate in OBS
-
-A Browser Source ticks at the OBS output frame rate unless **Use custom frame rate** is enabled in its properties. If the debug overlay reports 30 fps, check Settings → Video → FPS; the page cannot paint faster than CEF ticks it.
-
-## Composition format
-
-Every layer can carry keyframe tracks on `x, y, scaleX, scaleY, rotation, opacity, skewX, skewY, blur, brightness, maskOffset` — transform, opacity and filter only, never layout properties, so CEF keeps everything on the compositor.
-
-```jsonc
-{
-  "id": "bar", "type": "shape", "shape": "rect",
-  "size": { "width": 900, "height": 100 },
-  "transform": { "x": 120, "y": 870, "anchorX": 0, "anchorY": 0.5 },
-  "keyframes": {
-    "x": [
-      { "t": 0,   "v": -960, "ease": "power3.out" },
-      { "t": 0.6, "v": 120,  "ease": "none" },      // intro lands
-      { "t": 1.5, "v": 120,  "ease": "power3.in" }, // STOP marker sits here
-      { "t": 2.1, "v": -960 }                       // outro
-    ]
-  }
-}
-```
-
-Layer types: `shape`, `text`, `image`, `video`, `crawl`, `table`, `group`, `composition`.
-
-Any layer with a `binding` becomes an operator-editable dynamic field. `GET /api/projects/:id/compositions/:compId/bindings` returns the descriptor list plus a JSON Schema — the same block the control panel builds its form from. Binding kinds are `string`, `image`, `video`, `stringList` (a crawl's items) and `dataset` (a table's rows, which the control panel renders as an editable grid).
-
-A layer bound to a *data source* uses `source` instead — `table` and `crawl` both take one, and the server pushes matching DataSets under the reserved `$data` update key. The two mechanisms coexist: a source keeps the graphic fed, a binding lets the operator override it.
-
-### Nested compositions
-
-A `composition` layer inlines another composition, After Effects precomp style:
-
-```jsonc
-{
-  "id": "badge", "type": "composition", "ref": "badge",
-  "in": 0.3,                              // doubles as the precomp start time
-  "overrides": { "badgeText": "LIVE" }    // pins this field for this instance
-}
-```
-
-- Nested layers are inlined into the **same** timeline — one playhead, which is what lets `seek()` and editor scrubbing land on a single coherent frame.
-- Nested layer ids are namespaced (`badge/chip`), so the same composition can be instantiated twice in one graphic.
-- A field named in `overrides` is **pinned**: a parent `update()` will not overwrite it. That is what lets one badge comp appear twice reading `HOME` and `AWAY`.
-- The nested composition's own STOP markers are ignored; only the root defines playback steps.
-- Cycles, unresolvable refs and nesting past 8 levels produce a warning on `runtime.warnings` and render nothing, rather than failing the whole graphic.
-
-### Masks
-
-Masks are real SVG `<mask>` elements, not `clip-path` — `clip-path` can neither feather nor invert, which are the two things broadcast masks are for.
-
-```jsonc
-"mask": { "type": "rect", "x": 0, "y": 0, "width": 120, "height": 40, "feather": 6, "invert": false }
-```
-
-`feather` becomes a genuine `feGaussianBlur`; `invert` punches a hole; the `maskOffset` keyframe track slides the mask along X for wipe reveals.
-
-### Video layers
-
-Videos are slaved to the composition playhead rather than running on their own clock, so a stinger stays in sync with the graphic around it and scrubs correctly in the editor. `startAt` is the composition time at which media frame 0 plays; past the end a non-looping clip holds its last frame rather than going black.
-
-**Fit Width** condenses long text horizontally to fit `fit.maxWidth`, but never below `fit.minScale` (default `0.5`) — squashing a name past that is less useful than letting it run long. When the floor is hit, the layer gets `data-fit-overflow="1"` and the id appears in `runtime.overflowingTextLayers`, so the editor can flag a strap that is too short for its content instead of discovering it on air.
-
-Easing accepts GSAP names (`"power3.out"`), a cubic bezier (`{ "type": "cubicBezier", "points": [.4,0,.2,1] }`) or steps (`{ "type": "stepped", "steps": 4 }`). Structured eases are evaluated by our own solver, so the editor's curve preview and playback use identical math.
-
 ## API
+
+Projects, compositions and data sources — the routes worth automating against. The asset library, transcode queue, shared store, backup/restore and activity log each have their own endpoints under `/api/` as well; those exist to serve the editor, and are not listed here because their shapes still move with it.
 
 ```
 GET    /healthz
@@ -390,26 +345,6 @@ Definitions and health come back together from `GET …/datasources` on purpose:
 
 `datasources-preview` and the two `inspect` routes answer `200` with `{ ok: false, error }` rather than a 4xx. A URL that is wrong while it is being typed is the normal case, not an exception — the panel renders the message beside the field.
 
-## Known gaps
-
-- **Not validated in real vMix.** OBS is confirmed working (transparency and live control-panel updates both correct, 2026-07-28) — vMix, sustained 60fps under GPU load, and browser-source reconnect behavior still need a real-world pass; headless Chromium cannot prove any of them.
-- **A transcoded stinger has not yet been confirmed in a real OBS Browser Source.** The encode is proven correct at the file level — alpha decodes back 0→255, monotonic — but "clean edges in OBS" is a claim only OBS can settle.
-- **Only rectangle and ellipse shapes exist.** No pen tool, no bezier paths.
-- **Text reveals do not animate out.** A preset covers the entrance; the exit is the layer's own keyframes, as the demos do it.
-- **Reveal pieces are unmasked.** `chars-up` and its siblings slide and fade rather than rising from behind a hard edge.
-- **Layer size cannot be animated.** Only `scaleX`/`scaleY` are keyframable; there is no `width`/`height` track.
-- **Nested composition layers** render correctly in the preview but cannot be edited in place — open the nested project directly instead.
-- **A newly added layer's timeline row isn't scrolled into view**, so it's easy to lose track of if the playhead adds it off-screen.
-- **A dragged layer's position updates on release**, not continuously during the gesture.
-- **Rubber-band keyframe selection in the timeline is not available yet.**
-- **The control hub retains channel state indefinitely**, with no per-show reset — long-running installs accumulate state in memory.
-
-## Operating a show
-
-Open `/control/<project>/<composition>` on a laptop or tablet. Type into the fields, hit **PLAY**, and the graphic rolls on every output page connected to that composition. Edits apply live — the graphic does not need re-playing — and **NEXT** appears only on graphics with more than one hold.
-
-Outputs and panels join a channel per composition over `/ws/control`. The hub retains each channel's field values, so a browser source that drops mid-show reconnects and comes back showing the name the operator typed rather than the placeholder baked into the composition.
-
 ### Triggering from Companion, Stream Deck or a switcher
 
 ```
@@ -428,29 +363,9 @@ Each response reports `delivered` — how many outputs actually received the com
 
 With `BREEZE_API_KEY` set, control actions need the key as either an `x-breeze-key` header or a `?key=` query parameter. Reads — the output page, the panel, `/state` — stay open so a browser source never needs credentials.
 
-## Text reveals
-
-A text layer can carry a `textAnimPreset`, and the runtime splits it and staggers the pieces in at the layer's in-point:
-
-```json
-"textAnimPreset": { "id": "chars-up", "stagger": 0.02, "duration": 0.45, "ease": "power3.out" }
-```
-
-Six presets over two axes — `chars` / `words` / `lines` × `-up` / `-fade`. Only `id` is required; the timings default per preset and are scaled per unit, because a 0.02s stagger that reads clearly across forty characters is invisible across four lines. `demo / Lower Third — Reveal` is a name strap using `chars-up` with a `words-fade` title.
-
-Three things about it are deliberate:
-
-- **The reveal animates the pieces; the layer's keyframes animate the layer.** They compose rather than compete, so a strap can slide in as a whole while its characters rise inside it.
-- **Fit Width measures the split boxes, because those are what go to air.** Splitting turns the text into a row of inline-blocks that measures a few pixels wider than the shaped text it replaced, since the per-character boxes lose the kerning between them. Fitting the plain text instead — which 0.37 did, on the argument that it is the authored truth — left about four pixels of a 700px strap hanging off the end of the bar. The fit therefore runs after the split, and again after every re-split.
-- **A layer's text is only measurable while it is laid out.** A layer outside its visibility window is `display: none`, where `offsetWidth` is 0, so Fit Width un-hides it for the measurement rather than reading a zero as "it fits". That mattered for the ordinary workflow: a name typed in before PLAY is typed into a hidden strap.
-- **`lines` presets need real line breaks.** Text layers are `white-space: pre`, so copy never wraps on its own — a single-line strap splits into one line and `lines-up` reveals it as a whole. Put `\n` in the content to get lines.
-- **Live updates re-split.** The split is reverted before new text is written — reverting afterwards would restore the markup SplitText recorded and quietly discard what the operator just typed — and the reveal is rebuilt so it can play again. A name corrected during the hold stays visible.
-
-The properties panel reports the measured piece count and the reveal's real total, and warns when that total overruns the time before the graphic's hold.
-
 ## Data sources and tables
 
-One rule: **one canonical data shape, many adapters.** Every source — a pasted table, an HTTP feed, a news RSS URL, a private Google Sheet — normalizes into a `DataSet` before anything downstream sees it. Layers bind to columns and never learn where the rows came from. The source types and their options are covered below; the operator's walkthrough is in [Data sources and tables](docs/USER-GUIDE.md#12-data-sources-and-tables).
+One rule: **one canonical data shape, many source types.** Every source — a pasted table, an HTTP feed, a news RSS URL, a private Google Sheet — normalizes into a `DataSet` before anything downstream sees it. Layers bind to columns and never learn where the rows came from. The source types and their options are covered below; the operator's walkthrough is in [Data sources and tables](docs/USER-GUIDE.md#12-data-sources-and-tables).
 
 ```jsonc
 {
@@ -461,7 +376,7 @@ One rule: **one canonical data shape, many adapters.** Every source — a pasted
 }
 ```
 
-### Adapters
+### Source types
 
 | Type | What it takes | Notes |
 |---|---|---|
@@ -506,30 +421,13 @@ Pointing at a self-hosted instance on loopback needs the fetch guard opened for 
 BREEZE_DATA_ALLOW_HOSTS=localhost
 ```
 
-**Pin the model on a self-hosted instance.** Left blank, the adapter asks for Open-Meteo's `best_match`, which selects from the models Open-Meteo *knows about* — while your instance only holds the ones you have actually synced. Put the model id in the source's **Model** field (`ncep_gfs_seamless`) and it goes out as `&models=…`, matching what you would build in Open-Meteo's own API URL generator. **Time zone** defaults to `auto`, which resolves from the coordinates; set it explicitly when the graphic should read in the station's clock rather than the forecast location's, or when a self-hosted instance has no timezone database.
+**Pin the model on a self-hosted instance.** Left blank, Breeze asks for Open-Meteo's `best_match`, which selects from the models Open-Meteo *knows about* — while your instance only holds the ones you have actually synced. Put the model id in the source's **Model** field (`ncep_gfs_seamless`) and it goes out as `&models=…`, matching what you would build in Open-Meteo's own API URL generator. **Time zone** defaults to `auto`, which resolves from the coordinates; set it explicitly when the graphic should read in the station's clock rather than the forecast location's, or when a self-hosted instance has no timezone database.
 
-Because Open-Meteo fails the *whole* request when one requested variable is unavailable — rather than omitting that series — a model-pinned instance that has temperature but not UV would otherwise return nothing. The adapter retries once without the optional variables (`uv_index`, `uv_index_max`, `apparent_temperature_max`, `is_day`) when the error names one of them, and only then; a timeout or a bad coordinate is reported as-is rather than being retried into a worse message.
-
-### User-Agent
-
-Set `BREEZE_CONTACT` on any server that fetches data. It becomes the outgoing `User-Agent`:
-
-```
-BREEZE_CONTACT="mystation.com, ops@mystation.com"
-→ User-Agent: BreezeOverlay/0.60.0 (mystation.com, ops@mystation.com)
-```
-
-The product token carries the running version, so the string changes with each release — match on `BreezeOverlay/` rather than the whole token if you are filtering your own logs.
-
-api.weather.gov [requires](https://www.weather.gov/documentation/services-web-api) a User-Agent and documents why the value matters: *"the more unique to your application the less likely it will be affected by a security event. If you include contact information (website or email), we can contact you if your string is associated to a security event."*
-
-Both halves of that are the argument for setting it, and the second is sharper than it looks. Breeze's built-in fallback is **shared by every install in the world**, so a server running on the default has its traffic judged alongside every other Breeze deployment's — one careless install polling NWS in a loop can get the string throttled for all of them, and NWS has no way to warn anyone. A station that sets `BREEZE_CONTACT` is no longer downstream of a stranger's behavior and is reachable before it gets blocked rather than after.
-
-It applies to every outgoing fetch, not just weather — RSS feeds, JSON endpoints and CSV origins all get it. A weather source can override it per-source (**Contact** in the panel) for the rare case of one server acting for several stations; the server-wide setting is the one to reach for first. Resolution order is source → server → fallback.
+Because Open-Meteo fails the *whole* request when one requested variable is unavailable — rather than omitting that series — a model-pinned instance that has temperature but not UV would otherwise return nothing. Breeze retries once without the optional variables (`uv_index`, `uv_index_max`, `apparent_temperature_max`, `is_day`) when the error names one of them, and only then; a timeout or a bad coordinate is reported as-is rather than being retried into a worse message.
 
 ### File drops (FTP/SFTP)
 
-The league-office workflow: a directory gains `results-2026-08-03.csv` every few minutes and the graphic should show the newest one. The adapter resolves *newest file matching the pattern* and hands the body to the same readers the HTTP adapters use, so the same CSV over SFTP and over HTTPS produce identical tables. Patterns take `*` and `?`; ties on modification time break on filename descending, because minute-resolution FTP timestamps are common and a graphic must not flip between two files on alternate polls.
+The league-office workflow: a directory gains `results-2026-08-03.csv` every few minutes and the graphic should show the newest one. The source resolves *newest file matching the pattern* and hands the body to the same readers the HTTP source types use, so the same CSV over SFTP and over HTTPS produce identical tables. Patterns take `*` and `?`; ties on modification time break on filename descending, because minute-resolution FTP timestamps are common and a graphic must not flip between two files on alternate polls.
 
 Credentials follow the same rule as everywhere else — the def carries a `secretId` and a username, never a password. A `secretId` whose value begins with a PEM header is used as an SSH key; anything else is a password. A drop box on the venue LAN is refused until its host is added to `BREEZE_DATA_ALLOW_HOSTS`; that is the expected configuration here rather than an emergency escape hatch, but it stays opt-in because the editor accepts a hostname from anyone who can open it.
 
@@ -574,6 +472,102 @@ Two rules, both because this server sits on the same LAN as the switcher and acc
 
 A backup bundle carries the composition's authored rows, not a live feed. Restoring one on another machine gives you the graphic and its placeholder data; polling resumes from the source definitions once that install can reach the feed.
 
+## Composition format
+
+Every layer can carry keyframe tracks on `x, y, scaleX, scaleY, rotation, opacity, skewX, skewY, blur, brightness, maskOffset` — transform, opacity and filter only, never layout properties, so CEF keeps everything on the compositor.
+
+```jsonc
+{
+  "id": "bar", "type": "shape", "shape": "rect",
+  "size": { "width": 900, "height": 100 },
+  "transform": { "x": 120, "y": 870, "anchorX": 0, "anchorY": 0.5 },
+  "keyframes": {
+    "x": [
+      { "t": 0,   "v": -960, "ease": "power3.out" },
+      { "t": 0.6, "v": 120,  "ease": "none" },      // intro lands
+      { "t": 1.5, "v": 120,  "ease": "power3.in" }, // STOP marker sits here
+      { "t": 2.1, "v": -960 }                       // outro
+    ]
+  }
+}
+```
+
+Layer types: `shape`, `text`, `image`, `video`, `sprite`, `crawl`, `table`, `group`, `composition`.
+
+Any layer with a `binding` becomes an operator-editable dynamic field. `GET /api/projects/:id/compositions/:compId/bindings` returns the descriptor list plus a JSON Schema — the same block the control panel builds its form from. Binding kinds are `string`, `image`, `video`, `stringList` (a crawl's items) and `dataset` (a table's rows, which the control panel renders as an editable grid).
+
+A layer bound to a *data source* uses `source` instead — `table` and `crawl` both take one, and the server pushes matching DataSets under the reserved `$data` update key. The two mechanisms coexist: a source keeps the graphic fed, a binding lets the operator override it.
+
+### Nested compositions
+
+A `composition` layer inlines another composition, After Effects precomp style:
+
+```jsonc
+{
+  "id": "badge", "type": "composition", "ref": "badge",
+  "in": 0.3,                              // doubles as the precomp start time
+  "overrides": { "badgeText": "LIVE" }    // pins this field for this instance
+}
+```
+
+- Nested layers are inlined into the **same** timeline — one playhead, which is what lets `seek()` and editor scrubbing land on a single coherent frame.
+- Nested layer ids are namespaced (`badge/chip`), so the same composition can be instantiated twice in one graphic.
+- A field named in `overrides` is **pinned**: a parent `update()` will not overwrite it. That is what lets one badge comp appear twice reading `HOME` and `AWAY`.
+- The nested composition's own STOP markers are ignored; only the root defines playback steps.
+- Cycles, unresolvable refs and nesting past 8 levels produce a warning on `runtime.warnings` and render nothing, rather than failing the whole graphic.
+
+### Masks
+
+Masks are real SVG `<mask>` elements, not `clip-path` — `clip-path` can neither feather nor invert, which are the two things broadcast masks are for.
+
+```jsonc
+"mask": { "type": "rect", "x": 0, "y": 0, "width": 120, "height": 40, "feather": 6, "invert": false }
+```
+
+`feather` becomes a genuine `feGaussianBlur`; `invert` punches a hole; the `maskOffset` keyframe track slides the mask along X for wipe reveals.
+
+### Video layers
+
+Videos are slaved to the composition playhead rather than running on their own clock, so a stinger stays in sync with the graphic around it and scrubs correctly in the editor. `startAt` is the composition time at which media frame 0 plays; past the end a non-looping clip holds its last frame rather than going black.
+
+**Fit Width** condenses long text horizontally to fit `fit.maxWidth`, but never below `fit.minScale` (default `0.5`) — squashing a name past that is less useful than letting it run long. When the floor is hit, the layer gets `data-fit-overflow="1"` and the id appears in `runtime.overflowingTextLayers`, so the editor can flag a strap that is too short for its content instead of discovering it on air.
+
+Easing accepts GSAP names (`"power3.out"`), a cubic bezier (`{ "type": "cubicBezier", "points": [.4,0,.2,1] }`) or steps (`{ "type": "stepped", "steps": 4 }`). Structured eases are evaluated by our own solver, so the editor's curve preview and playback use identical math.
+
+## Text reveals
+
+A text layer can carry a `textAnimPreset`, and the runtime splits it and staggers the pieces in at the layer's in-point:
+
+```json
+"textAnimPreset": { "id": "chars-up", "stagger": 0.02, "duration": 0.45, "ease": "power3.out" }
+```
+
+Six presets over two axes — `chars` / `words` / `lines` × `-up` / `-fade`. Only `id` is required; the timings default per preset and are scaled per unit, because a 0.02s stagger that reads clearly across forty characters is invisible across four lines. `demo / Lower Third — Reveal` is a name strap using `chars-up` with a `words-fade` title.
+
+Three things about it are deliberate:
+
+- **The reveal animates the pieces; the layer's keyframes animate the layer.** They compose rather than compete, so a strap can slide in as a whole while its characters rise inside it.
+- **Fit Width measures the split boxes, because those are what go to air.** Splitting turns the text into a row of inline-blocks that measures a few pixels wider than the shaped text it replaced, since the per-character boxes lose the kerning between them. Fitting the plain text instead — which 0.37 did, on the argument that it is the authored truth — left about four pixels of a 700px strap hanging off the end of the bar. The fit therefore runs after the split, and again after every re-split.
+- **A layer's text is only measurable while it is laid out.** A layer outside its visibility window is `display: none`, where `offsetWidth` is 0, so Fit Width un-hides it for the measurement rather than reading a zero as "it fits". That mattered for the ordinary workflow: a name typed in before PLAY is typed into a hidden strap.
+- **`lines` presets need real line breaks.** Text layers are `white-space: pre`, so copy never wraps on its own — a single-line strap splits into one line and `lines-up` reveals it as a whole. Put `\n` in the content to get lines.
+- **Live updates re-split.** The split is reverted before new text is written — reverting afterwards would restore the markup SplitText recorded and quietly discard what the operator just typed — and the reveal is rebuilt so it can play again. A name corrected during the hold stays visible.
+
+The properties panel reports the measured piece count and the reveal's real total, and warns when that total overruns the time before the graphic's hold.
+
+## Known gaps
+
+- **Not validated in real vMix.** OBS is confirmed working (transparency and live control-panel updates both correct, 2026-07-28) — vMix, sustained 60fps under GPU load, and browser-source reconnect behavior still need a real-world pass; headless Chromium cannot prove any of them.
+- **A transcoded stinger has not yet been confirmed in a real OBS Browser Source.** The encode is proven correct at the file level — alpha decodes back 0→255, monotonic — but "clean edges in OBS" is a claim only OBS can settle.
+- **Only rectangle and ellipse shapes exist.** No pen tool, no bezier paths.
+- **Text reveals do not animate out.** A preset covers the entrance; the exit is the layer's own keyframes, as the demos do it.
+- **Reveal pieces are unmasked.** `chars-up` and its siblings slide and fade rather than rising from behind a hard edge.
+- **Layer size cannot be animated.** Only `scaleX`/`scaleY` are keyframable; there is no `width`/`height` track.
+- **Nested composition layers** render correctly in the preview but cannot be edited in place — open the nested project directly instead.
+- **A newly added layer's timeline row isn't scrolled into view**, so it's easy to lose track of if the playhead adds it off-screen.
+- **A dragged layer's position updates on release**, not continuously during the gesture.
+- **Rubber-band keyframe selection in the timeline is not available yet.**
+- **The control hub retains channel state indefinitely**, with no per-show reset — long-running installs accumulate state in memory.
+
 ## What's next
 
 Per-layer effects — blur, drop-shadow and the rest of the CSS filter family, keyframable like any other property — richer masking, and editing a nested composition in place instead of opening it on its own.
@@ -587,5 +581,4 @@ Breeze **requires** [GSAP](https://gsap.com) (GreenSock Animation Platform), (C)
 GSAP is licensed separately under the [GSAP Standard License](https://gsap.com/standard-license) — free for commercial use, with its own terms that are not part of the MPL.
 
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) lists every third-party package distributed with Breeze, generated from the installed production dependency tree rather than maintained by hand.
-
 
