@@ -38,8 +38,23 @@ export interface ChannelViewers {
   controllers: number;
 }
 
+/** The UI language this install renders in. See `apps/server/src/i18n.ts`. */
+export interface UiLocale {
+  /** BCP-47 tag, after resolution against what shipped. */
+  locale: string;
+  direction: 'ltr' | 'rtl';
+}
+
 export interface StatusReport {
   version: string;
+  /**
+   * How the editor learns its language.
+   *
+   * The editor is static files served from `editorDir`; it cannot read env and
+   * there is no shell to template. It already fetches status, so the resolved
+   * locale rides along rather than earning an endpoint of its own.
+   */
+  ui: UiLocale;
   /** Whole seconds since the process started. */
   uptime: number;
   viewers: {
@@ -98,7 +113,14 @@ export class StatusSampler {
     return Math.round((busyMicros / elapsedMicros) * 1000) / 10;
   }
 
-  report(hub: ControlHub, version: string): StatusReport {
+  report(
+    hub: ControlHub,
+    version: string,
+    // Defaulted so the sampler stays independently testable — the route passes
+    // the real one. English is the correct default for a caller that has no
+    // opinion, because nothing is ever auto-detected.
+    ui: UiLocale = { locale: 'en', direction: 'ltr' },
+  ): StatusReport {
     let renderers = 0;
     let controllers = 0;
     const channels: ChannelViewers[] = [];
@@ -125,6 +147,7 @@ export class StatusSampler {
     const mem = process.memoryUsage();
     return {
       version,
+      ui,
       uptime: Math.floor(process.uptime()),
       viewers: { renderers, controllers, channels },
       cpu: { percent: this.cpuPercent(), cores: os.cpus().length },

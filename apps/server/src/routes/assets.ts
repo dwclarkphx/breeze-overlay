@@ -43,6 +43,7 @@ import {
   readSharedIndex,
   staleAssets,
 } from '../shared-store.js';
+import { fail } from '../errors.js';
 import type { TranscodeQueue } from '../media/transcode.js';
 import { EDITABLE_ASSET_FIELDS, type AssetEdit, type AssetRef } from '@breeze/schema';
 
@@ -186,7 +187,7 @@ export async function registerAssetRoutes(
         if (refused) {
           reply.code(415);
           return {
-            error: `${refused} files are not accepted as assets — the assets directory is served to browsers`,
+            ...fail('error.assetsDirectoryRefused', { count: refused }),
           };
         }
 
@@ -298,7 +299,9 @@ export async function registerAssetRoutes(
           // Refused before the archive is unpacked rather than after: there is
           // no point writing 300 files for a job that cannot run.
           reply.code(503);
-          return { error: caps.reason ?? 'ffmpeg with libvpx-vp9 is unavailable' };
+          return caps.reason
+            ? { ...fail('error.vp9AlphaUnavailable'), error: caps.reason }
+            : fail('error.vp9AlphaUnavailable');
         }
 
         try {
@@ -491,7 +494,7 @@ export async function registerAssetRoutes(
         const unknown = (ids as string[]).filter((i) => !known.has(i));
         if (unknown.length > 0) {
           reply.code(404);
-          return { error: `no such asset: ${unknown.join(', ')}` };
+          return fail('error.noSuchAsset', { ids: unknown.join(', ') });
         }
 
         return {
@@ -728,7 +731,12 @@ export async function registerAssetRoutes(
         const info = await inspect(file);
         if (!info) {
           reply.code(503);
-          return { error: (await capabilities()).reason ?? 'ffprobe could not read this file' };
+          {
+            const reason = (await capabilities()).reason;
+            return reason
+              ? { ...fail('error.probeUnavailable'), error: reason }
+              : fail('error.probeUnavailable');
+          }
         }
         return { info };
       } catch (err) {
@@ -749,7 +757,9 @@ export async function registerAssetRoutes(
         // 503 rather than 400: the request is fine, the machine cannot serve it,
         // and it may be able to after an install and a restart.
         reply.code(503);
-        return { error: caps.reason ?? 'transcoding is unavailable on this server' };
+        return caps.reason
+          ? { ...fail('error.transcodeUnavailable'), error: caps.reason }
+          : fail('error.transcodeUnavailable');
       }
       try {
         const job = await transcodes.enqueue(req.params.id, req.params.assetId);
@@ -775,7 +785,7 @@ export async function registerAssetRoutes(
     async (req, reply) => {
       if (!transcodes.cancel(req.params.jobId)) {
         reply.code(404);
-        return { error: 'no such job, or it has already finished' };
+        return fail('error.noSuchJob');
       }
       reply.code(204);
       return null;

@@ -1,6 +1,6 @@
 {
   "name": "@breeze/editor",
-  "version": "0.67.0",
+  "version": "0.68.0",
   "private": true,
   "license": "MPL-2.0",
   "type": "module",
@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@breeze/i18n": "workspace:*",
     "@breeze/runtime": "workspace:*",
     "@breeze/schema": "workspace:*",
     "ag-psd": "^28.0.0",

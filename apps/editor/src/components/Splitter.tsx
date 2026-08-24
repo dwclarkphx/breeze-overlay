@@ -16,6 +16,8 @@
 
 import { useRef, type JSX } from 'react';
 
+import { useT } from '@breeze/i18n/react';
+
 export function Splitter({
   axis,
   value,
@@ -37,6 +39,7 @@ export function Splitter({
   /** Keyboard nudge, px. */
   step?: number;
 }): JSX.Element {
+  const t = useT();
   const drag = useRef<{ origin: number; from: number } | null>(null);
 
   const position = (e: React.PointerEvent) => (axis === 'x' ? e.clientX : e.clientY);
@@ -83,7 +86,7 @@ export function Splitter({
 
   return (
     <div
-      className={`splitter splitter-${axis}`}
+      className={`splitter splitter-${axis}`} // i18n-ignore — className, not text
       // A separator is the standard role for this, and it makes the divider
       // reachable and adjustable without a pointer at all.
       role="separator"
@@ -91,7 +94,7 @@ export function Splitter({
       aria-label={label}
       aria-valuenow={Math.round(value)}
       tabIndex={0}
-      title={`${label} — double-click to reset`}
+      title={t('editor.splitter.resetHint', { label })}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={end}

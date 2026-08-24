@@ -208,3 +208,51 @@ describe('ClockTicker', () => {
     }
   });
 });
+
+describe('locale', () => {
+  const at = new Date('2026-08-03T18:42:07Z');
+  const fmt = (format: string, locale?: string): string =>
+    formatClock(at, { format, timezone: 'UTC', ...(locale ? { locale } : {}) });
+
+  it('defaults to en-US, so a project written before the field reads the same', () => {
+    /*
+     * The compatibility guarantee. `locale` is optional and every clock in
+     * every existing project omits it, so the default is not a preference —
+     * it is the old behaviour, and changing it would silently reword graphics.
+     */
+    expect(fmt('dddd, MMMM D')).toBe('Monday, August 3');
+    expect(fmt('ddd D MMM')).toBe('Mon 3 Aug');
+    expect(fmt('h:mm A')).toBe('6:42 PM');
+  });
+
+  it('renders month and weekday names in the language the graphic asks for', () => {
+    expect(fmt('dddd', 'de')).toBe('Montag');
+    expect(fmt('MMMM', 'fr')).toBe('août');
+  });
+
+  it('asks Intl for abbreviations instead of slicing the long name', () => {
+    /*
+     * `ddd` was the long name cut to three characters, which is an English rule
+     * in disguise: it gives German `Mon` where the abbreviation is `Mo`, and
+     * Japanese `月曜日` where nothing was abbreviated at all. Invisible while
+     * the formatter was pinned to en-US.
+     */
+    expect(fmt('ddd', 'de')).toBe('Mo');
+    expect(fmt('ddd', 'ja')).toBe('月');
+    // …and still agrees with the old rule everywhere it was right.
+    expect(fmt('ddd')).toBe('Mon');
+  });
+
+  it('keeps the format tokens themselves language-independent', () => {
+    // The tokens are a frozen mini-language; only what they expand to moves.
+    expect(fmt('HH:mm:ss', 'ar')).toBe('18:42:07');
+  });
+
+  it('caches per locale as well as per zone', () => {
+    // One cache key was the zone alone, so the second language asked for would
+    // have been served the first one's formatter.
+    expect(fmt('dddd', 'de')).toBe('Montag');
+    expect(fmt('dddd', 'fr')).toBe('lundi');
+    expect(fmt('dddd', 'de')).toBe('Montag');
+  });
+});

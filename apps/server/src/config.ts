@@ -28,6 +28,16 @@ export interface Config {
   apiKey: string;
   logLevel: string;
   /**
+   * UI language for the editor and the operator pages, as a BCP-47 tag.
+   *
+   * An installation setting, not a per-browser one, and deliberately not
+   * detected (I18N.md §4.4): a Breeze server belongs to one operation, and
+   * `Accept-Language` would let two crew members see two languages for the same
+   * buttons. Raw here — `i18n.ts` resolves it against what actually shipped and
+   * logs once if it did not match. Never consulted by `/play` or `/api/*`.
+   */
+  locale: string;
+  /**
    * Hosts the data fetcher may reach even though they resolve to private
    * addresses. A leading dot matches subdomains. Empty by default: this server
    * runs on the same LAN as the switcher, so "fetch any URL" is a request
@@ -163,6 +173,7 @@ export const config: Config = {
   editorDir: path.resolve(env('BREEZE_EDITOR_DIR', path.join(REPO_ROOT, 'apps', 'editor', 'dist'))),
   apiKey: env('BREEZE_API_KEY', ''),
   logLevel: env('BREEZE_LOG_LEVEL', 'info'),
+  locale: env('BREEZE_LOCALE', 'en'),
   dataAllowHosts: envList('BREEZE_DATA_ALLOW_HOSTS'),
   // File last: it is the one that can hold a service-account key, so it should
   // win over an env entry of the same id rather than lose to one.

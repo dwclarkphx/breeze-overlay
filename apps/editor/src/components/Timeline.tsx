@@ -23,6 +23,7 @@ import {
   type JSX,
 } from 'react';
 import type { AnimatableProp, Layer } from '@breeze/schema';
+import { useT } from '@breeze/i18n/react';
 
 import { useEditor, type KeyframeRef } from '../state/store.js';
 import {
@@ -95,6 +96,7 @@ export interface TimelineProps {
 }
 
 export function Timeline({ onGrow }: TimelineProps = {}): JSX.Element {
+  const t = useT();
   const composition = useEditor((s) => s.composition);
   const playhead = useEditor((s) => s.playhead);
   const setPlayhead = useEditor((s) => s.setPlayhead);
@@ -337,7 +339,7 @@ export function Timeline({ onGrow }: TimelineProps = {}): JSX.Element {
     const raw = pxToTime(view, localX(e.clientX));
     // Exclude the keyframe being dragged from its own snap targets, or it
     // sticks to where it started and refuses to move.
-    const targets = snapTargets.filter((t) => Math.abs(t.time - drag.ref.time) > 1e-6);
+    const targets = snapTargets.filter((s) => Math.abs(s.time - drag.ref.time) > 1e-6);
     const { time } = snapTime(raw, targets, view, fps);
 
     if (Math.abs(time - drag.ref.time) < 1e-9) return;
@@ -402,7 +404,7 @@ export function Timeline({ onGrow }: TimelineProps = {}): JSX.Element {
     // where it started and refuses to move.
     const exclude = drag.mode === 'out' ? drag.start.out : drag.start.in;
     const targets = snapTargets.filter(
-      (t) => exclude === undefined || Math.abs(t.time - exclude) > 1e-6,
+      (s) => exclude === undefined || Math.abs(s.time - exclude) > 1e-6,
     );
 
     let next: Lifetime;
@@ -469,36 +471,39 @@ export function Timeline({ onGrow }: TimelineProps = {}): JSX.Element {
   return (
     <div className="panel timeline-panel" onWheel={onWheel}>
       <div className="timeline-toolbar">
-        <button onClick={() => setPlaying(!playing)} title={playing ? 'Pause' : 'Play preview'}>
+        <button
+          onClick={() => setPlaying(!playing)}
+          title={playing ? t('editor.timeline.pause') : t('editor.timeline.playPreview')}
+        >
           {playing ? '⏸' : '▶'}
         </button>
-        <button onClick={() => { setPlaying(false); setPlayhead(0); }} title="Go to start">⏮</button>
+        <button onClick={() => { setPlaying(false); setPlayhead(0); }} title={t('editor.timeline.goToStart')}>⏮</button>
         <label
           className="toggle"
-          title="Pause at STOP markers, as the graphic will on air. Off, the preview runs end to end."
+          title={t('editor.timeline.holdsTitle')}
         >
           <input
             type="checkbox"
             checked={honourHolds}
             onChange={(e) => setHonourHolds(e.target.checked)}
           />
-          Holds
+          {t('editor.timeline.holds')}
         </label>
         <span className="timecode">{formatTimecode(playhead, fps)}</span>
         <button
           onClick={() => run({ kind: 'addMarker', marker: { type: 'stop', time: playhead } })}
-          title="Add a STOP marker at the playhead — where the graphic holds on air"
+          title={t('editor.timeline.addStopTitle')}
         >
-          + STOP
+          {t('editor.timeline.addStop')}
         </button>
         <span className="spacer" />
         <button
           onClick={() => setView((v) => clampView(zoomAround(v, v.width / 2, 1 / 1.4), duration))}
-          title="Zoom out"
+          title={t('editor.stage.zoomOut')}
         >−</button>
         <button
           onClick={() => setView((v) => clampView(zoomAround(v, v.width / 2, 1.4), duration))}
-          title="Zoom in"
+          title={t('editor.stage.zoomIn')}
         >+</button>
         <button
           onClick={requestFit}
@@ -510,11 +515,21 @@ export function Timeline({ onGrow }: TimelineProps = {}): JSX.Element {
             kind of failure to read. What Fit now does is explained in the user
             guide, not in a hover.
           */
-          title="Fit the whole composition"
-        >Fit</button>
+          title={t('editor.timeline.fitTitle')}
+        >{t('editor.stage.fit')}</button>
       </div>
 
-      <div className="timeline-body" ref={bodyRef}>
+      {/*
+        Pinned LTR under a mirrored chrome — I18N.md §6.1.
+
+        Time runs left to right in every non-linear editor on earth, including
+        the Arabic-localised ones; a mirrored timeline puts 00:00 on the right
+        and reads timecode backwards. The toolbar above mirrors, because it is
+        ordinary chrome. The body cannot: every position in it comes from
+        `timeToPx`, and the label column is paired row-for-row with the tracks,
+        so mirroring one and not the other would split them apart.
+      */}
+      <div className="timeline-body" dir="ltr" ref={bodyRef}>
         <div className="timeline-labels" style={{ width: LABEL_WIDTH }}>
           {/*
             One label row per track row, in the same order and at the same
@@ -524,13 +539,19 @@ export function Timeline({ onGrow }: TimelineProps = {}): JSX.Element {
             counterpart at all, so every layer sat 22px below its own name.
           */}
           <div className="timeline-label-head" aria-hidden="true" />
-          <div className="timeline-label marker-label">Markers</div>
+          <div className="timeline-label marker-label">{t('editor.timeline.markers')}</div>
           {rows.map(({ layer, isCell }) => (
             <div key={layer.id}>
               <div
                 className={`timeline-label${isCell ? ' cell' : ''}${selectedLayerIds.includes(layer.id) ? ' selected' : ''}`}
                 onClick={() => selectLayers([layer.id])}
-                title={isCell ? `Row-template cell${layer.cell ? ` — column ${layer.cell}` : ''}` : undefined}
+                title={
+                  isCell
+                    ? layer.cell
+                      ? t('editor.timeline.cellWithColumn', { column: layer.cell })
+                      : t('editor.timeline.cell')
+                    : undefined
+                }
               >
                 {layer.name ?? layer.id}
                 {isCell && layer.cell ? <span className="label-cell-key">{layer.cell}</span> : null}
@@ -548,9 +569,10 @@ export function Timeline({ onGrow }: TimelineProps = {}): JSX.Element {
             onPointerDown={onRulerPointerDown}
             onPointerMove={onRulerPointerMove}
           >
-            {tickTimes.map((t) => (
-              <div key={t} className="tick" style={{ left: timeToPx(view, t) }}>
-                <span>{t.toFixed(t < 1 ? 2 : 2)}s</span>
+            {tickTimes.map((time) => (
+              // dir-ok — a position on the time axis, inside the dir="ltr" body
+              <div key={time} className="tick" style={{ left: timeToPx(view, time) }}>
+                <span>{t('editor.timeline.tick', { time: time.toFixed(2) })}</span>
               </div>
             ))}
           </div>
@@ -560,9 +582,13 @@ export function Timeline({ onGrow }: TimelineProps = {}): JSX.Element {
             {(composition.markers ?? []).map((marker, index) => (
               <div
                 key={`${marker.type}-${index}`}
-                className={`marker ${marker.type}`}
+                className={`marker ${marker.type}`} // i18n-ignore — className
+                // dir-ok — time axis
                 style={{ left: timeToPx(view, marker.time) }}
-                title={`${marker.type} @ ${marker.time.toFixed(3)}s — double-click to delete`}
+                title={t('editor.timeline.markerTitle', {
+                  type: marker.type,
+                  time: marker.time.toFixed(3),
+                })}
                 onPointerDown={(e) => {
                   (e.target as HTMLElement).setPointerCapture(e.pointerId);
                   markerDrag.current = index;
@@ -605,11 +631,13 @@ export function Timeline({ onGrow }: TimelineProps = {}): JSX.Element {
                     <div
                       className="lifetime"
                       data-trimmable={trimmable ? '1' : '0'}
-                      title={
-                        `${(layer.in ?? 0).toFixed(2)}s → ${layer.out?.toFixed(2) ?? 'end'} — drag to move` +
-                        (trimmable ? ', edges to trim' : ' (zoom in to trim)')
-                      }
+                      title={t('editor.timeline.lifetimeTitle', {
+                        in: (layer.in ?? 0).toFixed(2),
+                        out: layer.out?.toFixed(2) ?? t('editor.timeline.lifetimeOpenEnd'),
+                        trimmable: trimmable ? 'yes' : 'no',
+                      })}
                       style={{
+                        // dir-ok — time axis
                         left: timeToPx(view, layer.in ?? 0),
                         width: barWidth,
                       }}
@@ -656,8 +684,13 @@ export function Timeline({ onGrow }: TimelineProps = {}): JSX.Element {
                       <div
                         key={kf.t}
                         className={`keyframe${isSelected ? ' selected' : ''}`}
+                        // dir-ok — time axis
                         style={{ left: timeToPx(view, kf.t) }}
-                        title={`${prop} = ${kf.v} @ ${kf.t.toFixed(3)}s\ndouble-click to edit easing`}
+                        title={t('editor.timeline.keyframeTitle', {
+                          prop,
+                          value: String(kf.v),
+                          time: kf.t.toFixed(3),
+                        })}
                         onPointerDown={(e) => onKeyframePointerDown(e, ref)}
                         onDoubleClick={() => setEasingTarget(ref)}
                       />
@@ -676,6 +709,7 @@ export function Timeline({ onGrow }: TimelineProps = {}): JSX.Element {
             saying which line. Sticky inside the full-height line pins it to the
             top of .timeline-body, the same scrollport the ruler anchors to.
           */}
+          {/* dir-ok — time axis */}
           <div className="playhead" style={{ left: playheadPx }}>
             <span className="playhead-head" />
           </div>

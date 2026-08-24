@@ -53,7 +53,8 @@ describe('rasterReasonFor', () => {
   });
 
   it('rasterises text carrying layer effects', () => {
-    expect(rasterReasonFor(textLayer({ effects: {} }))).toMatch(/effects/);
+    expect(rasterReasonFor(textLayer({ effects: {} })))
+      .toEqual({ key: 'editor.psd.reasonEffects' });
   });
 
   it('rasterises text drawn through a scale', () => {
@@ -61,7 +62,7 @@ describe('rasterReasonFor', () => {
     // the right place, which reads as a bug rather than a limitation.
     expect(rasterReasonFor(textLayer({
       text: { ...textLayer().text!, transform: [2, 0, 0, 2, 0, 0] },
-    }))).toMatch(/scaled|rotated|skewed/);
+    }))).toEqual({ key: 'editor.psd.reasonTransform' });
   });
 
   it('accepts a pure translation, which the box already accounts for', () => {
@@ -73,7 +74,7 @@ describe('rasterReasonFor', () => {
   it('rasterises when no font could be read', () => {
     expect(rasterReasonFor(textLayer({
       text: { text: 'x', style: { fontSize: 12 } },
-    }))).toMatch(/font/);
+    }))).toEqual({ key: 'editor.psd.reasonNoFont' });
   });
 
   it('has no opinion about a layer that is not text', () => {
@@ -194,7 +195,7 @@ describe('planPsdImport', () => {
     // visually the opposite of what the designer built, and silently so.
     const plan = planPsdImport({ ...psd, children: [pixelLayer({ clipping: true })] });
     expect(plan.layers).toHaveLength(0);
-    expect(plan.skipped[0]!.reason).toMatch(/clipping/);
+    expect(plan.skipped[0]!.reason).toEqual({ key: 'editor.psd.skipClippingMask' });
   });
 
   it('skips a layer with no pixels and no text', () => {

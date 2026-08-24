@@ -14,7 +14,7 @@
  * dead feed should be diagnosed here and not by staring at a frozen graphic.
  */
 
-import { useCallback, useEffect, useMemo, useState, type JSX } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState, type JSX } from 'react';
 import {
   DEFAULT_POLL_INTERVAL,
   DEFAULT_WEATHER_POLL_INTERVAL,
@@ -29,6 +29,7 @@ import {
   type DataSourceDef,
   type WeatherProvider,
 } from '@breeze/schema';
+import { useRichT, useT, type Translate } from '@breeze/i18n/react';
 
 import { api, type DataSourceSummary } from '../api/client.js';
 import {
@@ -40,26 +41,55 @@ import {
 } from '../state/bracket.js';
 import { useEditor } from '../state/store.js';
 
-const TYPE_LABEL: Record<DataSourceDef['type'], string> = {
-  manual: 'Manual table',
-  'http-json': 'HTTP JSON',
-  'http-csv': 'HTTP CSV / Sheet',
-  rss: 'RSS / Atom',
-  xml: 'XML',
-  sheets: 'Google Sheet (private)',
-  weather: 'Weather',
-  ftp: 'FTP / SFTP drop',
+const TYPE_LABEL_KEY: Record<DataSourceDef['type'], string> = {
+  manual: 'editor.data.typeManual',
+  'http-json': 'editor.data.typeHttpJson',
+  'http-csv': 'editor.data.typeHttpCsv',
+  rss: 'editor.data.typeRss',
+  xml: 'editor.data.typeXml',
+  sheets: 'editor.data.typeSheets',
+  weather: 'editor.data.typeWeather',
+  ftp: 'editor.data.typeFtp',
 };
 
+/**
+ * The add menu says more than the badge does.
+ *
+ * "HTTP CSV / Google Sheet" is a choice being explained; "HTTP CSV / Sheet" is
+ * a label on a row that already exists. Two tables rather than one because the
+ * shorter wording is only right once the operator has already chosen.
+ */
+const MENU: Array<{ type: DataSourceDef['type']; labelKey: string }> = [
+  { type: 'manual', labelKey: 'editor.data.menuManual' },
+  { type: 'http-csv', labelKey: 'editor.data.menuHttpCsv' },
+  { type: 'http-json', labelKey: 'editor.data.menuHttpJson' },
+  { type: 'rss', labelKey: 'editor.data.menuRss' },
+  { type: 'xml', labelKey: 'editor.data.menuXml' },
+  { type: 'sheets', labelKey: 'editor.data.menuSheets' },
+  { type: 'weather', labelKey: 'editor.data.menuWeather' },
+  { type: 'ftp', labelKey: 'editor.data.menuFtp' },
+];
+
+/*
+ * Frozen English, and not an oversight.
+ *
+ * These are not labels — they are the *value* a new source is created with.
+ * `name` is persisted into the project and `columns[].label` renders on air
+ * through a table layer, so both are operator data under I18N.md §1.3, the same
+ * call already made for `WEATHER_COLUMNS`. Translating them would mean a
+ * project built in one locale and opened in another silently disagrees with
+ * itself about what a column is called, and a graphic changing wording because
+ * somebody changed BREEZE_LOCALE.
+ */
 const NEW_NAME: Record<DataSourceDef['type'], string> = {
-  manual: 'New table',
-  'http-json': 'New feed',
-  'http-csv': 'New sheet',
-  rss: 'New headline feed',
-  xml: 'New XML feed',
-  sheets: 'New private sheet',
-  weather: 'New weather',
-  ftp: 'New file drop',
+  manual: 'New table',  // i18n-ignore
+  'http-json': 'New feed',  // i18n-ignore
+  'http-csv': 'New sheet',  // i18n-ignore
+  rss: 'New headline feed',  // i18n-ignore
+  xml: 'New XML feed',  // i18n-ignore
+  sheets: 'New private sheet',  // i18n-ignore
+  weather: 'New weather',  // i18n-ignore
+  ftp: 'New file drop',  // i18n-ignore
 };
 
 /** RSS feeds change on a slower clock than a scoreboard; don't poll them like one. */
@@ -72,6 +102,7 @@ function blankSource(type: DataSourceDef['type'], id: string): DataSourceDef {
       name: NEW_NAME.manual,
       type: 'manual',
       columns: [
+        // Starter DataSet content, frozen with NEW_NAME above.
         { key: 'team', label: 'Team', type: 'string' },
         { key: 'w', label: 'W', type: 'number' },
         { key: 'l', label: 'L', type: 'number' },
@@ -147,18 +178,58 @@ function hasUrl(def: DataSourceDef): def is Extract<DataSourceDef, { url: string
   );
 }
 
+/**
+ * The columns an RSS/Atom feed always normalizes to, and the ones every weather
+ * provider does. Frozen identifiers — an operator binds a layer to them.
+ */
+const RSS_COLUMNS = [
+  'title', 'link', 'date', 'description', 'author', 'category', 'image', 'guid',
+] as const;
+const WEATHER_COLUMN_NAMES = [
+  'temp', 'tempMin', 'tempMax', 'condition', 'icon', 'windSpeed', 'windDir', 'precipProb',
+] as const;
+
+/**
+ * A list of column names inside a sentence, as one parameter rather than nine.
+ *
+ * Both hints below name the fixed columns their adapter produces. Passing each
+ * as its own rich parameter would put nine `{temp}`-shaped holes in one message
+ * and invite exactly the reordering that breaks it — and the names are frozen
+ * identifiers a translator must not touch anyway. One `{columns}` keeps the
+ * sentence translatable and the list intact.
+ */
+function ColumnNames({ names }: { names: readonly string[] }): JSX.Element {
+  return (
+    <>
+      {names.map((name, i) => (
+        <Fragment key={name}>
+          {i > 0 && ', '}
+          <code>{name}</code>
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
+/** A preview cell. `null` and `undefined` both render empty, never "null". */
+function cellText(value: unknown): string {
+  return value === null || value === undefined ? '' : String(value);
+}
+
 /** "4s ago", "2m ago" — relative because absolute timestamps need arithmetic. */
-function ago(iso: string | undefined): string {
-  if (!iso) return 'never';
+function ago(iso: string | undefined, t: Translate): string {
+  if (!iso) return t('editor.data.agoNever');
   const delta = Math.max(0, Date.now() - Date.parse(iso));
   const s = Math.round(delta / 1000);
-  if (s < 60) return `${s}s ago`;
+  if (s < 60) return t('editor.data.agoSeconds', { seconds: s });
   const m = Math.round(s / 60);
-  if (m < 60) return `${m}m ago`;
-  return `${Math.round(m / 60)}h ago`;
+  if (m < 60) return t('editor.data.agoMinutes', { minutes: m });
+  return t('editor.data.agoHours', { hours: Math.round(m / 60) });
 }
 
 export function DataPanel(): JSX.Element {
+  const t = useT();
+  const rt = useRichT();
   const projectId = useEditor((s) => s.projectId);
   const [sources, setSources] = useState<DataSourceSummary[]>([]);
   const [editing, setEditing] = useState<DataSourceDef | null>(null);
@@ -244,7 +315,7 @@ export function DataPanel(): JSX.Element {
     >
       <div className="panel-header">
         <button className="panel-toggle" onClick={() => setCollapsed((c) => !c)}>
-          {collapsed ? '▸' : '▾'} Data sources
+          {collapsed ? '▸' : '▾'} {t('editor.data.title')}
         </button>
         <span className="panel-actions">
           {/*
@@ -261,15 +332,10 @@ export function DataPanel(): JSX.Element {
               e.target.value = '';
             }}
           >
-            <option value="">+ Add…</option>
-            <option value="manual">Manual table</option>
-            <option value="http-csv">HTTP CSV / Google Sheet</option>
-            <option value="http-json">HTTP JSON</option>
-            <option value="rss">RSS / Atom feed</option>
-            <option value="xml">XML</option>
-            <option value="sheets">Google Sheet — private (API v4)</option>
-            <option value="weather">Weather</option>
-            <option value="ftp">FTP / SFTP file drop</option>
+            <option value="">{t('editor.layers.add')}</option>
+            {MENU.map((m) => (
+              <option key={m.type} value={m.type}>{t(m.labelKey)}</option>
+            ))}
           </select>
         </span>
       </div>
@@ -280,8 +346,12 @@ export function DataPanel(): JSX.Element {
         <div className="source-list">
           {sources.length === 0 && (
             <p className="hint">
-              No data sources. A published Google Sheet works as an <em>HTTP CSV</em> source — use
-              its <code>Publish to web → CSV</code> URL, no API key needed.
+              {rt('editor.data.emptyHint', {
+                httpCsv: <em>{t('editor.data.typeHttpCsvShort')}</em>,
+                // Google Sheets' own menu path, quoted so it can be followed.
+                // i18n-ignore-next-line
+                publish: <code>Publish to web → CSV</code>,
+              })}
             </p>
           )}
 
@@ -292,30 +362,36 @@ export function DataPanel(): JSX.Element {
                 <div className="source-head">
                   <span className="source-name">{def.name}</span>
                   <code className="source-id">{def.id}</code>
-                  <span className="source-type">{TYPE_LABEL[def.type]}</span>
+                  <span className="source-type">{t(TYPE_LABEL_KEY[def.type])}</span>
                 </div>
                 <div className="source-meta">
-                  <span>{rowCount} rows</span>
-                  {def.type !== 'manual' && <span>every {interval}s</span>}
-                  <span title={status.lastFetch}>fetched {ago(status.lastFetch)}</span>
-                  <span title={status.lastChange}>changed {ago(status.lastChange)}</span>
-                  <span>rev {status.revision}</span>
+                  <span>{t('editor.data.rowCount', { count: rowCount })}</span>
+                  {def.type !== 'manual' && (
+                    <span>{t('editor.data.everySeconds', { seconds: interval })}</span>
+                  )}
+                  <span title={status.lastFetch}>
+                    {t('editor.data.fetchedAgo', { when: ago(status.lastFetch, t) })}
+                  </span>
+                  <span title={status.lastChange}>
+                    {t('editor.data.changedAgo', { when: ago(status.lastChange, t) })}
+                  </span>
+                  <span>{t('editor.data.revision', { revision: status.revision })}</span>
                 </div>
                 {status.lastError && <div className="source-error">{status.lastError}</div>}
                 <div className="source-actions">
-                  <button onClick={() => setEditing(def)}>Edit</button>
+                  <button onClick={() => setEditing(def)}>{t('editor.data.edit')}</button>
                   {def.type !== 'manual' && (
                     <button onClick={() => void api.refreshDataSource(projectId, def.id).then(reload)}>
-                      Refresh
+                      {t('editor.data.refresh')}
                     </button>
                   )}
                   <button
                     onClick={() => {
-                      if (!confirm(`Delete data source "${def.name}"?`)) return;
+                      if (!confirm(t('editor.data.deleteConfirm', { name: def.name }))) return;
                       void api.deleteDataSource(projectId, def.id).then(reload);
                     }}
                   >
-                    Delete
+                    {t('editor.bin.delete')}
                   </button>
                 </div>
               </div>
@@ -355,6 +431,8 @@ interface SourceEditorProps {
 }
 
 function SourceEditor({ projectId, def, onChange, onCancel, onSave }: SourceEditorProps): JSX.Element {
+  const t = useT();
+  const rt = useRichT();
   const [preview, setPreview] = useState<{ ok: boolean; error?: string; data?: DataSet; rowCount?: number } | null>(
     null,
   );
@@ -391,7 +469,7 @@ function SourceEditor({ projectId, def, onChange, onCancel, onSave }: SourceEdit
   return (
     <div className="source-editor">
       <label>
-        <span>Name</span>
+        <span>{t('editor.data.fieldName')}</span>
         <input value={def.name} onChange={(e) => onChange({ ...def, name: e.target.value })} />
       </label>
 
@@ -407,7 +485,7 @@ function SourceEditor({ projectId, def, onChange, onCancel, onSave }: SourceEdit
             <SheetsFields def={def} onChange={onChange} />
           ) : (
             <label>
-              <span>URL</span>
+              <span>{t('editor.data.fieldUrl')}</span>
               <input
                 value={def.url}
                 placeholder={URL_PLACEHOLDER[def.type]}
@@ -418,11 +496,10 @@ function SourceEditor({ projectId, def, onChange, onCancel, onSave }: SourceEdit
 
           {def.type === 'rss' && (
             <p className="hint">
-              RSS 2.0, RSS 1.0/RDF and Atom all normalize to the same columns —{' '}
-              <code>title</code>, <code>link</code>, <code>date</code>, <code>description</code>,{' '}
-              <code>author</code>, <code>category</code>, <code>image</code>, <code>guid</code> — so
-              a graphic keeps working if the feed changes software. Bind a crawl layer's items to{' '}
-              <code>title</code> for a headline ticker.
+              {rt('editor.data.rssColumnsHint', {
+                columns: <ColumnNames names={RSS_COLUMNS} />,
+                title: <code>title</code>,
+              })}
             </p>
           )}
 
@@ -433,7 +510,7 @@ function SourceEditor({ projectId, def, onChange, onCancel, onSave }: SourceEdit
           {def.type === 'http-json' && (
             <label>
               <span>
-                Row path{' '}
+                {t('editor.data.rowPath')}{' '}
                 <button
                   className="linkish"
                   disabled={!def.url || busy}
@@ -444,12 +521,12 @@ function SourceEditor({ projectId, def, onChange, onCancel, onSave }: SourceEdit
                     }
                   }}
                 >
-                  find it
+                  {t('editor.data.findIt')}
                 </button>
               </span>
               <input
                 value={def.rowPath ?? ''}
-                placeholder="data.standings[0].teams — blank for the root array"
+                placeholder={t('editor.data.rowPathJsonPlaceholder')}
                 onChange={(e) => onChange({ ...def, rowPath: e.target.value })}
               />
             </label>
@@ -462,12 +539,12 @@ function SourceEditor({ projectId, def, onChange, onCancel, onSave }: SourceEdit
                 checked={def.header !== false}
                 onChange={(e) => onChange({ ...def, header: e.target.checked })}
               />
-              <span>First row is a header</span>
+              <span>{t('editor.data.headerRow')}</span>
             </label>
           )}
 
           <label>
-            <span>Poll interval (seconds, minimum {minInterval})</span>
+            <span>{t('editor.data.pollInterval', { min: minInterval })}</span>
             <input
               type="number"
               min={minInterval}
@@ -481,19 +558,19 @@ function SourceEditor({ projectId, def, onChange, onCancel, onSave }: SourceEdit
           {def.type !== 'weather' && (
             <label>
               <span>
-                {def.type === 'sheets'
-                  ? 'Credential id (required — API key or service-account JSON, held server-side)'
-                  : def.type === 'ftp'
-                    ? 'Credential id (optional — password or SSH key, held server-side)'
-                    : 'Credential id (optional — the value lives in server config)'}
+                {t(
+                  def.type === 'sheets' ? 'editor.data.credentialSheets'
+                  : def.type === 'ftp' ? 'editor.data.credentialFtp'
+                  : 'editor.data.credentialOther',
+                )}
               </span>
               <input
                 value={def.secretId ?? ''}
-                placeholder={
-                  def.type === 'sheets' ? 'e.g. league-sheets'
-                  : def.type === 'ftp' ? 'e.g. results-drop'
-                  : 'e.g. league-api'
-                }
+                placeholder={t(
+                  def.type === 'sheets' ? 'editor.data.credentialSheetsPlaceholder'
+                  : def.type === 'ftp' ? 'editor.data.credentialFtpPlaceholder'
+                  : 'editor.data.credentialOtherPlaceholder',
+                )}
                 onChange={(e) => onChange({ ...def, secretId: e.target.value })}
               />
             </label>
@@ -501,7 +578,7 @@ function SourceEditor({ projectId, def, onChange, onCancel, onSave }: SourceEdit
 
           <div className="source-actions">
             <button onClick={() => void runPreview()} disabled={!canPreview || busy}>
-              {busy ? 'Fetching…' : 'Preview'}
+              {t(busy ? 'editor.data.fetching' : 'editor.data.preview')}
             </button>
           </div>
 
@@ -513,22 +590,27 @@ function SourceEditor({ projectId, def, onChange, onCancel, onSave }: SourceEdit
       )}
 
       <div className="source-actions">
-        <button className="primary" onClick={onSave}>Save source</button>
-        <button onClick={onCancel}>Cancel</button>
+        <button className="primary" onClick={onSave}>{t('editor.data.saveSource')}</button>
+        <button onClick={onCancel}>{t('editor.upload.cancel')}</button>
       </div>
     </div>
   );
 }
 
 function DataPreview({ data, total }: { data: DataSet; total: number }): JSX.Element {
+  const t = useT();
   return (
     <div className="data-preview">
-      <div className="hint">{total} rows · {data.columns.length} columns</div>
+      <div className="hint">
+        {t('editor.data.previewSummary', { rows: total, columns: data.columns.length })}
+      </div>
       <table>
         <thead>
           <tr>
             {data.columns.map((c) => (
-              <th key={c.key} title={`${c.key} (${c.type})`}>{c.label ?? c.key}</th>
+              <th key={c.key} title={t('editor.data.columnTitle', { key: c.key, type: c.type })}>
+                {c.label ?? c.key}
+              </th>
             ))}
           </tr>
         </thead>
@@ -536,7 +618,7 @@ function DataPreview({ data, total }: { data: DataSet; total: number }): JSX.Ele
           {data.rows.slice(0, 8).map((row, i) => (
             <tr key={i}>
               {data.columns.map((c) => (
-                <td key={c.key}>{row[c.key] === null ? '' : String(row[c.key] ?? '')}</td>
+                <td key={c.key}>{cellText(row[c.key])}</td>
               ))}
             </tr>
           ))}
@@ -568,6 +650,8 @@ function XmlRowPathField({
   onChange: (def: DataSourceDef) => void;
   busy: boolean;
 }): JSX.Element {
+  const t = useT();
+  const rt = useRichT();
   const [found, setFound] = useState<{
     candidates: Array<{ path: string; count: number }>;
     feed?: 'rss' | 'rdf' | 'atom' | null;
@@ -577,7 +661,7 @@ function XmlRowPathField({
   const inspect = async () => {
     const result = await api.inspectXmlFeed(projectId, def.url);
     if (!result.ok) {
-      setFound({ candidates: [], error: result.error ?? 'could not read that URL' });
+      setFound({ candidates: [], error: result.error ?? t('editor.data.xmlReadFailed') });
       return;
     }
     setFound({ candidates: result.candidates ?? [], feed: result.feed ?? null });
@@ -588,14 +672,14 @@ function XmlRowPathField({
     <>
       <label>
         <span>
-          Row element{' '}
+          {t('editor.data.rowElement')}{' '}
           <button className="linkish" disabled={!def.url || busy} onClick={() => void inspect()}>
-            find it
+            {t('editor.data.findIt')}
           </button>
         </span>
         <input
           value={def.rowPath ?? ''}
-          placeholder="results/game — blank to guess the repeating element"
+          placeholder={t('editor.data.rowPathXmlPlaceholder')}
           onChange={(e) => onChange({ ...def, rowPath: e.target.value })}
         />
       </label>
@@ -604,9 +688,10 @@ function XmlRowPathField({
 
       {found?.feed && (
         <p className="hint">
-          This is {found.feed === 'atom' ? 'an Atom' : 'an RSS'} feed. The{' '}
-          <strong>RSS / Atom</strong> source type will normalize it to stable columns — worth using
-          instead unless you specifically want the raw element names.
+          {rt('editor.data.xmlFeedHint', {
+            feed: found.feed,
+            rssType: <strong>{t('editor.data.typeRss')}</strong>,
+          })}
         </p>
       )}
 
@@ -617,7 +702,7 @@ function XmlRowPathField({
               key={c.path}
               className={`chip${c.path === def.rowPath ? ' selected' : ''}`}
               onClick={() => onChange({ ...def, rowPath: c.path })}
-              title={`${c.count} occurrences`}
+              title={t('editor.data.xmlOccurrences', { count: c.count })}
             >
               {c.path} <span className="count">×{c.count}</span>
             </button>
@@ -646,13 +731,15 @@ function WeatherFields({
   def: Extract<DataSourceDef, { type: 'weather' }>;
   onChange: (def: DataSourceDef) => void;
 }): JSX.Element {
+  const t = useT();
+  const rt = useRichT();
   const info = WEATHER_PROVIDER_INFO[def.provider];
   const nonCommercial = info?.commercialUse === 'non-commercial-only';
 
   return (
     <>
       <label>
-        <span>Provider</span>
+        <span>{t('editor.data.weather.provider')}</span>
         <select
           value={def.provider}
           onChange={(e) => {
@@ -679,41 +766,53 @@ function WeatherFields({
         >
           {WEATHER_PROVIDERS.map((id) => (
             <option key={id} value={id}>
-              {WEATHER_PROVIDER_INFO[id].label}
+              {t(WEATHER_PROVIDER_INFO[id].labelKey)}
             </option>
           ))}
         </select>
       </label>
 
-      {info && <p className="hint">Coverage: {info.coverage}. Polls no faster than every {info.pollFloor}s.</p>}
+      {info && (
+        <p className="hint">
+          {t('editor.data.weather.coverageHint', {
+            coverage: t(info.coverageKey),
+            seconds: info.pollFloor,
+          })}
+        </p>
+      )}
 
       {nonCommercial && (
         <div className="source-error">
-          <strong>Non-commercial use only.</strong> Open-Meteo&rsquo;s hosted API may not be used on
-          a channel or site carrying advertising or subscriptions. For commercial output, run your
-          own Open-Meteo instance and pick <em>Open-Meteo — self-hosted</em>, or subscribe to their
-          paid API.{' '}
-          <a href={info.licenseUrl} target="_blank" rel="noreferrer">
-            Read the license
-          </a>
-          .
+          {rt('editor.data.weather.nonCommercial', {
+            lead: <strong>{t('editor.data.weather.nonCommercialLead')}</strong>,
+            selfHosted: <em>{t('schema.weather.provider.open-meteo-self.label')}</em>,
+            link: (
+              <a href={info.licenseUrl} target="_blank" rel="noreferrer">
+                {t('editor.data.weather.readLicense')}
+              </a>
+            ),
+          })}
         </div>
       )}
 
       {info?.attribution && (
         <p className="hint">
-          <strong>Attribution required.</strong> Show &ldquo;{info.attribution}&rdquo; wherever this
-          data appears — bind a text layer to the <code>attribution</code> column and it travels with
-          the graphic.{' '}
-          <a href={info.licenseUrl} target="_blank" rel="noreferrer">
-            License
-          </a>
+          {rt('editor.data.weather.attribution', {
+            lead: <strong>{t('editor.data.weather.attributionLead')}</strong>,
+            credit: info.attribution,
+            column: <code>attribution</code>,
+            link: (
+              <a href={info.licenseUrl} target="_blank" rel="noreferrer">
+                {t('editor.data.weather.license')}
+              </a>
+            ),
+          })}
         </p>
       )}
 
       {info?.needsBaseUrl && (
         <label>
-          <span>Instance URL</span>
+          <span>{t('editor.data.weather.instanceUrl')}</span>
           <input
             value={def.baseUrl ?? ''}
             placeholder="http://localhost:8282"
@@ -724,15 +823,17 @@ function WeatherFields({
 
       {info?.needsBaseUrl && (
         <p className="hint">
-          A private or loopback address is refused by the fetch guard until it is allowlisted — set{' '}
-          <code>BREEZE_DATA_ALLOW_HOSTS=localhost</code> in the server environment.
+          {rt('editor.data.weather.allowHostsHint', {
+            // i18n-ignore-next-line — an environment variable and its value
+            env: <code>BREEZE_DATA_ALLOW_HOSTS=localhost</code>,
+          })}
         </p>
       )}
 
       {info?.supportsModelSelection && (
         <div className="field-row">
           <label>
-            <span>Model (blank = best match)</span>
+            <span>{t('editor.data.weather.model')}</span>
             <input
               value={def.models ?? ''}
               placeholder="ncep_gfs_seamless"
@@ -740,7 +841,7 @@ function WeatherFields({
             />
           </label>
           <label>
-            <span>Time zone</span>
+            <span>{t('editor.data.weather.timezone')}</span>
             <input
               value={def.timezone ?? ''}
               placeholder="auto"
@@ -763,29 +864,31 @@ function WeatherFields({
       */}
       {info?.supportsModelSelection && (
         <p className="hint">
-          Not sure of the model id?{' '}
-          <a href="https://open-meteo.com/en/docs" target="_blank" rel="noreferrer">
-            Open-Meteo&rsquo;s API docs
-          </a>{' '}
-          let you pick a model and read the id straight off the generated URL — it is the same{' '}
-          <code>&amp;models=</code> value this field takes. Only the model and time zone are worth
-          copying across; the rest of the URL is built for you.
+          {rt('editor.data.weather.modelDocsHint', {
+            link: (
+              <a href="https://open-meteo.com/en/docs" target="_blank" rel="noreferrer">
+                {t('editor.data.weather.openMeteoDocs')}
+              </a>
+            ),
+            param: <code>&amp;models=</code>,
+          })}
         </p>
       )}
 
       {info?.needsBaseUrl && (
         <p className="hint">
-          Your instance only holds the models you have synced. If it answers on{' '}
-          <code>?models=…</code> but not without, name that model here — leaving it blank asks for{' '}
-          <code>best_match</code>, which may want a model the box does not have.
+          {rt('editor.data.weather.syncedModelsHint', {
+            query: <code>?models=…</code>,
+            fallback: <code>best_match</code>,
+          })}
         </p>
       )}
 
       <label>
-        <span>Contact for User-Agent (optional — overrides the server default)</span>
+        <span>{t('editor.data.weather.contact')}</span>
         <input
           value={def.contact ?? ''}
-          placeholder="mystation.com, ops@mystation.com"
+          placeholder={t('editor.data.weather.contactPlaceholder')}
           onChange={(e) => onChange({ ...def, contact: e.target.value })}
         />
       </label>
@@ -801,33 +904,27 @@ function WeatherFields({
         Keyed on the provider's `needsContact` flag rather than on its id: a
         third origin with the same policy should not need this file edited.
       */}
-      {info?.needsContact ? (
-        <p className="hint">
-          {info.label.split(' — ')[0]} requires this and will contact you before blocking if a
-          problem is traced to your requests. Left blank, Breeze sends a generic string shared by
-          every install — so your traffic is judged alongside everyone else&rsquo;s and nobody can
-          reach you. Set it once for the whole server with <code>BREEZE_CONTACT</code> instead of
-          per source.
-        </p>
-      ) : (
-        <p className="hint">
-          Not required here, but it identifies your station in the origin&rsquo;s logs. Set it once
-          for the whole server with <code>BREEZE_CONTACT</code> rather than per source.
-        </p>
-      )}
+      <p className="hint">
+        {rt(
+          info?.needsContact
+            ? 'editor.data.weather.contactRequired'
+            : 'editor.data.weather.contactOptional',
+          { provider: info ? t(info.shortNameKey) : '', env: <code>BREEZE_CONTACT</code> },
+        )}
+      </p>
 
       <label>
-        <span>Place name (shown on the graphic, never sent to the provider)</span>
+        <span>{t('editor.data.weather.place')}</span>
         <input
           value={def.place ?? ''}
-          placeholder="Phoenix, AZ"
+          placeholder={t('editor.data.weather.placePlaceholder')}
           onChange={(e) => onChange({ ...def, place: e.target.value })}
         />
       </label>
 
       <div className="field-row">
         <label>
-          <span>Latitude</span>
+          <span>{t('editor.data.weather.latitude')}</span>
           <input
             type="number"
             step="0.0001"
@@ -836,7 +933,7 @@ function WeatherFields({
           />
         </label>
         <label>
-          <span>Longitude</span>
+          <span>{t('editor.data.weather.longitude')}</span>
           <input
             type="number"
             step="0.0001"
@@ -848,33 +945,33 @@ function WeatherFields({
 
       <div className="field-row">
         <label>
-          <span>Units</span>
+          <span>{t('editor.data.weather.units')}</span>
           <select
             value={def.units ?? 'metric'}
             onChange={(e) => onChange({ ...def, units: e.target.value as 'metric' | 'imperial' })}
           >
-            <option value="imperial">°F / mph / in</option>
-            <option value="metric">°C / km/h / mm</option>
+            <option value="imperial">{t('editor.data.weather.unitsImperial')}</option>
+            <option value="metric">{t('editor.data.weather.unitsMetric')}</option>
           </select>
         </label>
         <label>
-          <span>Report</span>
+          <span>{t('editor.data.weather.report')}</span>
           <select
             value={def.mode ?? 'current'}
             onChange={(e) =>
               onChange({ ...def, mode: e.target.value as 'current' | 'hourly' | 'daily' })
             }
           >
-            <option value="current">Current conditions (1 row)</option>
-            <option value="hourly">Hourly forecast</option>
-            <option value="daily">Daily forecast</option>
+            <option value="current">{t('editor.data.weather.modeCurrent')}</option>
+            <option value="hourly">{t('editor.data.weather.modeHourly')}</option>
+            <option value="daily">{t('editor.data.weather.modeDaily')}</option>
           </select>
         </label>
       </div>
 
       {def.mode !== 'current' && (
         <label>
-          <span>Rows</span>
+          <span>{t('editor.data.weather.rows')}</span>
           <input
             type="number"
             min={1}
@@ -886,11 +983,11 @@ function WeatherFields({
       )}
 
       <p className="hint">
-        Every provider returns the same columns — <code>temp</code>, <code>tempMin</code>,{' '}
-        <code>tempMax</code>, <code>condition</code>, <code>icon</code>, <code>windSpeed</code>,{' '}
-        <code>windDir</code>, <code>precipProb</code> and the rest — so switching provider does not
-        mean rebuilding the graphic. <code>icon</code> is a fixed keyword such as{' '}
-        <code>partly-cloudy</code>, to map onto your own artwork.
+        {rt('editor.data.weather.columnsHint', {
+          columns: <ColumnNames names={WEATHER_COLUMN_NAMES} />,
+          icon: <code>icon</code>,
+          example: <code>partly-cloudy</code>,
+        })}
       </p>
     </>
   );
@@ -912,24 +1009,26 @@ function FtpFields({
   def: Extract<DataSourceDef, { type: 'ftp' }>;
   onChange: (def: DataSourceDef) => void;
 }): JSX.Element {
+  const t = useT();
+  const rt = useRichT();
   return (
     <>
       <div className="field-row">
         <label>
-          <span>Protocol</span>
+          <span>{t('editor.data.ftp.protocol')}</span>
           <select
             value={def.protocol}
             onChange={(e) =>
               onChange({ ...def, protocol: e.target.value as 'ftp' | 'ftps' | 'sftp' })
             }
           >
-            <option value="sftp">SFTP (SSH)</option>
-            <option value="ftps">FTPS (explicit TLS)</option>
-            <option value="ftp">FTP (plain — no encryption)</option>
+            <option value="sftp">{t('editor.data.ftp.protocolSftp')}</option>
+            <option value="ftps">{t('editor.data.ftp.protocolFtps')}</option>
+            <option value="ftp">{t('editor.data.ftp.protocolFtp')}</option>
           </select>
         </label>
         <label>
-          <span>Host</span>
+          <span>{t('editor.data.ftp.host')}</span>
           <input
             value={def.host}
             placeholder="drop.league.example"
@@ -937,7 +1036,7 @@ function FtpFields({
           />
         </label>
         <label>
-          <span>Port</span>
+          <span>{t('editor.data.ftp.port')}</span>
           <input
             type="number"
             placeholder={def.protocol === 'sftp' ? '22' : '21'}
@@ -950,15 +1049,12 @@ function FtpFields({
       </div>
 
       {def.protocol === 'ftp' && (
-        <p className="hint">
-          Plain FTP sends the password and the file in the clear. Fine for an anonymous public drop;
-          use SFTP or FTPS for anything with a login.
-        </p>
+        <p className="hint">{t('editor.data.ftp.plainWarning')}</p>
       )}
 
       <div className="field-row">
         <label>
-          <span>Directory</span>
+          <span>{t('editor.data.ftp.directory')}</span>
           <input
             value={def.path ?? ''}
             placeholder="/results"
@@ -966,7 +1062,7 @@ function FtpFields({
           />
         </label>
         <label>
-          <span>Filename pattern (newest match wins)</span>
+          <span>{t('editor.data.ftp.pattern')}</span>
           <input
             value={def.pattern}
             placeholder="results-*.csv"
@@ -977,21 +1073,21 @@ function FtpFields({
 
       <div className="field-row">
         <label>
-          <span>Format</span>
+          <span>{t('editor.data.ftp.format')}</span>
           <select
             value={def.format}
             onChange={(e) =>
               onChange({ ...def, format: e.target.value as 'csv' | 'json' | 'xml' | 'rss' })
             }
           >
-            <option value="csv">CSV</option>
-            <option value="json">JSON</option>
-            <option value="xml">XML</option>
-            <option value="rss">RSS / Atom</option>
+            <option value="csv">{t('editor.data.ftp.formatCsv')}</option>
+            <option value="json">{t('editor.data.ftp.formatJson')}</option>
+            <option value="xml">{t('editor.data.ftp.formatXml')}</option>
+            <option value="rss">{t('editor.data.ftp.formatRss')}</option>
           </select>
         </label>
         <label>
-          <span>Username (blank for anonymous)</span>
+          <span>{t('editor.data.ftp.username')}</span>
           <input
             value={def.username ?? ''}
             placeholder="anonymous"
@@ -1007,26 +1103,25 @@ function FtpFields({
             checked={def.header !== false}
             onChange={(e) => onChange({ ...def, header: e.target.checked })}
           />
-          <span>First row is a header</span>
+          <span>{t('editor.data.headerRow')}</span>
         </label>
       )}
 
       {(def.format === 'json' || def.format === 'xml') && (
         <label>
-          <span>Row path</span>
+          <span>{t('editor.data.rowPath')}</span>
           <input
             value={def.rowPath ?? ''}
-            placeholder={def.format === 'json' ? 'data.teams — blank for the root array' : 'results/game'}
+            placeholder={
+              def.format === 'json' ? t('editor.data.rowPathFtpJsonPlaceholder') : 'results/game'
+            }
             onChange={(e) => onChange({ ...def, rowPath: e.target.value })}
           />
         </label>
       )}
 
       <p className="hint">
-        A drop box on the venue LAN is refused until its host is allowlisted — add it to{' '}
-        <code>BREEZE_DATA_ALLOW_HOSTS</code> in the server environment. The file is parsed by the
-        same readers the HTTP sources use, so the same CSV over SFTP and over HTTPS gives the same
-        table.
+        {rt('editor.data.ftp.allowHostsHint', { env: <code>BREEZE_DATA_ALLOW_HOSTS</code> })}
       </p>
     </>
   );
@@ -1049,28 +1144,31 @@ function SheetsFields({
   def: Extract<DataSourceDef, { type: 'sheets' }>;
   onChange: (def: DataSourceDef) => void;
 }): JSX.Element {
+  const t = useT();
+  const rt = useRichT();
   return (
     <>
       <p className="hint">
-        For a sheet you can publish, <strong>HTTP CSV</strong> is simpler and needs no credential.
-        Use this type when the sheet must stay private — then share it with the service account's{' '}
-        <code>client_email</code>, or use an API key if it is link-shared.
+        {rt('editor.data.sheets.preferCsvHint', {
+          httpCsv: <strong>{t('editor.data.typeHttpCsvShort')}</strong>,
+          email: <code>client_email</code>,
+        })}
       </p>
 
       <label>
-        <span>Spreadsheet</span>
+        <span>{t('editor.data.sheets.spreadsheet')}</span>
         <input
           value={def.spreadsheet}
-          placeholder="paste the sheet URL, or just its id"
+          placeholder={t('editor.data.sheets.spreadsheetPlaceholder')}
           onChange={(e) => onChange({ ...def, spreadsheet: e.target.value })}
         />
       </label>
 
       <label>
-        <span>Range (A1 notation)</span>
+        <span>{t('editor.data.sheets.range')}</span>
         <input
           value={def.range ?? ''}
-          placeholder="Standings!A1:F30 — blank for A1:Z1000 of the first sheet"
+          placeholder={t('editor.data.sheets.rangePlaceholder')}
           onChange={(e) => onChange({ ...def, range: e.target.value })}
         />
       </label>
@@ -1095,11 +1193,11 @@ function useBracketPreview(
 ): { resolved: DataSet; seedRound: string; carried: Set<string> } | null {
   return useMemo(() => {
     if (!on) return null;
-    const t = previewAdvance(def.columns);
-    if (!t) return null;
+    const advance = previewAdvance(def.columns);
+    if (!advance) return null;
     const data: DataSet = { id: def.id, columns: def.columns, rows: def.rows };
     return {
-      resolved: applyTransforms(data, [t]),
+      resolved: applyTransforms(data, [advance]),
       seedRound: firstRound(def.rows),
       carried: carriedColumns(),
     };
@@ -1113,6 +1211,8 @@ function ManualTableEditor({
   def: Extract<DataSourceDef, { type: 'manual' }>;
   onChange: (def: DataSourceDef) => void;
 }): JSX.Element {
+  const t = useT();
+  const rt = useRichT();
   const setColumns = (columns: DataColumn[]) => onChange({ ...def, columns });
   const setRows = (rows: DataRow[]) => onChange({ ...def, rows });
 
@@ -1133,7 +1233,11 @@ function ManualTableEditor({
     if (withHeaders) {
       const headers = lines[0]!.split('\t');
       columns = headers.map((h, i) => ({
-        key: h.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || `col${i + 1}`,
+        // A column's key is a frozen identifier a graphic binds to, and the
+        // label it falls back to is DataSet content that renders on air. Both
+        // stay English for the same reason NEW_NAME does.
+        key: h.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || `col${i + 1}`,  // i18n-ignore
+        // i18n-ignore-next-line
         label: h.trim() || `Column ${i + 1}`,
         // Typed from the first data row: a column that is text here sorts as
         // text on air, and finding that out during a show is too late.
@@ -1164,10 +1268,7 @@ function ManualTableEditor({
 
   return (
     <div className="manual-table">
-      <div className="hint">
-        Paste a block from a spreadsheet into the first cell to replace the whole table, headers
-        included.
-      </div>
+      <div className="hint">{t('editor.data.manual.pasteHint')}</div>
 
       {isBracket && (
         <div className="bracket-bar">
@@ -1177,12 +1278,11 @@ function ManualTableEditor({
               checked={resolve}
               onChange={(e) => setResolve(e.target.checked)}
             />{' '}
-            Resolve bracket
+            {t('editor.data.manual.resolveBracket')}
           </label>
           {bracket && (
             <span className="hint">
-              Type a winner or a score and the rounds after it fill themselves. Filled slots are
-              locked — the table layer&apos;s own <code>advance</code> owns them.
+              {rt('editor.data.manual.bracketHint', { advance: <code>advance</code> })}
             </span>
           )}
         </div>
@@ -1210,10 +1310,10 @@ function ManualTableEditor({
                     setColumns(columns);
                   }}
                 >
-                  <option value="string">text</option>
-                  <option value="number">number</option>
-                  <option value="boolean">yes/no</option>
-                  <option value="date">date</option>
+                  <option value="string">{t('editor.data.manual.colTypeText')}</option>
+                  <option value="number">{t('editor.data.manual.colTypeNumber')}</option>
+                  <option value="boolean">{t('editor.data.manual.colTypeBoolean')}</option>
+                  <option value="date">{t('editor.data.manual.colTypeDate')}</option>
                 </select>
                 <code>{col.key}</code>
               </th>
@@ -1221,7 +1321,7 @@ function ManualTableEditor({
             <th>
               <button
                 onClick={() => {
-                  const key = `col${def.columns.length + 1}`;
+                  const key = `col${def.columns.length + 1}`;  // i18n-ignore — identifier
                   setColumns([...def.columns, { key, label: key, type: 'string' }]);
                 }}
               >
@@ -1245,7 +1345,7 @@ function ManualTableEditor({
                     <input
                       value={shown === null || shown === undefined ? '' : String(shown)}
                       readOnly={fed}
-                      title={fed ? 'Filled by the bracket — edit the round before it' : undefined}
+                      title={fed ? t('editor.data.manual.fedCell') : undefined}
                       onChange={(e) => {
                         if (fed) return;
                         const rows = [...def.rows];
@@ -1272,7 +1372,7 @@ function ManualTableEditor({
               <td>
                 <button
                   onClick={() => setRows(def.rows.filter((_, i) => i !== r))}
-                  title="Remove row"
+                  title={t('editor.data.manual.removeRow')}
                 >
                   ×
                 </button>
@@ -1290,7 +1390,7 @@ function ManualTableEditor({
             setRows([...def.rows, blank]);
           }}
         >
-          + Row
+          {t('editor.data.manual.addRow')}
         </button>
       </div>
     </div>

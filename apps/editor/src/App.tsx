@@ -15,6 +15,8 @@ import { useEffect, useState, type JSX } from 'react';
  */
 const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev';
 
+import { useT } from '@breeze/i18n/react';
+
 import { api, playUrl, type ProjectSummary } from './api/client.js';
 import { useEditor } from './state/store.js';
 import { useHubPresence } from './state/presence.js';
@@ -56,6 +58,7 @@ const DELETE_SCENE = '__breeze-delete-scene__';
 type Dialog = 'new-project' | 'delete-project' | 'new-scene' | 'delete-scene' | null;
 
 export function App(): JSX.Element {
+  const t = useT();
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [dialog, setDialog] = useState<Dialog>(null);
   const projectId = useEditor((s) => s.projectId);
@@ -73,7 +76,9 @@ export function App(): JSX.Element {
   const undoDepth = useEditor((s) => s.history.past.length);
   const redoDepth = useEditor((s) => s.history.future.length);
   const pendingUndo = useEditor((s) => s.history.past[s.history.past.length - 1]?.label ?? null);
-  const undoTitle = pendingUndo ? `Undo ${pendingUndo} (Ctrl+Z)` : 'Ctrl+Z';
+  const undoTitle = pendingUndo
+    ? t('editor.app.undoWith', { label: t(pendingUndo) })
+    : t('editor.app.undoShortcut');
   /*
    * The last few undo labels, for diagnosis. A drag that produces twenty
    * entries instead of one has two very different explanations — the coalescing
@@ -81,7 +86,9 @@ export function App(): JSX.Element {
    * breaking adjacency — and a depth alone cannot tell them apart.
    */
   const recentUndo = useEditor((s) =>
-    s.history.past.slice(-6).map((e) => e.label).join(' | '),
+    // Catalogue keys rather than prose: this is a diagnostic attribute the e2e
+    // specs echo into a failure message, and a key is stable where English is not.
+    s.history.past.slice(-6).map((e) => e.label.key).join(' | '),
   );
 
   /*
@@ -237,7 +244,7 @@ export function App(): JSX.Element {
           editor is the window that is already open.
         */}
         <strong className="brand">
-          Breeze <span className="brand-version" title="Breeze Overlay version">{APP_VERSION}</span>
+          Breeze <span className="brand-version" title={t('editor.app.version')}>{APP_VERSION}</span>
         </strong>
 
         {/*
@@ -247,27 +254,27 @@ export function App(): JSX.Element {
         */}
         <select
           value={projectId ?? ''}
-          title="Project"
+          title={t('editor.app.project')}
           onChange={(e) => onProjectSelect(e.target.value)}
         >
           {projects.map((p) => (
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
           <option disabled>──────────</option>
-          <option value={NEW_PROJECT}>+ New project…</option>
-          {projectId && <option value={DELETE_PROJECT}>Delete project…</option>}
+          <option value={NEW_PROJECT}>{t('editor.app.newProject')}</option>
+          {projectId && <option value={DELETE_PROJECT}>{t('editor.app.deleteProject')}</option>}
         </select>
 
         <select
           value={composition?.id ?? ''}
-          title="Scene"
+          title={t('editor.app.scene')}
           onChange={(e) => onSceneSelect(e.target.value)}
         >
           {(project?.compositions ?? []).map((c) => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
           {projectId && <option disabled>──────────</option>}
-          {projectId && <option value={NEW_SCENE}>+ New scene…</option>}
+          {projectId && <option value={NEW_SCENE}>{t('editor.app.newScene')}</option>}
           {/*
             Delete is only offered once the scene exists on the server. A
             brand-new project holds an unsaved composition from
@@ -276,7 +283,7 @@ export function App(): JSX.Element {
             constraint, which is why it sits outside this guard.
           */}
           {composition && project?.compositions.some((c) => c.id === composition.id) && (
-            <option value={DELETE_SCENE}>Delete scene…</option>
+            <option value={DELETE_SCENE}>{t('editor.app.deleteScene')}</option>
           )}
         </select>
 
@@ -292,7 +299,7 @@ export function App(): JSX.Element {
         {projectId && composition && (
           <code
             className="url-keys"
-            title="URL keys for this project and composition — click to copy. Set when created; not renameable."
+            title={t('editor.app.urlKeysHint')}
             onClick={() => void navigator.clipboard?.writeText(`${projectId}/${composition.id}`)}
           >
             {projectId}/{composition.id}
@@ -300,7 +307,7 @@ export function App(): JSX.Element {
         )}
 
         <button onClick={() => void save()} disabled={!dirty || saving}>
-          {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
+          {saving ? t('editor.app.saving') : dirty ? t('editor.app.save') : t('editor.app.saved')}
         </button>
 
         {/*
@@ -315,8 +322,12 @@ export function App(): JSX.Element {
           title={undoTitle}
           data-undo-depth={undoDepth}
           data-undo-labels={recentUndo}
-        >Undo</button>
-        <button onClick={redo} title="Ctrl+Shift+Z" data-redo-depth={redoDepth}>Redo</button>
+        >
+          {t('editor.app.undo')}
+        </button>
+        <button onClick={redo} title={t('editor.app.redoShortcut')} data-redo-depth={redoDepth}>
+          {t('editor.app.redo')}
+        </button>
 
         {projectId && composition && (
           <a
@@ -324,21 +335,25 @@ export function App(): JSX.Element {
             href={playUrl(projectId, composition.id)}
             target="_blank"
             rel="noreferrer"
-            title="Paste this URL into a vMix Web Browser input or an OBS Browser Source"
+            title={t('editor.app.outputUrlHint')}
           >
-            Output URL ↗
+            {t('editor.app.outputUrl')}
           </a>
         )}
 
         <span className="spacer" />
-        {dirty && <span className="dirty-dot" title="Unsaved changes">●</span>}
+        {dirty && <span className="dirty-dot" title={t('editor.app.unsaved')}>●</span>}
       </header>
 
-      {loadError && <div className="banner error">Could not load project: {loadError}</div>}
+      {loadError && (
+        // i18n-ignore-next-line — `banner error` is a className
+        <div className="banner error">{t('editor.app.loadFailed', { detail: loadError })}</div>
+      )}
 
       {issues.length > 0 && (
+        // i18n-ignore-next-line — `banner error` is a className
         <div className="banner error">
-          <strong>Not saved — {issues.length} validation problem{issues.length > 1 ? 's' : ''}:</strong>
+          <strong>{t('editor.app.notSaved', { count: issues.length })}</strong>
           <ul>
             {issues.slice(0, 6).map((issue, i) => (
               <li key={i}><code>{issue.path}</code> {issue.message}</li>
@@ -371,7 +386,7 @@ export function App(): JSX.Element {
           value={layout.left}
           onChange={(v) => resize('left', v)}
           onReset={() => resetPanel('left')}
-          label="Resize layers panel"
+          label={t('editor.app.resizeLayers')}
         />
 
         <main className="center"><StageViewport /></main>
@@ -383,7 +398,7 @@ export function App(): JSX.Element {
           value={layout.right}
           onChange={(v) => resize('right', v)}
           onReset={() => resetPanel('right')}
-          label="Resize properties panel"
+          label={t('editor.app.resizeProperties')}
         />
 
         <aside className="right" style={{ width: layout.right }}><PropertiesPanel /></aside>
@@ -395,7 +410,7 @@ export function App(): JSX.Element {
         value={layout.timeline}
         onChange={(v) => resize('timeline', v)}
         onReset={() => resetPanel('timeline')}
-        label="Resize timeline"
+        label={t('editor.app.resizeTimeline')}
       />
 
       {dialog === 'new-project' && (

@@ -23,6 +23,7 @@ import type { FastifyInstance } from 'fastify';
 
 import { describeAgent, recent } from '../audit.js';
 import type { ControlHub } from '../hub.js';
+import { serverI18n } from '../i18n.js';
 import { activityPage } from '../pages.js';
 import { StatusSampler } from '../status.js';
 import { APP_VERSION } from '../version.js';
@@ -55,6 +56,7 @@ export async function registerStatusRoutes(app: FastifyInstance, hub: ControlHub
     // Never cached. A status number served from a proxy cache is a lie that
     // looks exactly like a working readout.
     reply.header('cache-control', 'no-store');
-    return sampler.report(hub, APP_VERSION);
+    const { locale, direction } = serverI18n();
+    return sampler.report(hub, APP_VERSION, { locale, direction });
   });
 }

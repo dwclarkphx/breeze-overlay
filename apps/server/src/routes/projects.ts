@@ -24,6 +24,7 @@ import {
 import { CompositionValidationError, assertValidComposition } from '@breeze/schema/validate';
 
 import { actorOf, record } from '../audit.js';
+import { fail } from '../errors.js';
 import {
   NotFoundError,
   compositionReferrers,
@@ -240,10 +241,7 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       const referrers = await compositionReferrers(req.params.id, req.params.compId);
       if (referrers.length > 0) {
         reply.code(409);
-        return {
-          error: `still used by ${referrers.length} composition${referrers.length === 1 ? '' : 's'}`,
-          referrers,
-        };
+        return { ...fail('error.compositionInUse', { count: referrers.length }), referrers };
       }
       // Same reason as a project delete: the name has to be read while it still
       // exists. A refused delete above is not logged — nothing changed.

@@ -32,8 +32,14 @@ export interface PieceFrom {
 
 export interface TextAnimPresetDef {
   id: TextAnimPresetId;
-  /** Shown in the editor gallery. */
-  label: string;
+  /**
+   * Catalogue key for the name shown in the editor gallery.
+   *
+   * A key rather than the text: this table is display copy that happens to live
+   * beside the animation data, and the runtime itself never renders it — only
+   * the editor's picker does, where a translator is available.
+   */
+  labelKey: string;
   unit: SplitUnit;
   from: PieceFrom;
   /** Defaults, all overridable per layer. */
@@ -63,32 +69,32 @@ const RISE_PERCENT = 60;
  */
 const PRESETS: Record<TextAnimPresetId, TextAnimPresetDef> = {
   'chars-up': {
-    id: 'chars-up', label: 'Characters rise', unit: 'chars',
+    id: 'chars-up', labelKey: 'runtime.textAnim.charsUp', unit: 'chars',
     from: { yPercent: RISE_PERCENT, opacity: 0 },
     stagger: 0.02, duration: 0.45, ease: 'power3.out',
   },
   'chars-fade': {
-    id: 'chars-fade', label: 'Characters fade', unit: 'chars',
+    id: 'chars-fade', labelKey: 'runtime.textAnim.charsFade', unit: 'chars',
     from: { opacity: 0 },
     stagger: 0.015, duration: 0.4, ease: 'power1.out',
   },
   'words-up': {
-    id: 'words-up', label: 'Words rise', unit: 'words',
+    id: 'words-up', labelKey: 'runtime.textAnim.wordsUp', unit: 'words',
     from: { yPercent: RISE_PERCENT, opacity: 0 },
     stagger: 0.06, duration: 0.5, ease: 'power3.out',
   },
   'words-fade': {
-    id: 'words-fade', label: 'Words fade', unit: 'words',
+    id: 'words-fade', labelKey: 'runtime.textAnim.wordsFade', unit: 'words',
     from: { opacity: 0 },
     stagger: 0.05, duration: 0.45, ease: 'power1.out',
   },
   'lines-up': {
-    id: 'lines-up', label: 'Lines rise', unit: 'lines',
+    id: 'lines-up', labelKey: 'runtime.textAnim.linesUp', unit: 'lines',
     from: { yPercent: RISE_PERCENT, opacity: 0 },
     stagger: 0.12, duration: 0.55, ease: 'power3.out',
   },
   'lines-fade': {
-    id: 'lines-fade', label: 'Lines fade', unit: 'lines',
+    id: 'lines-fade', labelKey: 'runtime.textAnim.linesFade', unit: 'lines',
     from: { opacity: 0 },
     stagger: 0.1, duration: 0.5, ease: 'power1.out',
   },

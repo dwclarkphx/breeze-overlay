@@ -23,11 +23,14 @@
 
 import type { Composition } from '@breeze/schema';
 
+import { type Message } from '@breeze/i18n';
+
 import { applyCommand, coalesceKey, describeCommand, type Command } from './commands.js';
 
 export interface HistoryEntry {
   command: Command;
-  label: string;
+  /** Translated where it is shown; this module has no locale. */
+  label: Message;
   /** Document as it was *before* `command` ran. */
   before: Composition;
   /** Coalescing key, or null when this entry must stand alone. */
@@ -131,11 +134,11 @@ export function canRedo(history: HistoryState): boolean {
   return history.future.length > 0;
 }
 
-export function undoLabel(history: HistoryState): string | null {
+export function undoLabel(history: HistoryState): Message | null {
   return history.past[history.past.length - 1]?.label ?? null;
 }
 
-export function redoLabel(history: HistoryState): string | null {
+export function redoLabel(history: HistoryState): Message | null {
   return history.future[0]?.label ?? null;
 }
 

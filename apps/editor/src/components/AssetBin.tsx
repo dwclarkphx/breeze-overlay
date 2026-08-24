@@ -20,20 +20,15 @@
  */
 
 import { useEffect, useRef, useState, type DragEvent, type JSX } from 'react';
+
+import { useI18n, useRichT, useT } from '@breeze/i18n/react';
 import { referencedAssets, type AssetRef } from '@breeze/schema';
 
+import { formatBytes } from '../state/format.js';
 import { useEditor } from '../state/store.js';
 import { AssetFolderList, AssetLibrary } from './AssetLibrary.js';
 import { UploadConflictDialog } from './UploadConflictDialog.js';
 
-/** Bytes as something a person reads at a glance, not a precise figure. */
-function formatBytes(bytes: number | undefined): string {
-  if (bytes === undefined) return '';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
 
 /*
  * `referencedAssets` moved to `@breeze/schema` in Phase 7.5. The server now asks
@@ -51,6 +46,9 @@ const KIND_GLYPH: Record<AssetRef['kind'], string> = {
 };
 
 export function AssetBin(): JSX.Element {
+  const t = useT();
+  const rt = useRichT();
+  const { locale } = useI18n();
   const projectId = useEditor((s) => s.projectId);
   const assets = useEditor((s) => s.assets);
   const uploads = useEditor((s) => s.uploads);
@@ -163,13 +161,17 @@ export function AssetBin(): JSX.Element {
             filing, tagging and finding, none of which fit in a column three
             panels deep without making the layer list unusable.
           */}
-          <button onClick={() => inputRef.current?.click()} disabled={!projectId}>+ Upload…</button>
+          <button onClick={() => inputRef.current?.click()} disabled={!projectId}>
+            {t('editor.bin.upload')}
+          </button>
           <button
             className="asset-browse"
             onClick={() => setLibraryOpen(true)}
             disabled={!projectId}
-            title="Open the asset library"
-          >⤢ Library</button>
+            title={t('editor.bin.libraryTitle')}
+          >
+            {t('editor.bin.library')}
+          </button>
         </span>
       </div>
 
@@ -215,13 +217,13 @@ export function AssetBin(): JSX.Element {
             ))}
           </ul>
         ) : (
-          <p className="hint">Drop files here, or use Upload.</p>
+          <p className="hint">{t('editor.bin.dropHint')}</p>
         )}
       </div>
 
       {/* An error outlives the collapse: folding the panel must not be a way to
           make a failed upload disappear without it having been read. */}
-      {uploadError && <p className="asset-error">{uploadError}</p>}
+      {uploadError && <p className="asset-error">{t(uploadError)}</p>}
 
       {/*
         What the last replace actually did, named.
@@ -236,12 +238,17 @@ export function AssetBin(): JSX.Element {
       {lastReplace && (
         <p className="asset-replaced">
           <span>
-            Replaced <strong>{lastReplace.name}</strong>
+            {rt('editor.bin.replaced', {
+              name: <strong key="n">{lastReplace.name}</strong>,
+            })}{' '}
             {lastReplace.rewritten === 0
-              ? ' — no layers referenced it.'
-              : ` — repointed ${lastReplace.rewritten} layer${lastReplace.rewritten === 1 ? '' : 's'} in ${lastReplace.compositions.join(', ')}.`}
+              ? t('editor.bin.replacedNoRefs')
+              : t('editor.bin.replacedRepointed', {
+                  count: lastReplace.rewritten,
+                  where: lastReplace.compositions.join(', '),
+                })}
           </span>
-          <button onClick={dismissLastReplace} title="Dismiss">✕</button>
+          <button onClick={dismissLastReplace} title={t('editor.layers.dismiss')}>✕</button>
         </p>
       )}
 
@@ -258,7 +265,11 @@ export function AssetBin(): JSX.Element {
           const inUse = referenced.has(asset.path);
           const job = jobFor(asset.id);
           return (
-            <li key={asset.id} className="asset-row" title={`${asset.originalName ?? asset.path}\n${asset.path}`}>
+            <li
+              key={asset.id}
+              className="asset-row"
+              title={`${asset.originalName ?? asset.path}\n${asset.path}`} // i18n-ignore — the operator's own filename and path, no prose
+            >
               <span className="asset-thumb">
                 {asset.kind === 'image'
                   ? <img src={`${assetBase}/${asset.path.replace(/^assets\//, '')}`} alt="" />
@@ -300,8 +311,10 @@ export function AssetBin(): JSX.Element {
                   </span>
                 ) : (
                   <span className="asset-sub">
-                    {asset.kind} · {formatBytes(asset.bytes)}
-                    {inUse && <span className="asset-inuse"> · in use</span>}
+                    {t('editor.assets.kindName', { kind: asset.kind })}
+                    {' · '}
+                    {formatBytes(asset.bytes, t, locale)}
+                    {inUse && <span className="asset-inuse"> · {t('editor.bin.inUse')}</span>}
                     {/*
                       Marked rather than hidden. Retiring became routine when
                       Replace shipped, and a superseded row that looks exactly
@@ -310,7 +323,7 @@ export function AssetBin(): JSX.Element {
                       is kept is that an operator may need to go and find it.
                     */}
                     {asset.state === 'retired' && (
-                      <span className="asset-retired"> · retired</span>
+                      <span className="asset-retired"> · {t('editor.bin.retired')}</span>
                     )}
                   </span>
                 )}
@@ -328,7 +341,7 @@ export function AssetBin(): JSX.Element {
                 job?.state === 'running' || job?.state === 'queued' ? (
                   <button
                     className="asset-transcode"
-                    title="Cancel this transcode"
+                    title={t('editor.bin.cancelTranscode')}
                     onClick={() => void cancelTranscode(job.id)}
                   >✕</button>
                 ) : (
@@ -337,10 +350,10 @@ export function AssetBin(): JSX.Element {
                     disabled={!mediaCaps?.available}
                     title={
                       mediaCaps === null
-                        ? 'Checking whether this server can transcode…'
+                        ? t('editor.bin.transcodeChecking')
                         : mediaCaps.available
-                          ? 'Transcode to WebM with alpha, for use as a stinger'
-                          : (mediaCaps.reason ?? 'Transcoding is unavailable on this server')
+                          ? t('editor.bin.transcodeHint')
+                          : (mediaCaps.reason ?? t('editor.bin.transcodeUnavailable'))
                     }
                     onClick={() => void startTranscode(asset.id)}
                   >⇄</button>
@@ -355,7 +368,7 @@ export function AssetBin(): JSX.Element {
               */}
               <button
                 className="asset-copy"
-                title={`Copy path — ${asset.path}`}
+                title={t('editor.bin.copyPath', { path: asset.path })}
                 onClick={() => void navigator.clipboard?.writeText(asset.path)}
               >⧉</button>
 
@@ -364,13 +377,15 @@ export function AssetBin(): JSX.Element {
                   <button
                     className="danger"
                     onClick={() => { void removeAsset(asset.id); setConfirming(null); }}
-                  >Delete</button>
-                  <button onClick={() => setConfirming(null)}>Cancel</button>
+                  >
+                    {t('editor.bin.delete')}
+                  </button>
+                  <button onClick={() => setConfirming(null)}>{t('editor.upload.cancel')}</button>
                 </span>
               ) : (
                 <button
                   className="asset-delete"
-                  title={inUse ? 'Delete — this file is used by the open composition' : 'Delete'}
+                  title={inUse ? t('editor.bin.deleteInUse') : t('editor.bin.delete')}
                   onClick={() => setConfirming(asset.id)}
                 >🗑</button>
               )}

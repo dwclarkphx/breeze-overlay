@@ -25,6 +25,7 @@ RUN corepack enable
 # so this ordering keeps the install layer cached across ordinary edits.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY packages/schema/package.json   packages/schema/
+COPY packages/i18n/package.json     packages/i18n/
 COPY packages/runtime/package.json  packages/runtime/
 COPY apps/server/package.json       apps/server/
 COPY apps/editor/package.json       apps/editor/
@@ -59,6 +60,7 @@ RUN corepack enable
 # first-run seed and the editor mount without any error at build time.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY packages/schema/package.json   packages/schema/
+COPY packages/i18n/package.json     packages/i18n/
 COPY packages/runtime/package.json  packages/runtime/
 COPY apps/server/package.json       apps/server/
 COPY apps/editor/package.json       apps/editor/
@@ -71,6 +73,11 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm-store \
     pnpm install --frozen-lockfile --prod --filter @breeze/server...
 
 COPY --from=builder /app/packages/schema/dist   packages/schema/dist
+COPY --from=builder /app/packages/i18n/dist     packages/i18n/dist
+# The catalogues are data, not build output, so they need their own line.
+# Missing it fails silently: English is bundled as the fallback layer, so
+# every string still renders — just never in the configured language.
+COPY --from=builder /app/packages/i18n/locales  packages/i18n/locales
 COPY --from=builder /app/packages/runtime/dist  packages/runtime/dist
 COPY --from=builder /app/apps/server/dist       apps/server/dist
 COPY --from=builder /app/apps/server/public     apps/server/public

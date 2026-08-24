@@ -173,6 +173,7 @@ Timeline: Ctrl+wheel zooms about the cursor, Shift+wheel scrolls. Dragged keyfra
 | `BREEZE_DATA_DIR` | `<repo>/data` | Projects and uploaded assets |
 | `BREEZE_API_KEY` | *(empty)* | When set, mutating `/api/*` calls need `x-breeze-key` |
 | `BREEZE_LOG_LEVEL` | `info` | |
+| `BREEZE_LOCALE` | `en` | UI language for the editor, portal and operator panels, as a BCP-47 tag. An installation setting — not detected, not overridable per request. Does not affect `/play` or the API. See [Language](#language) |
 | `BREEZE_EDITOR_DIR` | `<repo>/apps/editor/dist` | Where the built editor is served from — only needed if serving a differently-located editor build |
 | `BREEZE_DATA_POLLING` | `1` | `0` disables all data-source polling. Off in tests, so no suite touches the network |
 | `BREEZE_DATA_ALLOW_HOSTS` | *(empty)* | Comma-separated hosts the data fetcher may reach despite resolving to a private address. A leading dot matches subdomains (`.scores.lan`). See [SSRF](#data-sources-and-tables) |
@@ -191,7 +192,7 @@ Set `BREEZE_CONTACT` on any server that fetches data. It becomes the outgoing `U
 
 ```
 BREEZE_CONTACT="mystation.com, ops@mystation.com"
-→ User-Agent: BreezeOverlay/0.67.0 (mystation.com, ops@mystation.com)
+→ User-Agent: BreezeOverlay/0.68.0 (mystation.com, ops@mystation.com)
 ```
 
 The product token carries the running version, so the string changes with each release — match on `BreezeOverlay/` rather than the whole token if you are filtering your own logs.
@@ -201,6 +202,35 @@ api.weather.gov [requires](https://www.weather.gov/documentation/services-web-ap
 Leave it unset and you share Breeze's built-in fallback string with every other install, which is throttled as one — so set it.
 
 It applies to every outgoing fetch, not just weather — RSS feeds, JSON endpoints and CSV origins all get it. A weather source can override it per-source (**Contact** in the panel) for the rare case of one server acting for several stations; the server-wide setting is the one to reach for first. Resolution order is source → server → fallback.
+
+---
+
+### Language
+
+Set `BREEZE_LOCALE` to a BCP-47 tag and the editor, the portal and the operator panels render in that language.
+
+```
+BREEZE_LOCALE=en
+```
+
+**It is an installation setting, not a per-browser one.** Nothing is detected from `Accept-Language`, and there is no `?lang=` override. That is deliberate: a control-panel URL gets bookmarked, pasted into a rundown and shared between the gallery and the truck, and two crew members reading the same panel in two languages is worse than everyone reading it in a second language. One server, one language.
+
+Four things it does **not** change:
+
+| | Why |
+|---|---|
+| `/play` | The graphic itself. Byte-identical on every install, whatever the server is set to — a composition's coordinates are absolute and the output has to match the editor pixel for pixel |
+| `/api/*` | Error messages stay English so `docker logs` is greppable and an integrator's `curl` does not change language. Each error also carries a `code` and `params`, so a client with a catalogue can translate it itself |
+| Your content | Layer text, column labels, data-source names and anything else you typed. Breeze translates its own words, never yours |
+| Clock layers | A clock on air is content, so its language belongs to the graphic — set per layer in the editor under **Clock → Language**. A station whose crew work in English can still put German day names on screen |
+
+**Right-to-left** languages (`ar`, `he`, `fa`, `ur`) mirror the chrome. The timeline and the stage stay left-to-right and are pinned that way: time runs left to right in every non-linear editor, and a mirrored stage would be lying about what goes to air.
+
+**Currently shipped: `en`.** Two pseudo-locales exist for testing rather than for use — `en-XA` renders every translated string bracketed and padded by about 40%, which finds both untranslated strings and layouts that break when text grows; `ar-XB` keeps English words but sets right-to-left direction, so you can check mirroring while still being able to read the screen.
+
+An unrecognised tag logs one line and falls back to English rather than refusing to start — a typo in `env.breeze` should not take the panels down. A tag that is translated but below the 95% ship threshold starts with a warning saying how far along it is.
+
+Translations are plain JSON in `packages/i18n/locales/` — copy `en.json`, translate the values, leave the keys alone. **Send one as an [issue](https://github.com/dwclarkphx/breeze-overlay/issues), not a pull request**; this project takes issue reports only, and the maintainer commits the file. `pnpm i18n:check` gives you the same verdict CI will, so you can confirm it is complete and well-formed before you send it.
 
 ## Docker
 
@@ -567,6 +597,7 @@ The properties panel reports the measured piece count and the reveal's real tota
 - **A dragged layer's position updates on release**, not continuously during the gesture.
 - **Rubber-band keyframe selection in the timeline is not available yet.**
 - **The control hub retains channel state indefinitely**, with no per-show reset — long-running installs accumulate state in memory.
+- **English is the only language shipped.** The machinery is in place and the whole interface is translated through it, but no other locale has been contributed yet — see [Language](#language). The right-to-left layout has been tested with a pseudo-locale rather than with real Arabic or Hebrew copy.
 
 ## What's next
 

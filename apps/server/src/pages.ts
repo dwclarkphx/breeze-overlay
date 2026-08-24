@@ -22,6 +22,9 @@ import {
   type SceneElement,
 } from '@breeze/schema';
 
+import { makeTranslator, type Translate } from '@breeze/i18n';
+
+import { messagesFor, serverI18n } from './i18n.js';
 import { GSAP_VENDOR_URL, GSAP_VERSION } from './vendor.js';
 
 /**
@@ -56,6 +59,10 @@ const GSAP_MAX_EXCLUSIVE = [4, 0, 0] as const;
  * programme feed would be a worse outcome than a missing graphic. The title is
  * visible in the OBS/vMix source list, which is where an operator looks.
  */
+// i18n-ignore-start — every string below is emitted into /play's inline
+// script, and /play is frozen English (I18N.md §2). They reach a console and a
+// tab title, not an operator, and the same bytes have to appear on every
+// install for a support conversation about them to mean anything.
 function gsapTags(): string {
   const v = encodeURIComponent(GSAP_VERSION);
   return `<script src="${GSAP_VENDOR_URL}/gsap.min.js?v=${v}"></script>
@@ -88,6 +95,7 @@ function gsapTags(): string {
 })();
 </script>`;
 }
+// i18n-ignore-end
 
 /** Source types whose rows come from a fetch rather than from an operator. */
 const FETCHED_SOURCE_TYPES = new Set(['http-json', 'http-csv', 'rss', 'xml', 'sheets', 'weather', 'ftp']);
@@ -107,6 +115,45 @@ export function isFedSource(type: string | undefined): boolean {
 function escapeJson(value: unknown): string {
   // `</script>` inside string data would close the tag early.
   return JSON.stringify(value).replace(/</g, '\\u003c');
+}
+
+/**
+ * The `<script>` block that hands a client bundle its slice of the catalogue.
+ *
+ * Written into the same `window.__BREEZE_*` object each page already uses for
+ * its data, so a bundle needs no request of its own between painting and having
+ * text. `apps/server/client/i18n.ts` is the other half.
+ *
+ * Never called from `playPage`. `/play` is frozen English (I18N.md §2) and the
+ * whole point of that is an output that is byte-identical on every install.
+ */
+/**
+ * The translator for a server-rendered page.
+ *
+ * A function rather than a module constant so a test that calls
+ * `resetServerI18n()` sees the change — a constant captured at import time
+ * would pin the first locale the process ever resolved.
+ */
+function pageT(): Translate {
+  return makeTranslator(serverI18n().catalogue);
+}
+
+/**
+ * `lang` and `dir` for a page that is translated.
+ *
+ * `/play` keeps its own hardcoded `lang="en"` and no `dir` at all: it is frozen
+ * English (I18N.md §2), and a graphic does not mirror — the stage is a 1:1
+ * preview of what goes to air, so a mirrored one would be lying.
+ */
+function htmlOpen(): string {
+  const { locale, direction } = serverI18n();
+  return `<html lang="${escapeHtml(locale)}" dir="${direction}">`;
+}
+
+function i18nBoot(global: string, ...prefixes: string[]): string {
+  const { locale } = serverI18n();
+  // i18n-ignore-next-line — the script tag itself, not anything it says
+  return `<script>window.${global} = ${escapeJson({ locale, messages: messagesFor(...prefixes) })};</script>`;
 }
 
 export interface PlayPageOptions {
@@ -142,7 +189,7 @@ export function playPage(opts: PlayPageOptions): string {
    */
   const elements = sceneElements(composition);
   return `<!doctype html>
-<html lang="en">
+<html lang="en">  <!-- Frozen: /play is byte-identical on every install (I18N.md §2). -->
 <head>
 <meta charset="utf-8">
 <title>${escapeHtml(composition.name)} — Breeze</title>
@@ -225,6 +272,7 @@ export interface ControlPageOptions {
  */
 function sceneElementsBlock(elements: SceneElement[]): string {
   if (elements.length === 0) return '';
+  const t = pageT();
 
   const rows = elements
     .map(
@@ -236,23 +284,22 @@ function sceneElementsBlock(elements: SceneElement[]): string {
         <span class="element-state playback" data-role="state">–</span>
       </div>
       <div class="verbs">
-        <button class="go" data-el-verb="play">PLAY</button>
-        <button data-el-verb="next">NEXT</button>
-        <button class="stop" data-el-verb="stop">STOP</button>
-        <button data-el-verb="clear">CLEAR</button>
+        <button class="go" data-el-verb="play">${t('server.pages.verbPlay')}</button>
+        <button data-el-verb="next">${t('server.pages.verbNext')}</button>
+        <button class="stop" data-el-verb="stop">${t('server.pages.verbStop')}</button>
+        <button data-el-verb="clear">${t('server.pages.verbClear')}</button>
       </div>
-      <div class="hint"><a href="./${encodeURIComponent(element.ref)}">Fields for this element →</a></div>
+      <div class="hint"><a href="./${encodeURIComponent(element.ref)}">${t('server.pages.fieldsForElement')}</a></div>
     </div>`,
     )
     .join('');
 
   return `
 <fieldset>
-  <legend>Elements</legend>
+  <legend>${t('server.pages.elements')}</legend>
   ${rows}
-  <button id="clear-all" class="stop" style="width:100%;margin-top:6px">CLEAR ALL</button>
-  <div class="hint">Each element rolls on its own. CLEAR ALL takes the whole page down at once —
-    reloading the browser source does the same thing far more bluntly.</div>
+  <button id="clear-all" class="stop" style="width:100%;margin-top:6px">${t('server.pages.clearAll')}</button>
+  <div class="hint">${t('server.pages.elementsHint')}</div>
 </fieldset>`;
 }
 
@@ -271,32 +318,34 @@ export function controlPage(opts: ControlPageOptions): string {
   const { projectId, composition, bindings, schema, stepCount } = opts;
   const datasets = opts.datasets ?? {};
   const elements = sceneElements(composition);
+  const t = pageT();
 
   return `<!doctype html>
-<html lang="en">
+${htmlOpen()}
 <head>
 <meta charset="utf-8">
-<title>${escapeHtml(composition.name)} — Breeze control</title>
+<title>${escapeHtml(t('server.pages.controlTitle', { name: composition.name }))}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <style>
-  :root{--bg:#0d1117;--panel:#161b22;--panel2:#1c2129;--border:#30363d;--text:#c9d1d9;
+  :root{--ui-tracking:1;--ui-caps:uppercase;/* I18N.md §6.3 — a multiplier and a switch, so a script group is one rule. */--bg:#0d1117;--panel:#161b22;--panel2:#1c2129;--border:#30363d;--text:#c9d1d9;
         --muted:#8b949e;--accent:#58a6ff;--go:#238636;--stop:#a52834;--key:#e3b341;
         --fed:#3fb950}
+  :root:lang(ar),:root:lang(fa),:root:lang(ur),:root:lang(he),:root:lang(zh),:root:lang(ja),:root:lang(ko),:root:lang(hi){--ui-tracking:0;--ui-caps:none}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);
-       font:16px/1.5 system-ui,"Segoe UI",sans-serif;padding:16px;
+       font:16px/1.5 system-ui,"Segoe UI","Noto Sans Arabic","Noto Sans Hebrew","Noto Sans SC","Noto Sans TC","Noto Sans JP","Noto Sans KR","Noto Sans Devanagari",sans-serif;padding:16px;
        padding-bottom:calc(16px + env(safe-area-inset-bottom))}
   header{display:flex;align-items:baseline;gap:10px;margin-bottom:14px;flex-wrap:wrap}
   h1{font-size:19px;margin:0}
   .sub{color:var(--muted);font-size:13px}
-  .status{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:13px}
+  .status{margin-inline-start:auto;display:flex;align-items:center;gap:8px;font-size:13px}
   .dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
   .dot.live{background:#3fb950;box-shadow:0 0 8px #3fb950}
   .dot.off{background:var(--stop)}
   fieldset{border:1px solid var(--border);border-radius:8px;padding:12px;margin:0 0 14px;
            background:var(--panel)}
-  legend{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.6px;padding:0 6px}
+  legend{color:var(--muted);font-size:12px;text-transform:var(--ui-caps);letter-spacing:calc(.6px * var(--ui-tracking));padding:0 6px}
   label{display:block;margin-bottom:10px}
   label span{display:block;color:var(--muted);font-size:13px;margin-bottom:4px}
   input,textarea{width:100%;padding:11px;font:inherit;background:var(--panel2);
@@ -315,8 +364,8 @@ export function controlPage(opts: ControlPageOptions): string {
   .grid-wrap{margin-bottom:12px}
   .grid-caption{display:block;color:var(--muted);font-size:13px;margin-bottom:4px}
   .grid{width:100%;border-collapse:collapse;display:block;overflow-x:auto;white-space:nowrap}
-  .grid th{color:var(--muted);font:600 12px/1 inherit;text-transform:uppercase;
-           letter-spacing:.5px;text-align:left;padding:0 4px 6px}
+  .grid th{color:var(--muted);font:600 12px/1 inherit;text-transform:var(--ui-caps);
+           letter-spacing:calc(.5px * var(--ui-tracking));text-align:start;padding:0 4px 6px}
   .grid td{padding:0 4px 4px}
   .grid input{padding:8px;min-width:88px}
   .grid-del{min-height:auto;padding:6px 10px;font-size:14px;color:var(--muted)}
@@ -325,20 +374,20 @@ export function controlPage(opts: ControlPageOptions): string {
   /* Fed fields. Read-only, and it must be obvious at a glance that they are —
      an operator who thinks a field is editable and finds it is not, thirty
      seconds before air, is the failure this styling exists to prevent. */
-  .fed{border:1px solid var(--border);border-left:3px solid var(--fed);
+  .fed{border:1px solid var(--border);border-inline-start:3px solid var(--fed);
        border-radius:6px;padding:10px 12px;margin-bottom:12px;background:var(--panel2)}
   .fed .grid-caption{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
   .fed-tag{color:var(--fed);border:1px solid var(--fed);border-radius:10px;
-           padding:1px 7px;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
-  .fed-when{color:var(--muted);font-size:11px;margin-left:auto;
+           padding:1px 7px;font-size:11px;text-transform:var(--ui-caps);letter-spacing:calc(.5px * var(--ui-tracking))}
+  .fed-when{color:var(--muted);font-size:11px;margin-inline-start:auto;
             font-family:ui-monospace,Consolas,monospace}
   .fed-val{font:600 22px/1.3 ui-monospace,Consolas,monospace;color:var(--text);
            word-break:break-word}
-  .fed-list{margin:0;padding-left:18px;color:var(--text);font-size:14px}
+  .fed-list{margin:0;padding-inline-start:18px;color:var(--text);font-size:14px}
   .fed-list li{margin-bottom:3px}
   .fed table{width:100%;border-collapse:collapse;display:block;overflow-x:auto;white-space:nowrap}
-  .fed th{color:var(--muted);font:600 11px/1 inherit;text-transform:uppercase;
-          letter-spacing:.5px;text-align:left;padding:0 10px 6px 0}
+  .fed th{color:var(--muted);font:600 11px/1 inherit;text-transform:var(--ui-caps);
+          letter-spacing:calc(.5px * var(--ui-tracking));text-align:start;padding:0 10px 6px 0}
   .fed td{padding:3px 10px 3px 0;font-family:ui-monospace,Consolas,monospace;font-size:13px}
   .fed-empty{color:var(--muted);font-style:italic;font-size:13px}
   /* Scene elements. Each is a separate graphic on its own channel, so each gets
@@ -348,7 +397,7 @@ export function controlPage(opts: ControlPageOptions): string {
            margin-bottom:12px;background:var(--panel2)}
   .element-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px}
   .element-key{color:var(--muted);font:12px/1 ui-monospace,Consolas,monospace}
-  .element-state{margin-left:auto;font-size:13px}
+  .element-state{margin-inline-start:auto;font-size:13px}
   .element .hint a{color:var(--accent)}
 </style>
 </head>
@@ -358,7 +407,7 @@ export function controlPage(opts: ControlPageOptions): string {
   <span class="sub">${escapeHtml(projectId)}</span>
   <span class="status">
     <span class="dot" id="dot"></span>
-    <span id="status">connecting…</span>
+    <span id="status">${t('server.pages.connecting')}</span>
   </span>
 </header>
 
@@ -376,18 +425,22 @@ ${sceneElementsBlock(elements)}
       ? 'hidden'
       : ''
   }>
-  <legend>${elements.length > 0 ? 'Scene layers' : 'Playback'}</legend>
+  <legend>${t(elements.length > 0 ? 'server.pages.sceneLayers' : 'server.pages.playback')}</legend>
   <div class="verbs">
-    <button class="go" data-verb="play">PLAY</button>
-    <button data-verb="next" ${stepCount > 1 ? '' : 'hidden'}>NEXT</button>
-    <button class="stop" data-verb="stop">STOP</button>
-    <button data-verb="clear">CLEAR</button>
+    <button class="go" data-verb="play">${t('server.pages.verbPlay')}</button>
+    <button data-verb="next" ${stepCount > 1 ? '' : 'hidden'}>${t('server.pages.verbNext')}</button>
+    <button class="stop" data-verb="stop">${t('server.pages.verbStop')}</button>
+    <button data-verb="clear">${t('server.pages.verbClear')}</button>
   </div>
-  <div class="hint">Step <span class="playback" id="step">–</span> · <span class="playback" id="playback">idle</span></div>
+  <div class="hint">${t('server.pages.stepReadout', {
+    step: '<span class="playback" id="step">–</span>',
+    // A frozen playback state, like the enum the client writes over it.
+    state: '<span class="playback" id="playback">idle</span>',
+  })}</div>
 </fieldset>
 
 <fieldset ${bindings.length ? '' : 'hidden'}>
-  <legend>Dynamic fields</legend>
+  <legend>${t('server.pages.dynamicFields')}</legend>
   <div id="fields"></div>
   ${
     /*
@@ -397,11 +450,11 @@ ${sceneElementsBlock(elements)}
      * here for you to send".
      */
     bindings.some((b) => !b.readOnly)
-      ? `<button id="send" style="width:100%">UPDATE ON AIR</button>
-  <div class="hint">Changes apply live — the graphic does not need re-playing.
-    Fields marked <span class="fed-tag">fed</span> come from a data source and update on their own.</div>`
-      : `<div class="hint">Every field here is fed by a data source and updates on its own.
-    There is nothing to send.</div>`
+      ? `<button id="send" style="width:100%">${t('server.pages.updateOnAir')}</button>
+  <div class="hint">${t('server.pages.updateHint', {
+    fed: `<span class="fed-tag">${t('server.pages.fedTag')}</span>`,
+  })}</div>`
+      : `<div class="hint">${t('server.pages.allFedHint')}</div>`
   }
 </fieldset>
 
@@ -414,7 +467,9 @@ window.__BREEZE_CONTROL__ = {
   stepCount: ${stepCount},
   dataKey: ${escapeJson(DATA_UPDATE_KEY)},
   datasets: ${escapeJson(datasets)},
-  elements: ${escapeJson(elements)}
+  elements: ${escapeJson(elements)},
+  locale: ${escapeJson(serverI18n().locale)},
+  messages: ${escapeJson(messagesFor('control.'))}
 };
 </script>
 <script src="/public/control.js"></script>
@@ -440,10 +495,11 @@ export function escapeHtml(s: string): string {
  * like leaving the application.
  */
 const SHELL_CSS = `
-  :root{--bg:#0d1117;--panel:#161b22;--panel2:#1c2129;--border:#30363d;--text:#c9d1d9;
+  :root{--ui-tracking:1;--ui-caps:uppercase;/* I18N.md §6.3 — a multiplier and a switch, so a script group is one rule. */--bg:#0d1117;--panel:#161b22;--panel2:#1c2129;--border:#30363d;--text:#c9d1d9;
         --muted:#8b949e;--accent:#58a6ff;--live:#3fb950}
+  :root:lang(ar),:root:lang(fa),:root:lang(ur),:root:lang(he),:root:lang(zh),:root:lang(ja),:root:lang(ko),:root:lang(hi){--ui-tracking:0;--ui-caps:none}
   *{box-sizing:border-box}
-  body{font:14px/1.6 system-ui,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);
+  body{font:14px/1.6 system-ui,"Segoe UI","Noto Sans Arabic","Noto Sans Hebrew","Noto Sans SC","Noto Sans TC","Noto Sans JP","Noto Sans KR","Noto Sans Devanagari",sans-serif;background:var(--bg);color:var(--text);
        margin:0;padding:32px}
   a{color:var(--accent)}
   code{background:var(--panel);padding:1px 5px;border-radius:4px;color:var(--muted);font-size:12px}
@@ -451,7 +507,7 @@ const SHELL_CSS = `
   /* Alongside the title, not in a footer: it is the first thing anyone is asked
      for when a graphic misbehaves, and a footer is below the fold. */
   .version{font-size:12px;color:var(--muted);font-weight:400;vertical-align:middle;
-           background:var(--panel);padding:2px 7px;border-radius:10px;margin-left:6px}
+           background:var(--panel);padding:2px 7px;border-radius:10px;margin-inline-start:6px}
   .hint{color:var(--muted)}
   /* Pills. Big enough to hit on a tablet, and visibly a control rather than a
      line of prose with an underline. */
@@ -482,6 +538,7 @@ export function portalPage(
   /** Shown in the header; defaulted so callers in tests need not supply it. */
   version = '',
 ): string {
+  const t = pageT();
   const tiles = projects
     .map((p) => {
       const pid = encodeURIComponent(p.id);
@@ -497,11 +554,11 @@ export function portalPage(
             </div>
             <div class="scene-links">
               <a class="btn primary" href="/control/${pid}/${cid}" target="_blank" rel="noreferrer"
-                 title="Play, stop and edit fields on air">Control panel</a>
+                 title="${escapeHtml(t('server.pages.controlPanelTitle'))}">${t('server.pages.controlPanel')}</a>
               <a class="btn" href="/play/${pid}/${cid}" target="_blank" rel="noreferrer"
-                 title="Paste into a vMix Web Browser input or an OBS Browser Source — transparent, 1:1, no controls">Output URL</a>
+                 title="${escapeHtml(t('server.pages.outputUrlTitle'))}">${t('server.pages.outputUrl')}</a>
               <a class="btn" href="/play/${pid}/${cid}?scale=contain&amp;debug=1" target="_blank" rel="noreferrer"
-                 title="Scaled to the window, with an FPS and playback overlay — for checking a graphic in a normal tab">Debug URL</a>
+                 title="${escapeHtml(t('server.pages.debugUrlTitle'))}">${t('server.pages.debugUrl')}</a>
             </div>
           </div>`;
         })
@@ -511,21 +568,21 @@ export function portalPage(
         <summary>
           <span class="tile-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
           <code>${escapeHtml(p.id)}</code>
-          <span class="tile-count">${count} scene${count === 1 ? '' : 's'}</span>
+          <span class="tile-count">${t('server.pages.sceneCount', { count })}</span>
           <span class="viewers" data-role="project-viewers" hidden></span>
         </summary>
         <div class="tile-body">
-          ${scenes || '<p class="hint">No scenes in this project yet. Open the editor to add one.</p>'}
+          ${scenes || `<p class="hint">${t('server.pages.noScenes')}</p>`}
         </div>
       </details>`;
     })
     .join('');
 
   return `<!doctype html>
-<html lang="en">
+${htmlOpen()}
 <head>
 <meta charset="utf-8">
-<title>Breeze Overlay</title>
+<title>${escapeHtml(t('server.pages.portalTitle'))}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
 <style>${SHELL_CSS}
@@ -536,13 +593,13 @@ export function portalPage(
   .status{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 26px}
   .stat{border:1px solid var(--border);border-radius:8px;background:var(--panel);
         padding:9px 14px;min-width:132px}
-  .stat-label{display:block;color:var(--muted);font-size:11px;text-transform:uppercase;
-              letter-spacing:.6px}
+  .stat-label{display:block;color:var(--muted);font-size:11px;text-transform:var(--ui-caps);
+              letter-spacing:calc(.6px * var(--ui-tracking))}
   .stat-value{font:600 19px/1.3 ui-monospace,Consolas,monospace;color:var(--text)}
   .stat-value.live{color:var(--live)}
   .stat-sub{color:var(--muted);font-size:11px}
   .status.stale{opacity:.5}
-  h2{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);
+  h2{font-size:13px;text-transform:var(--ui-caps);letter-spacing:calc(.6px * var(--ui-tracking));color:var(--muted);
      font-weight:600;margin:0 0 12px}
   /* Tiles. A grid while closed, full width once open: a project with eight
      scenes in a third-width column wraps its buttons into an unreadable stack,
@@ -573,7 +630,7 @@ export function portalPage(
      clipped "wc26-d..." is useless where a clipped "World Cup 2026 Bracket..."
      is still perfectly identifiable. */
   summary > code{flex:0 0 auto;white-space:nowrap}
-  .tile-count{color:var(--muted);font-size:12px;margin-left:auto;flex:0 0 auto;
+  .tile-count{color:var(--muted);font-size:12px;margin-inline-start:auto;flex:0 0 auto;
               white-space:nowrap}
   .tile-body{border-top:1px solid var(--border);padding:6px 16px 14px}
   .scene{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
@@ -589,64 +646,75 @@ export function portalPage(
   /* On-air badge. Only rendered when something is actually connected, so its
      presence carries the meaning and its absence is not a claim. */
   .viewers{flex:0 0 auto;color:var(--live);border:1px solid var(--live);border-radius:10px;
-           padding:1px 8px;font-size:11px;letter-spacing:.4px;white-space:nowrap}
+           padding:1px 8px;font-size:11px;letter-spacing:calc(.4px * var(--ui-tracking));white-space:nowrap}
   /* The badge appears mid-poll, so it must take its space from the name rather
      than from the count — a tile that reflows when a source connects draws the
      eye to the wrong thing. */
-  .tile .viewers{margin-left:0}
+  .tile .viewers{margin-inline-start:0}
   footer{margin-top:36px;color:var(--muted);font-size:12px;max-width:820px}
 </style>
 </head>
 <body>
 <header>
-  <h1>Breeze Overlay ${version ? `<span class="version">${escapeHtml(version)}</span>` : ''}</h1>
+  <h1>${t('server.pages.portalTitle')} ${version ? `<span class="version">${escapeHtml(version)}</span>` : ''}</h1>
 </header>
 
 <div class="actions">
-  <a class="pill primary" href="/editor/" target="_blank" rel="noreferrer">Open the editor &#8599;</a>
-  <a class="pill" href="/docs" target="_blank" rel="noreferrer">User guide &#8599;</a>
-  <a class="pill" href="/activity">Activity</a>
-  <a class="pill" href="/backup">Backup</a>
+  <a class="pill primary" href="/editor/" target="_blank" rel="noreferrer">${t('server.pages.openEditor')}</a>
+  <a class="pill" href="/docs" target="_blank" rel="noreferrer">${t('server.pages.userGuide')}</a>
+  <a class="pill" href="/activity">${t('server.pages.activity')}</a>
+  <a class="pill" href="/backup">${t('server.pages.backup')}</a>
 </div>
 
 <div class="status" id="status">
   <!-- No caption under this one. The number is the whole message: naming the
        kinds of client that might be behind it invited reading the label
        instead of the count. -->
-  <div class="stat"><span class="stat-label">Browser sources</span>
+  <div class="stat"><span class="stat-label">${t('server.pages.statBrowserSources')}</span>
     <span class="stat-value" id="stat-renderers">&ndash;</span></div>
-  <div class="stat"><span class="stat-label">Panels open</span>
+  <div class="stat"><span class="stat-label">${t('server.pages.statPanelsOpen')}</span>
     <span class="stat-value" id="stat-controllers">&ndash;</span>
-    <span class="stat-sub">control panels &amp; editors</span></div>
-  <div class="stat"><span class="stat-label">Server CPU</span>
+    <span class="stat-sub">${t('server.pages.statPanelsSub')}</span></div>
+  <div class="stat"><span class="stat-label">${t('server.pages.statServerCpu')}</span>
     <span class="stat-value" id="stat-cpu">&ndash;</span>
-    <span class="stat-sub" id="stat-cpu-sub">this process</span></div>
-  <div class="stat"><span class="stat-label">Memory</span>
+    <span class="stat-sub" id="stat-cpu-sub">${t('server.pages.statCpuSub')}</span></div>
+  <div class="stat"><span class="stat-label">${t('server.pages.statMemory')}</span>
     <span class="stat-value" id="stat-mem">&ndash;</span>
-    <span class="stat-sub">resident</span></div>
-  <div class="stat"><span class="stat-label">Uptime</span>
+    <span class="stat-sub">${t('server.pages.statMemorySub')}</span></div>
+  <div class="stat"><span class="stat-label">${t('server.pages.statUptime')}</span>
     <span class="stat-value" id="stat-uptime">&ndash;</span>
-    <span class="stat-sub">since start</span></div>
+    <span class="stat-sub">${t('server.pages.statUptimeSub')}</span></div>
 </div>
 
-<h2>Projects</h2>
+<h2>${t('server.pages.projects')}</h2>
 <div class="tiles">
-${tiles || '<p class="hint">No projects yet. Open the editor and choose <strong>+ New project&hellip;</strong> from the project menu.</p>'}
+${
+  tiles ||
+  `<p class="hint">${t('server.pages.noProjects', {
+    newProject: `<strong>${t('server.pages.newProject')}</strong>`,
+  })}</p>`
+}
 </div>
 
 <footer>
-  <p><strong>Control panel</strong> drives a graphic on air — play, stop and live field edits.
-  <strong>Output URL</strong> is what you paste into a vMix Web Browser input or an OBS Browser Source:
-  transparent, 1:1, no controls. <strong>Debug URL</strong> scales the stage to the window and shows an
-  FPS and playback overlay.</p>
-  <p><strong>Opening an Output URL in a desktop browser will clip the frame.</strong> It renders
-  1:1 at the composition's full size — 1920&times;1080 for the demos — and a browser window is always
-  shorter than that, so the bottom of the frame falls outside the window. A graphic low in the frame, like
-  the news ticker at y=1000, plays correctly and is simply not on screen: it looks as though nothing
-  happened when PLAY is pressed. Use the <strong>Debug URL</strong> to watch it in a window, and the
-  Output URL only in a source sized to the composition. The console on that page says so too.</p>
-  <p>Keys in a debug tab: <code>space</code> play · <code>→</code> next · <code>esc</code> stop · <code>backspace</code> clear.</p>
+  <p>${t('server.pages.portalFooterLinks', {
+    control: `<strong>${t('server.pages.controlPanel')}</strong>`,
+    output: `<strong>${t('server.pages.outputUrl')}</strong>`,
+    debug: `<strong>${t('server.pages.debugUrl')}</strong>`,
+  })}</p>
+  <p>${t('server.pages.portalFooterClip', {
+    lead: `<strong>${t('server.pages.portalFooterClipLead')}</strong>`,
+    debug: `<strong>${t('server.pages.debugUrl')}</strong>`,
+  })}</p>
+  <p>${t('server.pages.portalFooterKeys', {
+    // Key names, not words: these are what the keyboard says.
+    space: '<code>space</code>',
+    nextKey: '<code>→</code>',
+    esc: '<code>esc</code>',
+    backspace: '<code>backspace</code>',
+  })}</p>
 </footer>
+${i18nBoot('__BREEZE_PORTAL__', 'portal.')}
 <script src="/public/portal.js"></script>
 </body>
 </html>`;
@@ -679,6 +747,7 @@ ${tiles || '<p class="hint">No projects yet. Open the editor and choose <strong>
 export function backupPage(
   projects: Array<{ id: string; name: string; compositions: number }>,
 ): string {
+  const t = pageT();
   const rows = projects
     .map(
       (p) => `<tr>
@@ -686,26 +755,26 @@ export function backupPage(
       <td>${escapeHtml(p.name)}</td>
       <td><code>${escapeHtml(p.id)}</code></td>
       <td class="num">${p.compositions}</td>
-      <td><a class="pill small" href="/api/projects/${encodeURIComponent(p.id)}/backup">Download</a></td>
+      <td><a class="pill small" href="/api/projects/${encodeURIComponent(p.id)}/backup">${t('server.pages.download')}</a></td>
     </tr>`,
     )
     .join('');
 
   return `<!doctype html>
-<html lang="en">
+${htmlOpen()}
 <head>
 <meta charset="utf-8">
-<title>Backup — Breeze Overlay</title>
+<title>${escapeHtml(t('server.pages.backupTitle'))}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
 <style>${SHELL_CSS}
   header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
   h2{font-size:15px;margin:26px 0 10px}
   table{border-collapse:collapse;width:100%;max-width:900px}
-  th{text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;
-     letter-spacing:.6px;font-weight:600;padding:0 12px 8px 0;border-bottom:1px solid var(--border)}
+  th{text-align:start;color:var(--muted);font-size:11px;text-transform:var(--ui-caps);
+     letter-spacing:calc(.6px * var(--ui-tracking));font-weight:600;padding:0 12px 8px 0;border-bottom:1px solid var(--border)}
   td{padding:9px 12px 9px 0;border-bottom:1px solid #21262d;vertical-align:middle;font-size:13px}
-  .num{text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+  .num{text-align:end;color:var(--muted);font-variant-numeric:tabular-nums}
   .pill.small{padding:4px 10px;font-size:12px}
   .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}
   button{font:inherit;padding:7px 15px;border-radius:999px;border:1px solid var(--border);
@@ -724,40 +793,41 @@ export function backupPage(
 </head>
 <body>
 <header>
-  <a class="pill" href="/">&larr; Portal</a>
-  <h1>Backup</h1>
+  <a class="pill" href="/">${t('server.pages.portalLink')}</a>
+  <h1>${t('server.pages.backup')}</h1>
 </header>
 
-<h2>Back up</h2>
+<h2>${t('server.pages.backUp')}</h2>
 ${
   projects.length === 0
-    ? '<p class="hint">No projects yet. There is nothing to back up.</p>'
+    ? `<p class="hint">${t('server.pages.nothingToBackUp')}</p>`
     : `<table>
-  <tr><th></th><th>Project</th><th>Id</th><th class="num">Comps</th><th></th></tr>
+  <tr><th></th><th>${t('server.pages.colProject')}</th><th>${t('server.pages.colId')}</th>
+    <th class="num">${t('server.pages.colComps')}</th><th></th></tr>
   ${rows}
 </table>
 <div class="bar">
-  <button id="all">Select all</button>
-  <button id="none">Select none</button>
-  <button id="download" class="primary">Download selected</button>
+  <button id="all">${t('server.pages.selectAll')}</button>
+  <button id="none">${t('server.pages.selectNone')}</button>
+  <button id="download" class="primary">${t('server.pages.downloadSelected')}</button>
   <span class="hint" id="count"></span>
 </div>`
 }
 
-<h2>Restore</h2>
+<h2>${t('server.pages.restore')}</h2>
 <div id="drop">
-  Drop a <code>.zip</code> bundle here, or <label class="pill small" style="cursor:pointer">
-  choose a file<input type="file" id="file" accept=".zip,application/zip" hidden></label>
-  <div class="hint" style="margin-top:8px">Nothing is written until you confirm what it contains.</div>
+  ${t('server.pages.dropBundle', {
+    zip: '<code>.zip</code>',
+    chooser: `<label class="pill small" style="cursor:pointer">${t('server.pages.chooseAFile')}<input type="file" id="file" accept=".zip,application/zip" hidden></label>`,
+  })}
+  <div class="hint" style="margin-top:8px">${t('server.pages.nothingWrittenYet')}</div>
 </div>
 <div id="report"></div>
 
 <footer>
-  <p>A bundle carries composition JSON, the asset index, referenced asset files and data-source
-  definitions. It never carries the Breeze runtime, so it is inert without an install — and it
-  never carries credentials. A restored data source keeps its secret <em>id</em> and loses its
-  keys and tokens, so it will need them re-entered on the machine it lands on.</p>
+  <p>${t('server.pages.backupFooter', { id: `<em>${t('server.pages.secretId')}</em>` })}</p>
 </footer>
+${i18nBoot('__BREEZE_BACKUP__', 'backup.')}
 <script src="/public/backup.js"></script>
 </body>
 </html>`;
@@ -776,22 +846,23 @@ export function activityPage(
   describe: (agent: string) => string,
   filter = '',
 ): string {
+  const t = pageT();
   const shown = filter === '' ? entries : entries.filter((e) => e.action.startsWith(filter));
 
   /* Grouped so the filter bar reads as the categories rather than six verbs. */
   const filters: Array<[string, string]> = [
-    ['', 'Everything'],
-    ['project', 'Projects'],
-    ['scene', 'Scenes'],
-    ['panel', 'Control panels'],
+    ['', 'server.pages.filterEverything'],
+    ['project', 'server.pages.filterProjects'],
+    ['scene', 'server.pages.filterScenes'],
+    ['panel', 'server.pages.filterPanels'],
   ];
 
   const tabs = filters
     .map(
-      ([value, label]) =>
+      ([value, labelKey]) =>
         `<a class="tab${value === filter ? ' on' : ''}" href="/activity${
           value ? `?filter=${encodeURIComponent(value)}` : ''
-        }">${escapeHtml(label)}</a>`,
+        }">${escapeHtml(t(labelKey))}</a>`,
     )
     .join('');
 
@@ -806,6 +877,7 @@ export function activityPage(
         <td class="when"><time datetime="${escapeHtml(e.at)}">${escapeHtml(
           e.at.replace('T', ' ').replace(/\.\d+Z$/, 'Z'),
         )}</time></td>
+        <!-- i18n-ignore-next-line — a className, and a frozen audit action code -->
         <td><span class="verb ${escapeHtml(verb)}">${escapeHtml(e.action)}</span></td>
         <td>${target}</td>
         <td class="who"><code>${escapeHtml(e.actor.ip)}</code>
@@ -815,10 +887,10 @@ export function activityPage(
     .join('');
 
   return `<!doctype html>
-<html lang="en">
+${htmlOpen()}
 <head>
 <meta charset="utf-8">
-<title>Activity — Breeze Overlay</title>
+<title>${escapeHtml(t('server.pages.activityTitle'))}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
 <style>${SHELL_CSS}
@@ -829,13 +901,13 @@ export function activityPage(
   .tab:hover{border-color:var(--accent)}
   .tab.on{background:#1f6feb;border-color:#388bfd;color:#fff}
   table{border-collapse:collapse;width:100%;max-width:1100px}
-  th{text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;
-     letter-spacing:.6px;font-weight:600;padding:0 12px 8px 0;border-bottom:1px solid var(--border)}
+  th{text-align:start;color:var(--muted);font-size:11px;text-transform:var(--ui-caps);
+     letter-spacing:calc(.6px * var(--ui-tracking));font-weight:600;padding:0 12px 8px 0;border-bottom:1px solid var(--border)}
   td{padding:9px 12px 9px 0;border-bottom:1px solid #21262d;vertical-align:top;font-size:13px}
   .when{white-space:nowrap;color:var(--muted);font-family:ui-monospace,Consolas,monospace;
         font-size:12px}
   .who{white-space:nowrap}
-  .who span{color:var(--muted);margin-left:6px;font-size:12px;cursor:help}
+  .who span{color:var(--muted);margin-inline-start:6px;font-size:12px;cursor:help}
   /* Deletes are the reason this page exists; they should be findable by
      colour before the row is read. */
   .verb{font-family:ui-monospace,Consolas,monospace;font-size:12px;padding:2px 7px;
@@ -847,28 +919,27 @@ export function activityPage(
 </head>
 <body>
 <header>
-  <a class="pill" href="/">&larr; Portal</a>
-  <h1>Activity</h1>
+  <a class="pill" href="/">${t('server.pages.portalLink')}</a>
+  <h1>${t('server.pages.activity')}</h1>
 </header>
 
 <div class="tabs">${tabs}</div>
 
 ${
   shown.length === 0
-    ? '<p class="hint">Nothing recorded yet. Projects and scenes created or deleted, and control panels connecting, are logged here.</p>'
+    ? `<p class="hint">${t('server.pages.activityEmpty')}</p>`
     : `<table>
-  <tr><th>When (UTC)</th><th>What</th><th>Target</th><th>From</th></tr>
+  <tr><th>${t('server.pages.colWhen')}</th><th>${t('server.pages.colWhat')}</th>
+    <th>${t('server.pages.colTarget')}</th><th>${t('server.pages.colFrom')}</th></tr>
   ${rows}
 </table>`
 }
 
 <footer>
-  <p>Breeze has no accounts, so an action is attributed to the address it came from and the
-  browser it came from — not to a person. On a LAN with assigned machines that is usually enough
-  to identify who; behind a proxy or a VPN it is not, and this page does not pretend otherwise.</p>
-  <p>Written to <code>data/audit-&lt;year&gt;-&lt;month&gt;.jsonl</code>, one JSON object per line,
-  one file per month. Nothing deletes them for you. Browser sources are not recorded —
-  the portal's status strip shows what is connected right now.</p>
+  <p>${t('server.pages.activityFooterAttribution')}</p>
+  <p>${t('server.pages.activityFooterStorage', {
+    path: '<code>data/audit-&lt;year&gt;-&lt;month&gt;.jsonl</code>',
+  })}</p>
 </footer>
 </body>
 </html>`;
@@ -881,11 +952,12 @@ ${
  * is a file in the installation, not anything a request can supply.
  */
 export function docsPage(body: string): string {
+  const t = pageT();
   return `<!doctype html>
-<html lang="en">
+${htmlOpen()}
 <head>
 <meta charset="utf-8">
-<title>User guide — Breeze Overlay</title>
+<title>${escapeHtml(t('server.pages.docsTitle'))}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
 <style>${SHELL_CSS}
@@ -903,21 +975,21 @@ export function docsPage(body: string): string {
   .doc img{max-width:100%;border:1px solid var(--border);border-radius:8px;display:block;
            margin:16px 0}
   .doc table{border-collapse:collapse;width:100%;margin:16px 0;display:block;overflow-x:auto}
-  .doc th,.doc td{border:1px solid var(--border);padding:7px 11px;text-align:left;font-size:14px}
-  .doc th{background:var(--panel);color:var(--muted);font-size:12px;text-transform:uppercase;
-          letter-spacing:.5px}
+  .doc th,.doc td{border:1px solid var(--border);padding:7px 11px;text-align:start;font-size:14px}
+  .doc th{background:var(--panel);color:var(--muted);font-size:12px;text-transform:var(--ui-caps);
+          letter-spacing:calc(.5px * var(--ui-tracking))}
   .doc pre{background:var(--panel);border:1px solid var(--border);border-radius:8px;
            padding:12px 14px;overflow-x:auto}
   .doc pre code{background:none;padding:0;color:var(--text);font-size:13px}
-  .doc blockquote{margin:16px 0;padding:2px 0 2px 14px;border-left:3px solid var(--border);
+  .doc blockquote{margin:16px 0;padding:2px 0 2px 14px;border-inline-start:3px solid var(--border);
                   color:var(--muted)}
   .doc hr{border:none;border-top:1px solid var(--border);margin:32px 0}
 </style>
 </head>
 <body>
 <div class="doc-bar">
-  <a class="pill" href="/">&larr; Portal</a>
-  <a class="pill" href="/editor/" target="_blank" rel="noreferrer">Editor &#8599;</a>
+  <a class="pill" href="/">${t('server.pages.portalLink')}</a>
+  <a class="pill" href="/editor/" target="_blank" rel="noreferrer">${t('server.pages.editorLink')}</a>
 </div>
 <article class="doc">
 ${body}

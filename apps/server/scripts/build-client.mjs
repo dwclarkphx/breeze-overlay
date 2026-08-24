@@ -57,9 +57,26 @@ const LICENSE_BANNER = `/*! Breeze Overlay — Mozilla Public License 2.0
  */
 const RUNTIME_VENDOR = path.join(repoRoot, 'packages', 'runtime', 'src', 'vendor');
 
-const GSAP_ALIAS = {
+/**
+ * `@breeze/i18n` resolves to its sources, for the same reason the runtime does.
+ *
+ * The package's `exports` field points at `dist/`, so importing it by name
+ * would make this bundle depend on `@breeze/i18n` having been compiled first —
+ * a build-order edge that does not exist today and would fail in exactly one
+ * place, `pnpm dev`, where nothing builds the packages. esbuild reads .ts
+ * natively, so pointing at the source keeps the graph flat.
+ *
+ * Only control, portal and backup import it. `player.ts` — the `/play` bundle —
+ * does not and must not: that page is frozen English by design (I18N.md §2), so
+ * a catalogue in it would be dead weight at best and a way to break the one
+ * output that has to be byte-identical everywhere at worst.
+ */
+const I18N_SRC = path.join(repoRoot, 'packages', 'i18n', 'src', 'index.ts');
+
+const ALIAS = {
   gsap: path.join(RUNTIME_VENDOR, 'gsap-global.ts'),
   'gsap/SplitText': path.join(RUNTIME_VENDOR, 'splittext-global.ts'),
+  '@breeze/i18n': I18N_SRC,
 };
 
 const options = {
@@ -71,7 +88,7 @@ const options = {
   ],
   outdir: path.join(appRoot, 'public'),
   bundle: true,
-  alias: GSAP_ALIAS,
+  alias: ALIAS,
   format: 'iife',
   target: ['chrome100'],
   platform: 'browser',

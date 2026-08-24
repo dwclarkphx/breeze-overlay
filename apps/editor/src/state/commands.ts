@@ -27,6 +27,8 @@ import {
   type Marker,
 } from '@breeze/schema';
 
+import { msg, type Message } from '@breeze/i18n';
+
 export type Command =
   | { kind: 'addLayer'; layer: Layer; index?: number; parentId?: string }
   /*
@@ -81,32 +83,48 @@ export type Command =
   | { kind: 'setDuration'; duration: number }
   | { kind: 'renameComposition'; name: string };
 
-/** Human-readable label for the history UI. */
-export function describeCommand(command: Command): string {
+/**
+ * Label for the history UI, as a `Message` the caller translates.
+ *
+ * A `Message` rather than a string because this module has no translator and
+ * the label lands in the undo button's tooltip — see I18N.md and
+ * `@breeze/i18n`'s `Message`. The counted cases carry `count` so the catalogue
+ * owns the plural; the single/plural pairs that used to be written as ternaries
+ * here are one ICU message each now.
+ *
+ * `addLayer` uses an ICU `select` over the layer type rather than dropping the
+ * raw enum into the sentence. The type is a frozen identifier, but "Add text
+ * layer" is a sentence, and a language that inflects the noun or reorders it
+ * needs the whole thing in one message rather than a translated frame around an
+ * untranslated word.
+ */
+export function describeCommand(command: Command): Message {
   switch (command.kind) {
-    case 'addLayer': return `Add ${command.layer.type} layer`;
-    case 'importLayers': return `Import ${command.source}`;
-    case 'deleteLayers': return command.layerIds.length > 1 ? `Delete ${command.layerIds.length} layers` : 'Delete layer';
-    case 'reorderLayer': return 'Reorder layer';
-    case 'patchLayer': return 'Change layer';
-    case 'renameLayer': return 'Rename layer';
+    case 'addLayer': return msg('editor.commands.addLayer', { type: command.layer.type });
+    case 'importLayers': return msg('editor.commands.import', { source: command.source });
+    case 'deleteLayers': return msg('editor.commands.deleteLayers', { count: command.layerIds.length });
+    case 'reorderLayer': return msg('editor.commands.reorderLayer');
+    case 'patchLayer': return msg('editor.commands.changeLayer');
+    case 'renameLayer': return msg('editor.commands.renameLayer');
     case 'setValues': {
       const names = Object.keys(command.values);
-      return names.length === 1 ? `Change ${names[0]}` : 'Move layer';
+      return names.length === 1
+        ? msg('editor.commands.changeValue', { name: names[0] ?? '' })
+        : msg('editor.commands.moveLayer');
     }
-    case 'resizeLayer': return 'Resize layer';
-    case 'setKeyframe': return 'Add keyframe';
-    case 'moveKeyframe': return 'Move keyframe';
-    case 'setKeyframeValue': return 'Change keyframe value';
-    case 'setKeyframeEase': return 'Change easing';
-    case 'deleteKeyframes': return command.targets.length > 1 ? `Delete ${command.targets.length} keyframes` : 'Delete keyframe';
-    case 'pasteKeyframes': return 'Paste keyframes';
-    case 'addMarker': return 'Add marker';
-    case 'moveMarker': return 'Move marker';
-    case 'deleteMarker': return 'Delete marker';
-    case 'setStage': return 'Change stage';
-    case 'setDuration': return 'Change duration';
-    case 'renameComposition': return 'Rename composition';
+    case 'resizeLayer': return msg('editor.commands.resizeLayer');
+    case 'setKeyframe': return msg('editor.commands.addKeyframe');
+    case 'moveKeyframe': return msg('editor.commands.moveKeyframe');
+    case 'setKeyframeValue': return msg('editor.commands.changeKeyframeValue');
+    case 'setKeyframeEase': return msg('editor.commands.changeEasing');
+    case 'deleteKeyframes': return msg('editor.commands.deleteKeyframes', { count: command.targets.length });
+    case 'pasteKeyframes': return msg('editor.commands.pasteKeyframes');
+    case 'addMarker': return msg('editor.commands.addMarker');
+    case 'moveMarker': return msg('editor.commands.moveMarker');
+    case 'deleteMarker': return msg('editor.commands.deleteMarker');
+    case 'setStage': return msg('editor.commands.changeStage');
+    case 'setDuration': return msg('editor.commands.changeDuration');
+    case 'renameComposition': return msg('editor.commands.renameComposition');
   }
 }
 

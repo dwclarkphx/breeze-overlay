@@ -22,7 +22,24 @@
  * absent; only restore needs it, and the markup says so.
  */
 
-export {};
+import { bootI18n } from './i18n.js';
+
+declare global {
+  interface Window { __BREEZE_BACKUP__?: { locale?: string; messages?: Record<string, string> }; }
+}
+
+const { t } = bootI18n(window.__BREEZE_BACKUP__);
+
+/*
+ * Catalogue text goes into `innerHTML` unescaped, exactly like the literal
+ * markup around it, and only *data* is escaped — `escape(r.name)`, the same
+ * rule this file already followed. Escaping the message instead would mean
+ * escaping the `<code>` a message is handed as a parameter, which is the one
+ * thing here that has to stay markup.
+ *
+ * The catalogue is ours and `i18n:check` parses every entry, so this is the
+ * same trust boundary as the surrounding template literal — not a new one.
+ */
 
 interface InspectResult {
   manifest: { createdAt: string; appVersion: string; projects: Array<{ id: string; name: string }> };
@@ -40,7 +57,7 @@ function refreshCount(): void {
   const n = selected().length;
   const total = picks().length;
   const count = el('count');
-  if (count) count.textContent = total ? `${n} of ${total} selected` : '';
+  if (count) count.textContent = total ? t('backup.selectedCount', { count: n, total }) : '';
   const download = el<HTMLButtonElement>('download');
   if (download) download.disabled = n === 0;
 }
@@ -95,17 +112,17 @@ function escape(s: string): string {
 
 async function inspect(file: File): Promise<void> {
   pending = file;
-  say(`<p class="hint">Reading ${escape(file.name)}…</p>`);
+  say(`<p class="hint">${t('backup.reading', { file: escape(file.name) })}</p>`);
 
   const res = await fetch('/api/restore/inspect', {
     method: 'POST',
     headers: { 'content-type': 'application/zip' },
     body: file,
   });
-  const body = await res.json().catch(() => ({ error: 'unreadable response' }));
+  const body = await res.json().catch(() => ({ error: t('backup.unreadableResponse') }));
 
   if (!res.ok) {
-    say(`<p class="err">${escape((body as { error?: string }).error ?? 'could not read that bundle')}</p>`);
+    say(`<p class="err">${escape((body as { error?: string }).error ?? t('backup.inspectFailed'))}</p>`);
     pending = null;
     return;
   }
@@ -118,7 +135,7 @@ async function inspect(file: File): Promise<void> {
       const named = data.manifest.projects.find((m) => m.id === p.id);
       return `<tr><td>${escape(named?.name ?? p.id)}</td><td><code>${escape(p.id)}</code></td>
         <td class="num">${p.assets}</td>
-        <td>${p.collides ? '<span class="warn">already exists</span>' : 'new'}</td></tr>`;
+        <td>${p.collides ? `<span class="warn">${t('backup.statusExists')}</span>` : t('backup.statusNew')}</td></tr>`;
     })
     .join('');
 
@@ -130,19 +147,20 @@ async function inspect(file: File): Promise<void> {
    * them to click through the one that does.
    */
   const choice = colliding.length
-    ? `<p class="warn">${colliding.length} project${colliding.length > 1 ? 's' : ''} already
-         exist${colliding.length > 1 ? '' : 's'} on this server. Overwriting replaces what is
-         there now — including anything currently on air.</p>
+    ? `<p class="warn">${t('backup.collision', { count: colliding.length })}</p>
        <div class="bar">
-         <button id="go-rename" class="primary">Restore alongside (new ids)</button>
-         <button id="go-overwrite">Overwrite existing</button>
+         <button id="go-rename" class="primary">${t('backup.restoreAlongside')}</button>
+         <button id="go-overwrite">${t('backup.overwriteExisting')}</button>
        </div>`
-    : `<div class="bar"><button id="go-rename" class="primary">Restore</button></div>`;
+    : `<div class="bar"><button id="go-rename" class="primary">${t('backup.restore')}</button></div>`;
 
-  say(`<p>Written ${escape(data.manifest.createdAt.replace('T', ' ').replace(/\..*/, ''))}
-        by Breeze ${escape(data.manifest.appVersion)}.</p>
+  say(`<p>${t('backup.written', {
+        date: escape(data.manifest.createdAt.replace('T', ' ').replace(/\..*/, '')),
+        version: escape(data.manifest.appVersion),
+      })}</p>
       <table>
-        <tr><th>Project</th><th>Id</th><th class="num">Assets</th><th>Status</th></tr>
+        <tr><th>${t('backup.colProject')}</th><th>${t('backup.colId')}</th>
+          <th class="num">${t('backup.colAssets')}</th><th>${t('backup.colStatus')}</th></tr>
         ${rows}
       </table>
       ${choice}`);
@@ -153,33 +171,34 @@ async function inspect(file: File): Promise<void> {
 
 async function restore(mode: 'rename' | 'overwrite'): Promise<void> {
   if (!pending) return;
-  say('<p class="hint">Restoring…</p>');
+  say(`<p class="hint">${t('backup.restoring')}</p>`);
 
   const res = await fetch(`/api/restore?mode=${mode}`, {
     method: 'POST',
     headers: { 'content-type': 'application/zip' },
     body: pending,
   });
-  const body = await res.json().catch(() => ({ error: 'unreadable response' }));
+  const body = await res.json().catch(() => ({ error: t('backup.unreadableResponse') }));
 
   if (!res.ok) {
-    say(`<p class="err">${escape((body as { error?: string }).error ?? 'restore failed')}</p>`);
+    say(`<p class="err">${escape((body as { error?: string }).error ?? t('backup.restoreFailed'))}</p>`);
     return;
   }
 
   const done = (body as { restored: Array<{ id: string; name: string; assets: number; overwrote: boolean }> }).restored;
-  say(`<p>Restored ${done.length} project${done.length > 1 ? 's' : ''}.</p>
+  say(`<p>${t('backup.restored', { count: done.length })}</p>
      <ul>${done
        .map(
          (r) =>
-           `<li>${escape(r.name)} → <code>${escape(r.id)}</code>, ${r.assets} asset${
-             r.assets === 1 ? '' : 's'
-           }${r.overwrote ? ' <span class="warn">(overwrote)</span>' : ''}</li>`,
+           `<li>${t('backup.restoredItem', {
+             name: escape(r.name),
+             id: `<code>${escape(r.id)}</code>`,
+             count: r.assets,
+           })}${r.overwrote ? ` <span class="warn">${t('backup.overwrote')}</span>` : ''}</li>`,
        )
        .join('')}</ul>
-     <p class="hint">Data sources restored without their credentials — re-enter any keys or tokens
-     in the editor before those graphics go live.</p>
-     <div class="bar"><a class="pill" href="/">Back to the portal</a></div>`);
+     <p class="hint">${t('backup.credentialsHint')}</p>
+     <div class="bar"><a class="pill" href="/">${t('backup.backToPortal')}</a></div>`);
   pending = null;
 }
 

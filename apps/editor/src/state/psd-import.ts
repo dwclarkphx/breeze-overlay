@@ -33,6 +33,7 @@
  */
 
 import { makeId } from '@breeze/schema';
+import { msg, type Message } from '@breeze/i18n';
 import type { GroupLayer, ImageLayer, Layer, TextLayer } from '@breeze/schema';
 
 /* -------------------------------------------------------------- ag-psd shape */
@@ -92,9 +93,9 @@ export interface PsdPlan {
   layers: Layer[];
   rasters: PlannedRaster[];
   /** Layer name → why it could not stay editable text. Shown to the operator. */
-  rasterReasons: Array<{ name: string; reason: string }>;
+  rasterReasons: Array<{ name: string; reason: Message }>;
   /** Layers dropped entirely, with the reason. */
-  skipped: Array<{ name: string; reason: string }>;
+  skipped: Array<{ name: string; reason: Message }>;
 }
 
 /* ------------------------------------------------------------------ helpers */
@@ -137,16 +138,20 @@ function alignOf(justification: string | undefined): 'left' | 'center' | 'right'
 /**
  * Why this text layer cannot stay text, or null if it can.
  *
- * Returned as a reason string rather than a boolean because the operator is
- * shown it. "3 layers were flattened" invites a bug report; "Title — has layer
- * effects" invites deleting the effect and re-importing.
+ * Returned as a reason rather than a boolean because the operator is shown it.
+ * "3 layers were flattened" invites a bug report; "Title — has layer effects"
+ * invites deleting the effect and re-importing.
+ *
+ * A `Message` rather than a string: this module runs nowhere near a component
+ * and has no translator, and freezing English in here would put it in the
+ * report an operator reads however the editor is configured.
  */
-export function rasterReasonFor(layer: PsdLayerLike): string | null {
+export function rasterReasonFor(layer: PsdLayerLike): Message | null {
   if (!layer.text?.text) return null;
-  if (layer.effects) return 'has layer effects (stroke, shadow or glow)';
-  if (!textTransformIsPlain(layer.text.transform)) return 'the text is scaled, rotated or skewed';
-  if (!layer.text.style?.font?.name) return 'no font could be read from the layer';
-  if (!layer.text.style.fontSize) return 'no font size could be read from the layer';
+  if (layer.effects) return msg('editor.psd.reasonEffects');
+  if (!textTransformIsPlain(layer.text.transform)) return msg('editor.psd.reasonTransform');
+  if (!layer.text.style?.font?.name) return msg('editor.psd.reasonNoFont');
+  if (!layer.text.style.fontSize) return msg('editor.psd.reasonNoFontSize');
   return null;
 }
 
@@ -167,6 +172,7 @@ function boxOf(layer: PsdLayerLike): { x: number; y: number; width: number; heig
  * fixable; one that silently falls back to Times is how a show goes out wrong.
  */
 export function fontFrom(psdFont: string): { family: string; weight?: number; italic: boolean } {
+  // Parsing a PostScript font name, not building a message.
   const [rawFamily = psdFont, suffix = ''] = psdFont.split('-');
   const family = rawFamily.replace(/([a-z])([A-Z])/g, '$1 $2').trim();
   const italic = /it(alic)?$/i.test(suffix);
@@ -180,7 +186,7 @@ export function fontFrom(psdFont: string): { family: string; weight?: number; it
     [/thin|hairline/i, 100],
   ];
   const weight = weights.find(([re]) => re.test(suffix))?.[1];
-  return { family: `${family}, Arial, sans-serif`, ...(weight ? { weight } : {}), italic };
+  return { family: `${family}, Arial, sans-serif`, ...(weight ? { weight } : {}), italic }; // i18n-ignore — CSS font stack, not prose
 }
 
 /* ------------------------------------------------------------------ planner */
@@ -210,7 +216,7 @@ export function planPsdImport(psd: PsdLike, opts: { nameHint?: string } = {}): P
       if (layer.children?.length) {
         const children = visit(layer.children);
         if (children.length === 0) {
-          plan.skipped.push({ name, reason: 'the group is empty' });
+          plan.skipped.push({ name, reason: msg('editor.psd.skipEmptyGroup') });
           continue;
         }
         const group: GroupLayer = {
@@ -235,7 +241,7 @@ export function planPsdImport(psd: PsdLike, opts: { nameHint?: string } = {}): P
        * than a wrong graphic.
        */
       if (layer.clipping) {
-        plan.skipped.push({ name, reason: 'clipping masks are not imported — flatten it in Photoshop first' });
+        plan.skipped.push({ name, reason: msg('editor.psd.skipClippingMask') });
         continue;
       }
 
@@ -269,7 +275,7 @@ export function planPsdImport(psd: PsdLike, opts: { nameHint?: string } = {}): P
       if (layer.text?.text && reason) plan.rasterReasons.push({ name, reason });
 
       if (!layer.canvas || box.width === 0 || box.height === 0) {
-        plan.skipped.push({ name, reason: 'the layer has no pixels' });
+        plan.skipped.push({ name, reason: msg('editor.psd.skipNoPixels') });
         continue;
       }
 
@@ -294,7 +300,7 @@ export function planPsdImport(psd: PsdLike, opts: { nameHint?: string } = {}): P
       out.push(image);
       plan.rasters.push({
         layerId: image.id,
-        name: `${opts.nameHint ? `${opts.nameHint}-` : ''}${String(rasterIndex++).padStart(2, '0')}-${
+        name: `${opts.nameHint ? `${opts.nameHint}-` : ''}${String(rasterIndex++).padStart(2, '0')}-${ // i18n-ignore — generated asset filename
           name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'layer'
         }.png`,
         canvas: layer.canvas,

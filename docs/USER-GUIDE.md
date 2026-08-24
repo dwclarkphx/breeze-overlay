@@ -122,6 +122,14 @@ Two settings worth knowing, both environment variables:
 |---|---|
 | `BREEZE_PORT` | Defaults to `7331`. Change it if something else already has that port |
 | `BREEZE_HOST` | Defaults to `0.0.0.0` (reachable from the LAN). Set it to `127.0.0.1` to keep the server private to its own machine |
+| `BREEZE_LOCALE` | Defaults to `en`. The language of the editor and the control panels |
+
+`BREEZE_LOCALE` is a property of the *server*, not of your browser: everyone
+looking at this Breeze sees the same words, so two people on the same control
+panel are always talking about the same button. It does not touch your own
+content — layer text, column names and data-source names stay exactly as you
+typed them — and it does not touch what goes to air. English is the only
+language shipped today.
 
 ---
 
@@ -384,6 +392,23 @@ http://<host>:7331/play/demo/l3rd-name?name=Jane%20Doe&title=Reporter
 ```
 
 Crawl layers and table layers can carry bindings too, so an operator can replace a whole headline list or a whole table live.
+
+---
+
+### A clock that updates itself
+
+A clock is not a layer type — it is a switch on a **text layer**. Turn on **Live clock** in the properties panel and the layer stops showing its own text and starts showing the time, updating on air without anyone touching it.
+
+- **Preset** — the common formats, each option labelled with the time *right now* in that format. Pick the one that reads the way you want.
+- **Format** — the tokens behind the preset, if none of them is quite right. `h:mm A` → `6:42 PM`, `HH:mm:ss` → `18:42:07`, `dddd, MMMM D` → `Monday, August 3`. The field's tooltip lists them all. Watch the case: `mm` is minutes, `MM` is the month.
+- **Time zone** — blank uses the clock of the machine rendering the graphic, which is usually right, because that machine is in the market whose time is on screen. Set an IANA zone (`America/Phoenix`, `Europe/London`) when it is not.
+- **Language** — which language the month and weekday names appear in. This belongs to the *graphic*, not to the editor: a station whose crew work in English can still put German day names on screen. Leave it alone and you get English.
+
+The two controls do different halves of the job, and it is worth being clear about which is which. **Format** decides the *order and the punctuation*; **Language** decides the *words*. So `dddd, MMMM D` in German gives `Montag, August 3` — German names in American order, which is probably not what you meant. Write the order out the way the language wants it: `dddd, D. MMMM` gives `Montag, 3. August`.
+
+**Now:** underneath shows exactly what will render, updating every second, in the language and zone you picked — so you never have to guess.
+
+The layer's own **Content** becomes a placeholder once the clock is on: the canvas and a still export use it, a renderer never does. And a clock always beats a binding, so if the layer has both, the operator's field will appear to do nothing — clear one or the other.
 
 ---
 

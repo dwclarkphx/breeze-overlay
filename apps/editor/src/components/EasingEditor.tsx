@@ -16,6 +16,8 @@
  */
 
 import { useMemo, useRef, useState, type JSX } from 'react';
+
+import { useT } from '@breeze/i18n/react';
 import { sampleEase } from '@breeze/runtime';
 import { NAMED_EASES, type CubicBezierEase, type Ease } from '@breeze/schema';
 
@@ -45,14 +47,19 @@ const Y_MIN = -0.6;
 const Y_MAX = 1.6;
 const Y_SPAN = Y_MAX - Y_MIN;
 
-/** Curves worth one click, since hand-dragging these every time is tedious. */
-const BEZIER_PRESETS: Array<{ label: string; points: [number, number, number, number] }> = [
-  { label: 'Ease', points: [0.25, 0.1, 0.25, 1] },
-  { label: 'Ease in', points: [0.42, 0, 1, 1] },
-  { label: 'Ease out', points: [0, 0, 0.58, 1] },
-  { label: 'Ease in-out', points: [0.42, 0, 0.58, 1] },
-  { label: 'Anticipate', points: [0.68, -0.55, 0.265, 1.55] },
-  { label: 'Broadcast in', points: [0.16, 1, 0.3, 1] },
+/**
+ * Curves worth one click, since hand-dragging these every time is tedious.
+ *
+ * `labelKey` rather than `label`, for the same reason the schema's preset
+ * tables carry keys: the points are the value and the name is display text.
+ */
+const BEZIER_PRESETS: Array<{ labelKey: string; points: [number, number, number, number] }> = [
+  { labelKey: 'editor.easing.presetEase', points: [0.25, 0.1, 0.25, 1] },
+  { labelKey: 'editor.easing.presetEaseIn', points: [0.42, 0, 1, 1] },
+  { labelKey: 'editor.easing.presetEaseOut', points: [0, 0, 0.58, 1] },
+  { labelKey: 'editor.easing.presetEaseInOut', points: [0.42, 0, 0.58, 1] },
+  { labelKey: 'editor.easing.presetAnticipate', points: [0.68, -0.55, 0.265, 1.55] },
+  { labelKey: 'editor.easing.presetBroadcastIn', points: [0.16, 1, 0.3, 1] },
 ];
 
 export function EasingEditor({
@@ -62,6 +69,7 @@ export function EasingEditor({
   target: KeyframeRef;
   onClose: () => void;
 }): JSX.Element | null {
+  const t = useT();
   const composition = useEditor((s) => s.composition);
   const run = useEditor((s) => s.run);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -199,7 +207,7 @@ export function EasingEditor({
                 value={typeof ease === 'string' ? ease : ''}
                 onChange={(e) => e.target.value && setEase(e.target.value)}
               >
-                <option value="">— custom curve —</option>
+                <option value="">{t('editor.easing.customCurve')}</option>
                 {NAMED_EASES.map((name) => (
                   <option key={name} value={name}>{name}</option>
                 ))}
@@ -209,10 +217,10 @@ export function EasingEditor({
             <div className="preset-grid">
               {BEZIER_PRESETS.map((preset) => (
                 <button
-                  key={preset.label}
+                  key={preset.labelKey}
                   onClick={() => setEase({ type: 'cubicBezier', points: preset.points })}
                 >
-                  {preset.label}
+                  {t(preset.labelKey)}
                 </button>
               ))}
             </div>

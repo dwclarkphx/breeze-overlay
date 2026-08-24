@@ -28,7 +28,10 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+import { makeTranslator, type Translate } from '@breeze/i18n';
+
 import { config } from './config.js';
+import { serverI18n } from './i18n.js';
 
 export type AuditAction =
   | 'project.create'
@@ -158,8 +161,10 @@ export async function recent(limit = 200): Promise<AuditEntry[]> {
  * shown on hover. The point is a column that can be scanned down, which a
  * 140-character UA cannot be.
  */
-export function describeAgent(agent: string): string {
-  if (agent === 'unknown' || agent.trim() === '') return 'unknown';
+export function describeAgent(agent: string, t: Translate = makeTranslator(serverI18n().catalogue)): string {
+  // Browser and OS names are proper nouns and stay as they are; only the word
+  // joining them and the "no idea" fallback are text an operator reads.
+  if (agent === 'unknown' || agent.trim() === '') return t('server.audit.agentUnknown');
 
   // Breeze's own outgoing fetches, and anything else honest about itself.
   if (agent.startsWith('BreezeOverlay/')) return agent.split(' ')[0] ?? agent;
@@ -184,8 +189,11 @@ export function describeAgent(agent: string): string {
     : /Linux/i.test(agent) ? 'Linux'
     : null;
 
-  if (browser && os) return `${browser} on ${os}`;
+  if (browser && os) return t('server.audit.agentBrowserOnOs', { browser, os });
   if (browser) return browser;
   if (os) return os;
+  // The raw User-Agent header, truncated; the ellipsis is the truncation
+  // mark, not a word.
+  // i18n-ignore-next-line
   return agent.length > 40 ? `${agent.slice(0, 37)}…` : agent;
 }

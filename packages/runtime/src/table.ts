@@ -51,7 +51,8 @@ import { hasKeyframes } from './plan.js';
 
 export interface RowAnimDef {
   id: RowAnimPresetId;
-  label: string;
+  /** Catalogue key for the editor gallery; see TextAnimPresetDef. */
+  labelKey: string;
   /** GSAP `from` vars applied to each row element. */
   from: { yPercent?: number; xPercent?: number; opacity?: number };
   stagger: number;
@@ -70,17 +71,17 @@ const ROW_RISE_PERCENT = 50;
 
 const ROW_PRESETS: Record<Exclude<RowAnimPresetId, 'none'>, RowAnimDef> = {
   'rows-up': {
-    id: 'rows-up', label: 'Rows rise',
+    id: 'rows-up', labelKey: 'runtime.rowAnim.rowsUp',
     from: { yPercent: ROW_RISE_PERCENT, opacity: 0 },
     stagger: 0.06, duration: 0.45, ease: 'power3.out',
   },
   'rows-fade': {
-    id: 'rows-fade', label: 'Rows fade',
+    id: 'rows-fade', labelKey: 'runtime.rowAnim.rowsFade',
     from: { opacity: 0 },
     stagger: 0.05, duration: 0.4, ease: 'power1.out',
   },
   'rows-slide': {
-    id: 'rows-slide', label: 'Rows slide in',
+    id: 'rows-slide', labelKey: 'runtime.rowAnim.rowsSlide',
     from: { xPercent: -20, opacity: 0 },
     stagger: 0.05, duration: 0.5, ease: 'power3.out',
   },

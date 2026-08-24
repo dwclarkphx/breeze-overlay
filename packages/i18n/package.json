@@ -1,0 +1,42 @@
+{
+  "name": "@breeze/i18n",
+  "version": "0.68.0",
+  "private": true,
+  "license": "MPL-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.js"
+    },
+    "./locales/*.json": "./locales/*.json"
+  },
+  "//exports-locales": "The editor imports en.json statically as its fallback layer and code-splits the rest, so the catalogues have to be reachable as a subpath. The server does not use this — it reads the same directory from disk, because it needs to enumerate what shipped rather than name one file.",
+  "files": ["dist", "locales"],
+  "//files": "Inert here — every workspace package is private and consumed through pnpm symlinks, so nothing is ever packed. Kept for shape consistency with @breeze/schema only. What actually decides whether locales/ reaches production is the Dockerfile's runtime stage, which copies per directory: @breeze/i18n needs a COPY line for locales as well as one for dist, and missing it fails silently because the English merge layer hides it.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "//react": "React is a peer, not a dependency: the server and the esbuild client bundles import @breeze/i18n and must not pull React in behind them. Only the editor imports @breeze/i18n/react.",
+  "peerDependencies": {
+    "react": "^19.2.8"
+  },
+  "peerDependenciesMeta": {
+    "react": { "optional": true }
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18",
+    "react": "^19.2.8",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}

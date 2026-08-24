@@ -34,11 +34,14 @@ describe('the preset gallery', () => {
     );
   });
 
-  it('gives every preset a usable default duration and a label', () => {
+  it('gives every preset a usable default duration and a catalogue key', () => {
     for (const preset of TEXT_ANIM_PRESETS) {
       expect(preset.duration, preset.id).toBeGreaterThan(0);
       expect(preset.stagger, preset.id).toBeGreaterThanOrEqual(0);
-      expect(preset.label.length, preset.id).toBeGreaterThan(0);
+      // A key, not text: the editor's gallery translates it. Asserting the
+      // shape rather than the length is what makes a stray English label fail
+      // here rather than in `i18n:check` two packages away.
+      expect(preset.labelKey, preset.id).toMatch(/^runtime\.textAnim\.[A-Za-z]+$/);
     }
   });
 

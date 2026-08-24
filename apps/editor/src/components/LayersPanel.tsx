@@ -16,10 +16,13 @@
 import { useRef, useState, type JSX } from 'react';
 import type { Layer, LayerType } from '@breeze/schema';
 
+import { useT } from '@breeze/i18n/react';
+
 import { useEditor } from '../state/store.js';
 import { LayerThumb } from './LayerThumb.js';
 
 export function LayersPanel(): JSX.Element {
+  const t = useT();
   const composition = useEditor((s) => s.composition);
   const selected = useEditor((s) => s.selectedLayerIds);
   const selectLayers = useEditor((s) => s.selectLayers);
@@ -71,13 +74,13 @@ export function LayersPanel(): JSX.Element {
     <div key={layer.id}>
       <div
         className={`layer-row${selected.includes(layer.id) ? ' selected' : ''}`}
-        style={{ paddingLeft: 8 + depth * 14 }}
+        style={{ paddingInlineStart: 8 + depth * 14 }}
         onClick={(e) => (e.shiftKey || e.ctrlKey ? toggleSelection(layer.id) : selectLayers([layer.id]))}
         onDoubleClick={() => setRenaming(layer.id)}
       >
         <button
           className="layer-icon-btn"
-          title={layer.visible === false ? 'Show' : 'Hide'}
+          title={layer.visible === false ? t('editor.layers.show') : t('editor.layers.hide')}
           onClick={(e) => {
             e.stopPropagation();
             run({ kind: 'patchLayer', layerId: layer.id, patch: { visible: layer.visible === false } });
@@ -87,7 +90,7 @@ export function LayersPanel(): JSX.Element {
         </button>
         <button
           className="layer-icon-btn"
-          title={layer.locked ? 'Unlock' : 'Lock'}
+          title={layer.locked ? t('editor.layers.unlock') : t('editor.layers.lock')}
           onClick={(e) => {
             e.stopPropagation();
             run({ kind: 'patchLayer', layerId: layer.id, patch: { locked: !layer.locked } });
@@ -128,13 +131,15 @@ export function LayersPanel(): JSX.Element {
           panel.
         */}
         {layer.cell !== undefined && layer.cell !== '' && (
-          <span className="layer-cell-key" title={`Column: ${layer.cell}`}>{layer.cell}</span>
+          <span className="layer-cell-key" title={t('editor.layers.columnCell', { cell: layer.cell })}>
+            {layer.cell}
+          </span>
         )}
 
         {(depth === 0 || siblings !== undefined) && (
           <span className="layer-order">
-            <button onClick={(e) => { e.stopPropagation(); move(layer.id, 1, siblings); }} title="Bring forward">▲</button>
-            <button onClick={(e) => { e.stopPropagation(); move(layer.id, -1, siblings); }} title="Send backward">▼</button>
+            <button onClick={(e) => { e.stopPropagation(); move(layer.id, 1, siblings); }} title={t('editor.layers.bringForward')}>▲</button>
+            <button onClick={(e) => { e.stopPropagation(); move(layer.id, -1, siblings); }} title={t('editor.layers.sendBackward')}>▼</button>
           </span>
         )}
       </div>
@@ -155,7 +160,7 @@ export function LayersPanel(): JSX.Element {
       */}
       {layer.type === 'table' && layer.row.cells.length > 0 && (
         <>
-          <div className="layer-subhead" style={{ paddingLeft: 8 + (depth + 1) * 14 }}>
+          <div className="layer-subhead" style={{ paddingInlineStart: 8 + (depth + 1) * 14 }}>
             Row template
           </div>
           {[...layer.row.cells]
@@ -169,7 +174,7 @@ export function LayersPanel(): JSX.Element {
   return (
     <div className="panel layers-panel">
       <div className="panel-header">
-        <span>Layers</span>
+        <span>{t('editor.layers.title')}</span>
         <span className="panel-actions">
           <select
             className="add-layer"
@@ -191,22 +196,22 @@ export function LayersPanel(): JSX.Element {
               addLayer(value as LayerType);
             }}
           >
-            <option value="">+ Add…</option>
-            <option value="text">Text</option>
-            <option value="shape">Shape</option>
-            <option value="image">Image</option>
-            <option value="video">Video</option>
-            <option value="sprite">Sprite sheet</option>
-            <option value="crawl">Crawl</option>
+            <option value="">{t('editor.layers.add')}</option>
+            <option value="text">{t('editor.layers.typeText')}</option>
+            <option value="shape">{t('editor.layers.typeShape')}</option>
+            <option value="image">{t('editor.layers.typeImage')}</option>
+            <option value="video">{t('editor.layers.typeVideo')}</option>
+            <option value="sprite">{t('editor.layers.typeSprite')}</option>
+            <option value="crawl">{t('editor.layers.typeCrawl')}</option>
             {/*
               Import sits in the add menu rather than beside it, because from
               the operator's side "put a PSD in this composition" is a way of
               adding layers — the fact that it goes through a file picker and an
               upload is our problem, not theirs.
             */}
-            <option value="import:psd">From a .psd file…</option>
-            <option value="table">Table</option>
-            <option value="group">Group</option>
+            <option value="import:psd">{t('editor.layers.importPsd')}</option>
+            <option value="table">{t('editor.layers.typeTable')}</option>
+            <option value="group">{t('editor.layers.typeGroup')}</option>
             {/*
               Cell options appear only with a table in context. Offered
               unconditionally they would be the most common way to add a layer
@@ -214,14 +219,16 @@ export function LayersPanel(): JSX.Element {
               and there is no error to explain why.
             */}
             {targetTable && (
-              <optgroup label={`Cell in ${targetTable.name ?? targetTable.id}`}>
-                <option value="cell:text">Text cell</option>
-                <option value="cell:image">Image cell</option>
-                <option value="cell:shape">Shape cell</option>
+              <optgroup
+                label={t('editor.layers.cellIn', { table: targetTable.name ?? targetTable.id })}
+              >
+                <option value="cell:text">{t('editor.layers.cellText')}</option>
+                <option value="cell:image">{t('editor.layers.cellImage')}</option>
+                <option value="cell:shape">{t('editor.layers.cellShape')}</option>
               </optgroup>
             )}
           </select>
-          <button onClick={deleteSelected} disabled={selected.length === 0} title="Delete selected">🗑</button>
+          <button onClick={deleteSelected} disabled={selected.length === 0} title={t('editor.layers.deleteSelected')}>🗑</button>
           {/*
             Kept out of the layout rather than conditionally rendered: a file
             input that unmounts between the click and the dialog closing loses
@@ -247,22 +254,27 @@ export function LayersPanel(): JSX.Element {
       {psdImport && (
         <div className="psd-progress">
           <div className="bar" style={{ width: `${Math.round(psdImport.fraction * 100)}%` }} />
-          <span>{psdImport.label}</span>
+          <span>{t(psdImport.label)}</span>
         </div>
       )}
 
       {psdReport && (
         <div className={`psd-report${psdReport.error ? ' error' : ''}`}>
           <div className="psd-report-head">
-            <strong>{psdReport.error ? 'Import failed' : `Imported ${psdReport.source}`}</strong>
-            <button onClick={dismissPsdReport} title="Dismiss">✕</button>
+            <strong>
+              {psdReport.error
+                ? t('editor.layers.importFailed')
+                : t('editor.layers.imported', { source: psdReport.source })}
+            </strong>
+            <button onClick={dismissPsdReport} title={t('editor.layers.dismiss')}>✕</button>
           </div>
-          {psdReport.error && <p>{psdReport.error}</p>}
+          {psdReport.error && <p>{t(psdReport.error)}</p>}
           {psdReport.documentSize && (
             <p>
-              The file is {psdReport.documentSize.width}×{psdReport.documentSize.height};
-              this stage is not. Layers keep their original positions — resize the stage in
-              Composition settings if you want them to line up.
+              {t('editor.layers.sizeMismatch', {
+                width: psdReport.documentSize.width,
+                height: psdReport.documentSize.height,
+              })}
             </p>
           )}
           {/*
@@ -272,20 +284,20 @@ export function LayersPanel(): JSX.Element {
           */}
           {psdReport.rasterReasons.length > 0 && (
             <>
-              <p>Flattened to images, so they cannot be edited or bound:</p>
+              <p>{t('editor.layers.flattened')}</p>
               <ul>
                 {psdReport.rasterReasons.map((r) => (
-                  <li key={r.name}><strong>{r.name}</strong> — {r.reason}</li>
+                  <li key={r.name}><strong>{r.name}</strong> — {t(r.reason)}</li>
                 ))}
               </ul>
             </>
           )}
           {psdReport.skipped.length > 0 && (
             <>
-              <p>Not imported:</p>
+              <p>{t('editor.layers.notImported')}</p>
               <ul>
                 {psdReport.skipped.map((r) => (
-                  <li key={r.name}><strong>{r.name}</strong> — {r.reason}</li>
+                  <li key={r.name}><strong>{r.name}</strong> — {t(r.reason)}</li>
                 ))}
               </ul>
             </>

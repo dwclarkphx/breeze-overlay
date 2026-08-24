@@ -37,18 +37,27 @@ import {
   type Point,
 } from '../state/stage-math.js';
 
+import { useT } from '@breeze/i18n/react';
+
 const REBUILD_DEBOUNCE_MS = 60;
 
 /** Breathing room between the stage and the edge of the canvas when fitted. */
 const FIT_PADDING_PX = 24;
 
-/** Broadcast title/action safe areas, as fractions of the stage. */
+/**
+ * Broadcast title/action safe areas, as fractions of the stage.
+ *
+ * `id`, not `label`: these are React keys and nothing renders them. Naming a
+ * field `label` says it is display text, which sent `i18n:check` looking for a
+ * translation that would never appear anywhere.
+ */
 const SAFE_AREAS = [
-  { label: 'action safe', inset: 0.035 },
-  { label: 'title safe', inset: 0.1 },
+  { id: 'action-safe', inset: 0.035 },
+  { id: 'title-safe', inset: 0.1 },
 ];
 
 export function StageViewport(): JSX.Element {
+  const t = useT();
   const composition = useEditor((s) => s.composition);
   const project = useEditor((s) => s.project);
   const playhead = useEditor((s) => s.playhead);
@@ -662,20 +671,22 @@ export function StageViewport(): JSX.Element {
   };
 
   if (!composition) {
-    return <div className="stage-empty">No composition loaded</div>;
+    return <div className="stage-empty">{t('editor.stage.empty')}</div>;
   }
 
   return (
     <div className="stage-wrap">
       <div className="stage-toolbar">
-        <button onClick={() => zoomTo(zoom / 1.25)} title="Zoom out">−</button>
+        <button onClick={() => zoomTo(zoom / 1.25)} title={t('editor.stage.zoomOut')}>−</button>
         <span className="zoom-readout" data-fitted={userZoom === null ? '1' : '0'}>
           {Math.round(zoom * 100)}%
         </span>
-        <button onClick={() => zoomTo(zoom * 1.25)} title="Zoom in">+</button>
+        <button onClick={() => zoomTo(zoom * 1.25)} title={t('editor.stage.zoomIn')}>+</button>
         {/* Fit hands the zoom back to the measured canvas, so it keeps tracking
             resizes and rotations until the operator zooms again. */}
-        <button onClick={resetView} title="Fit the stage to the viewport">Fit</button>
+        <button onClick={resetView} title={t('editor.stage.fitTitle')}>
+          {t('editor.stage.fit')}
+        </button>
         <label className="toggle" data-auto-off={guidesFit ? undefined : '1'}>
           <input
             type="checkbox"
@@ -683,21 +694,24 @@ export function StageViewport(): JSX.Element {
             disabled={!guidesFit}
             title={
               !guidesFit
-                ? `Guides are hidden below ${MIN_GUIDE_CANVAS_WIDTH}px of stage width — widen the panel to bring them back`
+                ? t('editor.stage.guidesTooNarrow', { minWidth: MIN_GUIDE_CANVAS_WIDTH })
                 : elementStage
-                  ? 'Safe-area guides and center lines. Off by default here: this stage is an element rather than a full frame, so its safe areas are fractions of the element, not of the raster it will sit on.'
-                  : 'Safe-area guides and center lines'
+                  ? t('editor.stage.guidesHintElement')
+                  : t('editor.stage.guidesHint')
             }
             onChange={(e) => setShowGuides(e.target.checked)}
           />
-          Guides
+          {t('editor.stage.guides')}
         </label>
 
         {selectedLayer && visibility !== 'visible' && (
           <span className="selection-hint" data-state={visibility}>
-            {visibility === 'off-stage'
-              ? `“${selectedLayer.name ?? selectedLayer.id}” is off-stage at this time`
-              : `“${selectedLayer.name ?? selectedLayer.id}” is not shown at this time`}
+            {t(
+              visibility === 'off-stage'
+                ? 'editor.stage.layerOffStage'
+                : 'editor.stage.layerNotShown',
+              { layer: selectedLayer.name ?? selectedLayer.id },
+            )}
           </span>
         )}
 
@@ -706,6 +720,16 @@ export function StageViewport(): JSX.Element {
 
       <div
         className="stage-canvas"
+        /*
+         * Pinned LTR — I18N.md §6.1. The stage is a 1:1 preview of what goes to
+         * air and the graphic does not mirror, so a mirrored preview would be
+         * lying about the output. It is also built on raw `clientX` arithmetic,
+         * pointer capture and react-moveable's coordinate model, which between
+         * them have produced four recorded defects; inverting the sign of every
+         * horizontal delta in there is the most expensive thing this phase could
+         * choose. The toolbar above is chrome and mirrors normally.
+         */
+        dir="ltr"
         ref={setCanvasEl}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -716,10 +740,10 @@ export function StageViewport(): JSX.Element {
         <div
           className="stage-transform"
           style={{
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, // i18n-ignore — CSS transform
             // Divided by zoom so the selection outline stays a constant 2px on
             // screen rather than shrinking with the stage.
-            '--bz-select-width': `${(2 / zoom).toFixed(2)}px`,
+            '--bz-select-width': `${(2 / zoom).toFixed(2)}px`, // i18n-ignore — CSS length
           } as React.CSSProperties}
         >
           {/* Checkerboard: the stage is transparent, and a flat gray backdrop
@@ -735,11 +759,11 @@ export function StageViewport(): JSX.Element {
               className="stage-guides"
               width={composition.stage.width}
               height={composition.stage.height}
-              viewBox={`0 0 ${composition.stage.width} ${composition.stage.height}`}
+              viewBox={`0 0 ${composition.stage.width} ${composition.stage.height}`} // i18n-ignore — SVG viewBox
             >
               {SAFE_AREAS.map((area) => (
                 <rect
-                  key={area.label}
+                  key={area.id}
                   x={composition.stage.width * area.inset}
                   y={composition.stage.height * area.inset}
                   width={composition.stage.width * (1 - area.inset * 2)}

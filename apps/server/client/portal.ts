@@ -40,6 +40,14 @@ interface Status {
   memory: { rss: number; heapUsed: number; systemTotal: number };
 }
 
+import { bootI18n } from './i18n.js';
+
+declare global {
+  interface Window { __BREEZE_PORTAL__?: { locale?: string; messages?: Record<string, string> }; }
+}
+
+const { t } = bootI18n(window.__BREEZE_PORTAL__);
+
 const POLL_MS = 2000;
 
 const el = (id: string) => document.getElementById(id);
@@ -51,10 +59,10 @@ function text(id: string, value: string): void {
 
 /** Bytes to a short human string. Graphics boxes have gigabytes; show one decimal. */
 function bytes(n: number): string {
-  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  if (n < 1024 * 1024) return t('portal.kilobytes', { value: Math.round(n / 1024) });
   const mb = n / (1024 * 1024);
-  if (mb < 1024) return `${Math.round(mb)} MB`;
-  return `${(mb / 1024).toFixed(1)} GB`;
+  if (mb < 1024) return t('portal.megabytes', { value: Math.round(mb) });
+  return t('portal.gigabytes', { value: (mb / 1024).toFixed(1) });
 }
 
 /**
@@ -68,10 +76,10 @@ function duration(seconds: number): string {
   const h = Math.floor((seconds % 86400) / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = seconds % 60;
-  if (d > 0) return `${d}d ${h}h`;
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
+  if (d > 0) return t('portal.uptimeDaysHours', { days: d, hours: h });
+  if (h > 0) return t('portal.uptimeHoursMinutes', { hours: h, minutes: m });
+  if (m > 0) return t('portal.uptimeMinutesSeconds', { minutes: m, seconds: s });
+  return t('portal.uptimeSeconds', { seconds: s });
 }
 
 /**
@@ -83,10 +91,15 @@ function duration(seconds: number): string {
  */
 function badge(renderers: number, controllers: number): string {
   if (renderers > 0) {
-    const src = `${renderers} source${renderers === 1 ? '' : 's'}`;
-    return controllers > 0 ? `${src} · ${controllers} panel${controllers === 1 ? '' : 's'}` : src;
+    const sources = t('portal.sources', { count: renderers });
+    return controllers > 0
+      ? t('portal.sourcesAndPanels', {
+          sources,
+          panels: t('portal.panels', { count: controllers }),
+        })
+      : sources;
   }
-  if (controllers > 0) return `${controllers} panel${controllers === 1 ? '' : 's'}`;
+  if (controllers > 0) return t('portal.panels', { count: controllers });
   return '';
 }
 
@@ -110,10 +123,10 @@ function paint(status: Status): void {
 
   text('stat-controllers', String(controllers));
 
-  text('stat-cpu', `${status.cpu.percent.toFixed(1)}%`);
+  text('stat-cpu', t('portal.percent', { value: status.cpu.percent.toFixed(1) }));
   // The denominator matters: 140% is unremarkable on an 8-core box mid-encode
   // and alarming on a single-core VM, and the number alone cannot say which.
-  text('stat-cpu-sub', `of one core · ${status.cpu.cores} cores`);
+  text('stat-cpu-sub', t('portal.cpuOfOneCore', { cores: status.cpu.cores }));
 
   text('stat-mem', bytes(status.memory.rss));
   text('stat-uptime', duration(status.uptime));

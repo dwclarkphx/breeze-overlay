@@ -34,6 +34,7 @@ function versionOf(relative: string): string {
 /** Kept in step with `scripts/sync-version.mjs` by the last test below. */
 const WORKSPACE_PACKAGES = [
   'packages/schema/package.json',
+  'packages/i18n/package.json',
   'packages/runtime/package.json',
   'apps/server/package.json',
   'apps/editor/package.json',

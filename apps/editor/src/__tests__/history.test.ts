@@ -316,7 +316,10 @@ describe('labels and log', () => {
     const r = pushCommand(base(), emptyHistory, {
       kind: 'addLayer', layer: createShapeLayer({ id: 'x' }),
     });
-    expect(undoLabel(r.history)).toBe('Add shape layer');
+    expect(undoLabel(r.history)).toEqual({
+      key: 'editor.commands.addLayer',
+      params: { type: 'shape' },
+    });
   });
 
   it('exposes a serializable command log', () => {

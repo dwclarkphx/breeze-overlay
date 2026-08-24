@@ -43,17 +43,27 @@ describe('crawl separator presets', () => {
     // around a glyph is what the string itself carries. An unpadded bullet
     // gives "storyone•storytwo".
     for (const preset of CRAWL_SEPARATOR_PRESETS) {
-      expect(preset.value, preset.label).toMatch(/^\s.*\s$|^\s+$/);
+      expect(preset.value, preset.labelKey).toMatch(/^\s.*\s$|^\s+$/);
     }
   });
 
-  it('has unique values and unique labels', () => {
+  it('has unique values and unique label keys', () => {
     // Values are the <option> values and labels are what tells them apart; a
-    // duplicate of either makes one entry unreachable in the picker.
+    // duplicate of either makes one entry unreachable in the picker. The label
+    // is now a catalogue key rather than the text, so a duplicate key would
+    // also make two presets render identically in every language at once.
     const values = CRAWL_SEPARATOR_PRESETS.map((p) => p.value);
-    const labels = CRAWL_SEPARATOR_PRESETS.map((p) => p.label);
+    const labelKeys = CRAWL_SEPARATOR_PRESETS.map((p) => p.labelKey);
     expect(new Set(values).size).toBe(values.length);
-    expect(new Set(labels).size).toBe(labels.length);
+    expect(new Set(labelKeys).size).toBe(labelKeys.length);
+  });
+
+  it('names a catalogue key rather than English', () => {
+    // The rule this phase turns on: @breeze/schema carries identifiers and
+    // values, never display text (I18N.md §2.1).
+    for (const preset of CRAWL_SEPARATOR_PRESETS) {
+      expect(preset.labelKey).toMatch(/^schema\.crawl\.separator\.[a-z]+$/);
+    }
   });
 
   it('has no empty separator', () => {
@@ -61,7 +71,7 @@ describe('crawl separator presets', () => {
     // all. Someone who wants that can type it into Custom; it should not be
     // one click away in a list of suggestions.
     for (const preset of CRAWL_SEPARATOR_PRESETS) {
-      expect(preset.value.length, preset.label).toBeGreaterThan(0);
+      expect(preset.value.length, preset.labelKey).toBeGreaterThan(0);
     }
   });
 });

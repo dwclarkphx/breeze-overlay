@@ -47,6 +47,12 @@ afterAll(async () => {
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
 
+/*
+ * These read the real catalogue through `describeAgent`'s default translator.
+ * The strings below are the English entries for `server.audit.*`, so the test
+ * is a round trip through the catalogue rather than an assertion about a
+ * literal — which is the point: a key renamed out from under it fails here.
+ */
 describe('describeAgent', () => {
   it('squints a User-Agent into something scannable', () => {
     expect(describeAgent(AGENT)).toBe('Chrome on Windows');

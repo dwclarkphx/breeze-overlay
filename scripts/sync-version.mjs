@@ -54,6 +54,7 @@ if (!/^\d+\.\d+\.\d+$/.test(version)) {
 /** Workspace manifests, relative to the repo root. */
 export const WORKSPACE_PACKAGES = [
   'packages/schema/package.json',
+  'packages/i18n/package.json',
   'packages/runtime/package.json',
   'apps/server/package.json',
   'apps/editor/package.json',

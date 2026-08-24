@@ -41,7 +41,10 @@ import {
   type TranscodeJob,
   type ValidationIssue,
 } from '../api/client.js';
+import { msg, type Message } from '@breeze/i18n';
+
 import { applyCommand, findCellOwner, findLayer, type Command } from './commands.js';
+import { detailOf } from './i18n.js';
 import {
   canRedo,
   canUndo,
@@ -193,7 +196,7 @@ export interface EditorState {
   /** Filename → 0..1, present only while uploading. */
   uploads: Record<string, number>;
   /** Last upload failure, shown by the bin until the next attempt. */
-  uploadError: string | null;
+  uploadError: Message | null;
   /**
    * A drop held at the door because some of its filenames are already in the
    * bin, waiting on the operator to say replace or keep both.
@@ -262,7 +265,7 @@ export interface EditorState {
   selectKeyframes: (refs: KeyframeRef[]) => void;
   addLayer: (type: LayerType) => void;
   /** Progress while a PSD is being parsed and its layers uploaded, or null. */
-  psdImport: { fraction: number; label: string } | null;
+  psdImport: { fraction: number; label: Message } | null;
   /**
    * What the last import did that the operator would not otherwise see.
    *
@@ -272,10 +275,10 @@ export interface EditorState {
    */
   psdReport: {
     source: string;
-    rasterReasons: Array<{ name: string; reason: string }>;
-    skipped: Array<{ name: string; reason: string }>;
+    rasterReasons: Array<{ name: string; reason: Message }>;
+    skipped: Array<{ name: string; reason: Message }>;
     documentSize?: { width: number; height: number };
-    error?: string;
+    error?: Message;
   } | null;
   importPsdFile: (file: File) => Promise<void>;
   dismissPsdReport: () => void;
@@ -371,8 +374,8 @@ export interface EditorState {
   /* derived */
   canUndo: () => boolean;
   canRedo: () => boolean;
-  undoLabel: () => string | null;
-  redoLabel: () => string | null;
+  undoLabel: () => Message | null;
+  redoLabel: () => Message | null;
   activeLayer: () => Layer | null;
   /**
    * The table owning the current selection, when a cell is selected.
@@ -450,7 +453,10 @@ async function runUploads(
       // one rejected file would leave the operator re-picking the four that
       // were fine, in a hurry, before a show.
       set({
-        uploadError: `${file.name}: ${error instanceof Error ? error.message : String(error)}`,
+        uploadError: msg('editor.upload.fileFailed', {
+          file: file.name,
+          detail: error instanceof Error ? error.message : String(error),
+        }),
       });
     } finally {
       const { [file.name]: _done, ...rest } = get().uploads;
@@ -620,7 +626,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     try {
       await api.deleteAsset(projectId, assetId);
     } catch (error) {
-      set({ uploadError: error instanceof Error ? error.message : String(error) });
+      set({ uploadError: detailOf(error) });
     }
     await get().refreshAssets();
   },
@@ -656,7 +662,7 @@ export const useEditor = create<EditorState>((set, get) => ({
         assetTags: [...new Set([...get().assetTags, ...(saved.tags ?? [])])].sort(),
       });
     } catch (error) {
-      set({ uploadError: error instanceof Error ? error.message : String(error) });
+      set({ uploadError: detailOf(error) });
       // Re-read rather than trying to invert the optimistic edit: the server is
       // the only thing that knows what actually landed.
       await get().refreshAssets();
@@ -677,7 +683,7 @@ export const useEditor = create<EditorState>((set, get) => ({
         ].sort(),
       });
     } catch (error) {
-      set({ uploadError: error instanceof Error ? error.message : String(error) });
+      set({ uploadError: detailOf(error) });
       await get().refreshAssets();
     }
   },
@@ -753,6 +759,10 @@ export const useEditor = create<EditorState>((set, get) => ({
           available: false,
           version: null,
           vp9Alpha: false,
+          // Shares a field with server-provided text, which stays English under
+          // I18N.md §1.2; translating only the client fallback would make one
+          // field switch language by code path.
+          // i18n-ignore-next-line
           reason: 'This server does not support transcoding.',
         },
       });
@@ -766,7 +776,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       await api.transcodeAsset(projectId, assetId);
       await get().refreshTranscodes();
     } catch (error) {
-      set({ uploadError: error instanceof Error ? error.message : String(error) });
+      set({ uploadError: detailOf(error) });
     }
   },
 
@@ -999,7 +1009,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     const { projectId, composition } = get();
     if (!projectId || !composition) return;
 
-    set({ psdImport: { fraction: 0, label: 'Starting…' } });
+    set({ psdImport: { fraction: 0, label: msg('editor.psd.starting') } });
     try {
       const { importPsd } = await import('./psd-file.js');
       const result = await importPsd(projectId, file, (p) => set({ psdImport: p }));
@@ -1033,7 +1043,7 @@ export const useEditor = create<EditorState>((set, get) => ({
           source: file.name,
           rasterReasons: [],
           skipped: [],
-          error: err instanceof Error ? err.message : String(err),
+          error: detailOf(err),
         },
       });
     }

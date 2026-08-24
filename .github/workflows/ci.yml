@@ -49,6 +49,9 @@ jobs:
       - name: License headers
         run: pnpm license:check
 
+      - name: i18n catalogue
+        run: pnpm i18n:check
+
       # Attribution for what a user receives, generated from the installed
       # production tree. Runs before the build for the same reason as the two
       # checks above — it needs only the install, and a dependency added

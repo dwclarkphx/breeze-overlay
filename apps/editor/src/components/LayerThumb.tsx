@@ -14,6 +14,8 @@
  */
 
 import { useEffect, useRef, useState, type JSX } from 'react';
+
+import { useT, type Translate } from '@breeze/i18n/react';
 import type { Layer } from '@breeze/schema';
 
 import { layerThumb, TYPE_GLYPH, type LayerThumb as Thumb } from '../state/layer-thumb.js';
@@ -86,7 +88,17 @@ function VideoThumb({ src, size }: { src: string; size: number }): JSX.Element {
   return <img className="layer-thumb" src={poster} alt="" width={size} height={size} />;
 }
 
-function render(thumb: Thumb, size: number, assetBase: string | undefined): JSX.Element {
+/**
+ * `t` is a parameter rather than a hook because `render` is a plain function
+ * that recurses into itself for stacked thumbs — making it a component to reach
+ * `useT()` would remount every nested thumbnail on each render.
+ */
+function render(
+  thumb: Thumb,
+  size: number,
+  assetBase: string | undefined,
+  t: Translate,
+): JSX.Element {
   switch (thumb.kind) {
     case 'image':
       return (
@@ -124,7 +136,7 @@ function render(thumb: Thumb, size: number, assetBase: string | undefined): JSX.
             width: size,
             height: size,
             backgroundImage: `url("${resolve(thumb.src, assetBase)}")`,
-            backgroundSize: `${thumb.cols * 100}% ${thumb.rows * 100}%`,
+            backgroundSize: `${thumb.cols * 100}% ${thumb.rows * 100}%`, // i18n-ignore — CSS value
             backgroundPosition: '0% 0%',
             backgroundRepeat: 'no-repeat',
           }}
@@ -139,7 +151,7 @@ function render(thumb: Thumb, size: number, assetBase: string | undefined): JSX.
             background: thumb.fill,
             borderRadius: thumb.ellipse ? '50%' : `${thumb.radius}%`,
             ...(thumb.stroke
-              ? { boxShadow: `inset 0 0 0 ${Math.min(3, thumb.stroke.width)}px ${thumb.stroke.color}` }
+              ? { boxShadow: `inset 0 0 0 ${Math.min(3, thumb.stroke.width)}px ${thumb.stroke.color}` } // i18n-ignore — CSS value
               : {}),
           }}
         />
@@ -162,7 +174,7 @@ function render(thumb: Thumb, size: number, assetBase: string | undefined): JSX.
 
     case 'table':
       return (
-        <span className="layer-thumb table-thumb" title={`${thumb.rows} rows`}>
+        <span className="layer-thumb table-thumb" title={t('editor.thumb.rows', { count: thumb.rows })}>
           {thumb.columns.length
             ? thumb.columns.slice(0, 3).map((c, i) => <i key={i}>{c.slice(0, 2)}</i>)
             : <i>▦</i>}
@@ -171,10 +183,17 @@ function render(thumb: Thumb, size: number, assetBase: string | undefined): JSX.
 
     case 'stack':
       return (
-        <span className="layer-thumb stack" title={`${thumb.count} layers`}>
+        <span className="layer-thumb stack" title={t('editor.thumb.layers', { count: thumb.count })}>
           {thumb.children.map((child, i) => (
-            <span key={i} className="stack-item" style={{ left: i * 3, top: i * 3 }}>
-              {render(child, size - 6, assetBase)}
+            <span
+              key={i}
+              className="stack-item"
+              // A thumbnail is a miniature of the graphic, and the graphic does
+              // not mirror (I18N.md §6.1).
+              // dir-ok
+              style={{ left: i * 3, top: i * 3 }}
+            >
+              {render(child, size - 6, assetBase, t)}
             </span>
           ))}
           {thumb.children.length === 0 && <i>{TYPE_GLYPH.group}</i>}
@@ -187,5 +206,6 @@ function render(thumb: Thumb, size: number, assetBase: string | undefined): JSX.
 }
 
 export function LayerThumb({ layer, assetBase, size = 22 }: LayerThumbProps): JSX.Element {
-  return render(layerThumb(layer), size, assetBase);
+  const t = useT();
+  return render(layerThumb(layer), size, assetBase, t);
 }

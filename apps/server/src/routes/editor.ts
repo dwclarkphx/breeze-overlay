@@ -20,6 +20,7 @@ import path from 'node:path';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 
 import { config } from '../config.js';
+import { fail } from '../errors.js';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -78,7 +79,7 @@ export async function registerEditorRoutes(app: FastifyInstance): Promise<void> 
 
     if (!resolved.startsWith(config.editorDir + path.sep)) {
       reply.code(403);
-      return { error: 'forbidden' };
+      return fail('error.forbidden');
     }
 
     const data = await sendFile(reply, resolved);

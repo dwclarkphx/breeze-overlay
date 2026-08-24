@@ -17,6 +17,8 @@
 // still emits it as a plain IIFE for the page.
 export {};
 
+import { bootI18n } from './i18n.js';
+
 interface Binding {
   name: string;
   kind: string;
@@ -43,9 +45,14 @@ declare global {
       datasets: Record<string, DatasetValue & { fetchedAt?: string }>;
       /** Independently triggered elements, when this composition is a scene. */
       elements?: Array<{ layerId: string; name: string; ref: string; channel: string }>;
+      /** The installation's locale, and this panel's slice of the catalogue. */
+      locale?: string;
+      messages?: Record<string, string>;
     };
   }
 }
+
+const { t, locale } = bootI18n(window.__BREEZE_CONTROL__);
 
 interface DatasetValue {
   columns: Array<{ key: string; label?: string; type: string }>;
@@ -91,7 +98,7 @@ function makeDatasetGrid(
   actions.className = 'grid-actions';
   const addBtn = document.createElement('button');
   addBtn.type = 'button';
-  addBtn.textContent = '+ Row';
+  addBtn.textContent = t('control.addRow');
   actions.appendChild(addBtn);
   wrap.appendChild(actions);
 
@@ -143,7 +150,7 @@ function makeDatasetGrid(
       btn.type = 'button';
       btn.className = 'grid-del';
       btn.textContent = '×';
-      btn.title = 'Remove row';
+      btn.title = t('control.removeRow');
       btn.addEventListener('click', () => {
         rows.splice(index, 1);
         draw();
@@ -202,9 +209,12 @@ interface FedField {
 function shortTime(iso: string | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
+  // The installation's locale, not the browser's. Everything else on this page
+  // follows BREEZE_LOCALE, and a clock that alone followed the tablet it was
+  // opened on would be the one readout that disagreed with the rest.
   return Number.isNaN(d.getTime())
     ? ''
-    : d.toLocaleTimeString(undefined, { hour12: false });
+    : d.toLocaleTimeString(locale, { hour12: false });
 }
 
 /**
@@ -229,10 +239,15 @@ function makeFedField(binding: Binding): FedField {
   title.textContent = binding.label || binding.name;
   const tag = document.createElement('span');
   tag.className = 'fed-tag';
+  // The tag shows the source *type*, a frozen enum value. The fallback shares
+  // the slot with it, so translating only the fallback would make one badge
+  // switch language by code path. No marker: both are lowercase single words,
+  // which the detector already declines to treat as prose — and if either ever
+  // became `Fed` or `Idle`, the ratchet noticing is the right outcome.
   tag.textContent = binding.sourceType ?? 'fed';
   tag.title = binding.sourceName
-    ? `Fed by "${binding.sourceName}" (${binding.source})`
-    : `Fed by ${binding.source}`;
+    ? t('control.fedByNamed', { name: binding.sourceName, id: binding.source })
+    : t('control.fedBy', { id: binding.source });
   const when = document.createElement('span');
   when.className = 'fed-when';
 
@@ -259,7 +274,7 @@ function makeFedField(binding: Binding): FedField {
       // Distinguished deliberately from "no rows": a source that has not
       // answered yet and a source that answered with nothing are different
       // problems, and the operator is the one who has to tell them apart.
-      empty(data ? 'Source returned no rows.' : 'Waiting for the first poll…');
+      empty(t(data ? 'control.noRows' : 'control.awaitingFirstPoll'));
       return;
     }
 
@@ -398,11 +413,17 @@ function wireSceneElements(boot: NonNullable<Window['__BREEZE_CONTROL__']>, key:
 
         const playback = message.state.playback;
         if (message.state.renderers === 0) {
-          stateEl.textContent = 'no output';
+          stateEl.textContent = t('control.noOutput');
           return;
         }
+        // `playback.state` is a frozen enum and so is the `idle` it falls back
+        // to — see the fed tag above for why the pair stays together.
         stateEl.textContent = playback
-          ? `${playback.state} · step ${playback.step}/${playback.stepCount}`
+          ? t('control.playbackStep', {
+              state: playback.state,
+              step: playback.step,
+              stepCount: playback.stepCount,
+            })
           : 'idle';
       });
 
@@ -519,7 +540,7 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
 
   function setStatus(text: string, cls: '' | 'live' | 'off') {
     status.textContent = text;
-    dot.className = `dot ${cls}`;
+    dot.className = `dot ${cls}`;  // i18n-ignore — className
   }
 
   function connect(): void {
@@ -572,9 +593,9 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
       | undefined;
 
     if (state.renderers > 0) {
-      setStatus(`${state.renderers} output${state.renderers > 1 ? 's' : ''} connected`, 'live');
+      setStatus(t('control.outputsConnected', { count: state.renderers }), 'live');
     } else {
-      setStatus('no output connected', 'off');
+      setStatus(t('control.noOutputConnected'), 'off');
     }
 
     playbackEl.textContent = playback?.state ?? 'idle';
@@ -656,6 +677,7 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
           // Row cap: the panel shows a feed, not the whole of one. A 5000-row
           // sheet would otherwise be fetched and laid out every 15 seconds on
           // a tablet.
+          // i18n-ignore-next-line — an API path, frozen per I18N.md §2
           const url = `/api/projects/${encodeURIComponent(boot.projectId)}/datasources/${encodeURIComponent(sourceId)}?rows=50${key ? `&key=${encodeURIComponent(key)}` : ''}`;
           const res = await fetch(url);
           if (!res.ok) continue;

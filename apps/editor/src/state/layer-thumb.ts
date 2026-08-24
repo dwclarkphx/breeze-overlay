@@ -50,11 +50,11 @@ export function fillToCss(fill: Fill | undefined, fallback = 'transparent'): str
   if (typeof fill === 'string') return fill;
   const stops = [...fill.stops]
     .sort((a, b) => a.pos - b.pos)
-    .map((s) => `${s.color} ${(s.pos * 100).toFixed(1)}%`)
+    .map((s) => `${s.color} ${(s.pos * 100).toFixed(1)}%`) // i18n-ignore — CSS gradient stop
     .join(', ');
   return fill.type === 'radial'
-    ? `radial-gradient(circle at 50% 50%, ${stops})`
-    : `linear-gradient(${fill.angle ?? 180}deg, ${stops})`;
+    ? `radial-gradient(circle at 50% 50%, ${stops})` // i18n-ignore — CSS value
+    : `linear-gradient(${fill.angle ?? 180}deg, ${stops})`; // i18n-ignore — CSS value
 }
 
 /** How many children a stacked thumbnail samples. Three reads; six is noise. */
@@ -130,7 +130,7 @@ export function layerThumb(layer: Layer): LayerThumb {
 
     default: {
       const exhaustive: never = layer;
-      throw new Error(`unknown layer type ${JSON.stringify(exhaustive)}`);
+      throw new Error(`unknown layer type ${JSON.stringify(exhaustive)}`); // i18n-ignore — exhaustiveness guard, never reaches a user
     }
   }
 }

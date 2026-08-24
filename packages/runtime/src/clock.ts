@@ -60,12 +60,13 @@ interface ClockParts {
  */
 const numericCache = new Map<string, Intl.DateTimeFormat>();
 const nameCache = new Map<string, Intl.DateTimeFormat>();
+const shortCache = new Map<string, Intl.DateTimeFormat>();
 
-function numericFormatter(timeZone: string | undefined): Intl.DateTimeFormat {
-  const key = timeZone ?? '';
+function numericFormatter(locale: string, timeZone: string | undefined): Intl.DateTimeFormat {
+  const key = `${locale}\u0000${timeZone ?? ''}`;
   let f = numericCache.get(key);
   if (!f) {
-    f = new Intl.DateTimeFormat('en-US', {
+    f = new Intl.DateTimeFormat(locale, {
       ...(timeZone ? { timeZone } : {}),
       hour12: true,
       hour: 'numeric',
@@ -80,11 +81,11 @@ function numericFormatter(timeZone: string | undefined): Intl.DateTimeFormat {
   return f;
 }
 
-function nameFormatter(timeZone: string | undefined): Intl.DateTimeFormat {
-  const key = timeZone ?? '';
+function nameFormatter(locale: string, timeZone: string | undefined): Intl.DateTimeFormat {
+  const key = `${locale}\u0000${timeZone ?? ''}`;
   let f = nameCache.get(key);
   if (!f) {
-    f = new Intl.DateTimeFormat('en-US', {
+    f = new Intl.DateTimeFormat(locale, {
       ...(timeZone ? { timeZone } : {}),
       hour12: false,
       hour: '2-digit',
@@ -96,12 +97,39 @@ function nameFormatter(timeZone: string | undefined): Intl.DateTimeFormat {
   return f;
 }
 
-function partsOf(date: Date, timeZone: string | undefined): ClockParts {
+/**
+ * The abbreviated weekday and month, asked for rather than derived.
+ *
+ * `ddd` and `MMM` used to be the long name sliced to three characters, which
+ * is an English rule wearing a general disguise: it happens to give `Mon` and
+ * `Aug`, and it gives German `Mon` where the abbreviation is `Mo`, Japanese
+ * `月曜日` where nothing was abbreviated at all, and Arabic `الا`. Invisible
+ * while the formatter was pinned to `en-US`; wrong the moment a graphic could
+ * choose its own language. `Intl` already knows every one of these.
+ */
+function shortFormatter(locale: string, timeZone: string | undefined): Intl.DateTimeFormat {
+  const key = `${locale}\u0000${timeZone ?? ''}`;
+  let f = shortCache.get(key);
+  if (!f) {
+    f = new Intl.DateTimeFormat(locale, {
+      ...(timeZone ? { timeZone } : {}),
+      weekday: 'short',
+      month: 'short',
+    });
+    shortCache.set(key, f);
+  }
+  return f;
+}
+
+function partsOf(date: Date, locale: string, timeZone: string | undefined): ClockParts {
   const numeric = new Map<string, string>();
-  for (const p of numericFormatter(timeZone).formatToParts(date)) numeric.set(p.type, p.value);
+  for (const p of numericFormatter(locale, timeZone).formatToParts(date)) numeric.set(p.type, p.value);
 
   const named = new Map<string, string>();
-  for (const p of nameFormatter(timeZone).formatToParts(date)) named.set(p.type, p.value);
+  for (const p of nameFormatter(locale, timeZone).formatToParts(date)) named.set(p.type, p.value);
+
+  const short = new Map<string, string>();
+  for (const p of shortFormatter(locale, timeZone).formatToParts(date)) short.set(p.type, p.value);
 
   const h12 = numeric.get('hour') ?? '12';
   /*
@@ -121,9 +149,9 @@ function partsOf(date: Date, timeZone: string | undefined): ClockParts {
     A: (numeric.get('dayPeriod') ?? 'AM').toUpperCase().replace(/\./g, ''),
     D: numeric.get('day') ?? '1',
     M: numeric.get('month') ?? '1',
-    MMM: monthLong.slice(0, 3),
+    MMM: short.get('month') ?? monthLong.slice(0, 3),
     MMMM: monthLong,
-    ddd: (named.get('weekday') ?? '').slice(0, 3),
+    ddd: short.get('weekday') ?? (named.get('weekday') ?? '').slice(0, 3),
     dddd: named.get('weekday') ?? '',
     YYYY: numeric.get('year') ?? '',
   };
@@ -159,7 +187,13 @@ const EXPANDERS: Record<ClockToken, (p: ClockParts) => string> = {
  * `[Day] D` is the only way to get a capital D on screen next to a day number.
  */
 export function formatClock(date: Date, clock: TextClock): string {
-  const parts = partsOf(date, clock.timezone);
+  /*
+   * `en-US` when the graphic does not say otherwise, which is what every clock
+   * rendered before `locale` existed. Deliberately *not* the server's
+   * BREEZE_LOCALE — see TextClock.locale and I18N.md §5.3: the language on air
+   * belongs to the graphic, not to whoever is looking at the editor.
+   */
+  const parts = partsOf(date, clock.locale ?? 'en-US', clock.timezone);
   const format = clock.format;
   let out = '';
   let i = 0;

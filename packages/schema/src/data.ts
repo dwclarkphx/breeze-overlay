@@ -678,7 +678,26 @@ export type WeatherProvider = (typeof WEATHER_PROVIDERS)[number];
 
 export interface WeatherProviderInfo {
   id: WeatherProvider;
-  label: string;
+  /**
+   * Catalogue key for the picker label, not the label itself.
+   *
+   * `@breeze/schema` carries identifiers and values; it does not carry English
+   * (I18N.md §2.1). The key is a literal here rather than derived from `id` so
+   * that `i18n:check` can find it by reading the source, and so a typo fails as
+   * an orphan-key error instead of rendering the key on screen.
+   */
+  labelKey: string;
+  /**
+   * Catalogue key for the provider's bare name — "NWS", not
+   * "NWS — api.weather.gov".
+   *
+   * Exists because the panel used to derive it by splitting `label` on an em
+   * dash. That works in English and nowhere else: a translator may use a
+   * different dash, may not use one at all, or may put the qualifier first, and
+   * the split would then quietly render half a sentence. Two keys is the fix;
+   * string surgery on display text never is.
+   */
+  shortNameKey: string;
   /** Where the data may be used. `non-commercial` gates the editor. */
   commercialUse: 'yes' | 'non-commercial-only';
   /** Credit line the license obliges, or null where none is required. */
@@ -688,8 +707,8 @@ export interface WeatherProviderInfo {
   licenseUrl: string;
   /** Poll floor in seconds — see the note on WEATHER_POLL_FLOOR below. */
   pollFloor: number;
-  /** Rough coverage, for the picker. */
-  coverage: string;
+  /** Catalogue key for the coverage note shown under the picker. */
+  coverageKey: string;
   /** True when the def must carry a `baseUrl`. */
   needsBaseUrl: boolean;
   /**
@@ -727,7 +746,8 @@ export interface WeatherProviderInfo {
 export const WEATHER_PROVIDER_INFO: Record<WeatherProvider, WeatherProviderInfo> = {
   nws: {
     id: 'nws',
-    label: 'NWS — api.weather.gov',
+    labelKey: 'schema.weather.provider.nws.label',
+    shortNameKey: 'schema.weather.provider.nws.shortName',
     commercialUse: 'yes',
     // A work of the US federal government: public domain, no credit obliged.
     // Crediting anyway is good practice, which is why the adapter still fills
@@ -736,27 +756,29 @@ export const WEATHER_PROVIDER_INFO: Record<WeatherProvider, WeatherProviderInfo>
     attributionUrl: null,
     licenseUrl: 'https://www.weather.gov/disclaimer',
     pollFloor: 300,
-    coverage: 'United States and territories only',
+    coverageKey: 'schema.weather.provider.nws.coverage',
     needsBaseUrl: false,
     needsContact: true,
     supportsModelSelection: false,
   },
   'open-meteo': {
     id: 'open-meteo',
-    label: 'Open-Meteo — hosted (non-commercial)',
+    labelKey: 'schema.weather.provider.open-meteo.label',
+    shortNameKey: 'schema.weather.provider.open-meteo.shortName',
     commercialUse: 'non-commercial-only',
     attribution: 'Weather data by Open-Meteo.com',
     attributionUrl: 'https://open-meteo.com/',
     licenseUrl: 'https://open-meteo.com/en/licence',
     pollFloor: 900,
-    coverage: 'Worldwide',
+    coverageKey: 'schema.weather.provider.open-meteo.coverage',
     needsBaseUrl: false,
     needsContact: false,
     supportsModelSelection: true,
   },
   'open-meteo-self': {
     id: 'open-meteo-self',
-    label: 'Open-Meteo — self-hosted',
+    labelKey: 'schema.weather.provider.open-meteo-self.label',
+    shortNameKey: 'schema.weather.provider.open-meteo-self.shortName',
     // The non-commercial term binds the *hosted service*, not the data: the
     // data stays CC BY 4.0, which permits commercial use with credit. Running
     // your own instance therefore removes the commercial restriction but not
@@ -766,7 +788,7 @@ export const WEATHER_PROVIDER_INFO: Record<WeatherProvider, WeatherProviderInfo>
     attributionUrl: 'https://open-meteo.com/',
     licenseUrl: 'https://open-meteo.com/en/licence',
     pollFloor: 60,
-    coverage: 'Worldwide',
+    coverageKey: 'schema.weather.provider.open-meteo-self.coverage',
     needsBaseUrl: true,
     needsContact: false,
     supportsModelSelection: true,
@@ -778,7 +800,8 @@ export const WEATHER_PROVIDER_INFO: Record<WeatherProvider, WeatherProviderInfo>
    */
   'met-norway': {
     id: 'met-norway',
-    label: 'MET Norway — Locationforecast',
+    labelKey: 'schema.weather.provider.met-norway.label',
+    shortNameKey: 'schema.weather.provider.met-norway.shortName',
     // NLOD 2.0 + CC BY 4.0. Commercial use is permitted with credit; what is
     // *not* permitted is passing your service off as Yr, NRK or MET Norway, so
     // the credit line names them as the source rather than as a partner.
@@ -794,7 +817,7 @@ export const WEATHER_PROVIDER_INFO: Record<WeatherProvider, WeatherProviderInfo>
      * hourly at best.
      */
     pollFloor: 900,
-    coverage: 'Worldwide; sharpest in the Nordics and Arctic',
+    coverageKey: 'schema.weather.provider.met-norway.coverage',
     needsBaseUrl: false,
     // "If we cannot contact you in case of problems, you risk being blocked
     // without warning" — their terms, near enough verbatim.
@@ -803,7 +826,8 @@ export const WEATHER_PROVIDER_INFO: Record<WeatherProvider, WeatherProviderInfo>
   },
   brightsky: {
     id: 'brightsky',
-    label: 'Bright Sky — DWD (Germany)',
+    labelKey: 'schema.weather.provider.brightsky.label',
+    shortNameKey: 'schema.weather.provider.brightsky.shortName',
     /*
      * Bright Sky itself is "free-to-use for all purposes"; the data underneath
      * is DWD open data, whose terms permit commercial use with a source
@@ -816,7 +840,7 @@ export const WEATHER_PROVIDER_INFO: Record<WeatherProvider, WeatherProviderInfo>
     // No published limit and no key. 900s is politeness towards a service one
     // person runs and funds — MOSMIX updates hourly, so nothing is lost.
     pollFloor: 900,
-    coverage: 'Germany and immediate surroundings only',
+    coverageKey: 'schema.weather.provider.brightsky.coverage',
     needsBaseUrl: false,
     needsContact: false,
     supportsModelSelection: false,

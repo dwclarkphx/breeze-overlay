@@ -25,6 +25,7 @@ import { marked } from 'marked';
 import type { FastifyInstance } from 'fastify';
 
 import { REPO_ROOT } from '../config.js';
+import { fail } from '../errors.js';
 import { docsPage } from '../pages.js';
 
 const DOCS_DIR = path.join(REPO_ROOT, 'docs');
@@ -158,7 +159,7 @@ export async function registerDocsRoutes(app: FastifyInstance): Promise<void> {
     const resolved = path.resolve(imagesDir, req.params['*']);
     if (!resolved.startsWith(imagesDir + path.sep)) {
       reply.code(403);
-      return { error: 'forbidden' };
+      return fail('error.forbidden');
     }
 
     const type = IMAGE_MIME[path.extname(resolved).toLowerCase()];

@@ -24,6 +24,8 @@ import type { Layer } from '@breeze/schema';
 
 import { api } from '../api/client.js';
 import { planPsdImport, type PsdPlan } from './psd-import.js';
+import { msg, type Message } from '@breeze/i18n';
+import { LocalizedError } from './i18n.js';
 
 export interface PsdImportResult {
   layers: Layer[];
@@ -36,7 +38,8 @@ export interface PsdImportResult {
 export interface PsdImportProgress {
   /** 0..1 across the whole import, upload included. */
   fraction: number;
-  label: string;
+  /** Translated where it is rendered, not here — this module has no locale. */
+  label: Message;
 }
 
 /** A canvas to a PNG blob. */
@@ -44,7 +47,15 @@ function toBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);
-      else reject(new Error('the browser could not encode that layer as a PNG'));
+      else {
+        reject(
+          new LocalizedError(
+            msg('editor.psd.encodeFailed'),
+            // i18n-ignore-next-line — English for the stack trace; the Message above is shown
+            'the browser could not encode that layer as a PNG',
+          ),
+        );
+      }
     }, 'image/png');
   });
 }
@@ -62,10 +73,10 @@ export async function importPsd(
   file: File,
   onProgress?: (p: PsdImportProgress) => void,
 ): Promise<PsdImportResult> {
-  onProgress?.({ fraction: 0, label: 'Reading the file…' });
+  onProgress?.({ fraction: 0, label: msg('editor.psd.reading') });
   const buffer = await file.arrayBuffer();
 
-  onProgress?.({ fraction: 0.05, label: 'Parsing…' });
+  onProgress?.({ fraction: 0.05, label: msg('editor.psd.parsing') });
   const { readPsd } = await import('ag-psd');
 
   /*
@@ -86,7 +97,9 @@ export async function importPsd(
   const plan = planPsdImport(psd as never, { nameHint: hint || 'psd' });
 
   if (plan.layers.length === 0) {
-    throw new Error(
+    throw new LocalizedError(
+      msg('editor.psd.nothingImportable'),
+      // i18n-ignore-next-line — English for the stack trace; the Message above is shown
       'nothing importable in that PSD — every layer was empty, a clipping mask, or had no pixels.',
     );
   }
@@ -110,7 +123,10 @@ export async function importPsd(
   const total = plan.rasters.length;
   for (const [i, raster] of plan.rasters.entries()) {
     const base = 0.1 + (i / Math.max(1, total)) * 0.9;
-    onProgress?.({ fraction: base, label: `Uploading ${i + 1} of ${total}…` });
+    onProgress?.({
+      fraction: base,
+      label: msg('editor.psd.uploading', { done: i + 1, total }),
+    });
 
     const blob = await toBlob(raster.canvas as HTMLCanvasElement);
     const asset = await api.uploadAsset(
@@ -119,7 +135,7 @@ export async function importPsd(
       (p: number) =>
         onProgress?.({
           fraction: base + (p / Math.max(1, total)) * 0.9,
-          label: `Uploading ${i + 1} of ${total}…`,
+          label: msg('editor.psd.uploading', { done: i + 1, total }),
         }),
     );
 
@@ -127,7 +143,7 @@ export async function importPsd(
     if (target && 'src' in target) (target as { src: string }).src = asset.asset.path;
   }
 
-  onProgress?.({ fraction: 1, label: 'Done' });
+  onProgress?.({ fraction: 1, label: msg('editor.psd.done') });
 
   return {
     layers: plan.layers,

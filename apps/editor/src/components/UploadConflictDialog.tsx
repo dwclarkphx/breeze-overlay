@@ -42,27 +42,15 @@
 
 import { useEffect, useMemo, useState, type JSX } from 'react';
 import { assetLabel, type AssetRef } from '@breeze/schema';
+import { useI18n, useRichT, useT } from '@breeze/i18n/react';
 
+import { formatBytes, formatDate } from '../state/format.js';
 import { useEditor } from '../state/store.js';
 
-/** Bytes as something read at a glance — the same rounding the bin uses. */
-function formatBytes(bytes: number | undefined): string {
-  if (bytes === undefined) return '';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
-
-/** `2026-08-07T…` → `7 Aug 2026`, for the "added" line under an existing file. */
-function formatAdded(iso: string | undefined): string {
-  if (!iso) return 'date unknown';
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return 'date unknown';
-  return at.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
 export function UploadConflictDialog(): JSX.Element | null {
+  const t = useT();
+  const rt = useRichT();
+  const { locale } = useI18n();
   const pending = useEditor((s) => s.uploadConflicts);
   const projectId = useEditor((s) => s.projectId);
   const resolve = useEditor((s) => s.resolveUploadConflicts);
@@ -128,12 +116,10 @@ export function UploadConflictDialog(): JSX.Element | null {
   return (
     <>
       <div className="lib-overlay" onClick={cancel} />
-      <div className="conflict-dialog" role="dialog" aria-modal="true" aria-label="File already exists">
+      <div className="conflict-dialog" role="dialog" aria-modal="true" aria-label={t('editor.upload.dialogLabel')}>
         <header>
           <strong>
-            {collisions.length === 1
-              ? 'A file with this name is already here'
-              : `${collisions.length} files with these names are already here`}
+            {t('editor.upload.heading', { count: collisions.length })}
           </strong>
         </header>
 
@@ -153,11 +139,8 @@ export function UploadConflictDialog(): JSX.Element | null {
               onChange={() => { setMode('replace'); setOverrides({}); }}
             />
             <span>
-              <strong>Replace</strong>
-              <span className="hint">
-                Every layer using the old file switches to the new one, in every
-                composition. The old file is retired, not deleted.
-              </span>
+              <strong>{t('editor.upload.replace')}</strong>
+              <span className="hint">{t('editor.upload.replaceHint')}</span>
             </span>
           </label>
           <label>
@@ -167,11 +150,8 @@ export function UploadConflictDialog(): JSX.Element | null {
               onChange={() => { setMode('new'); setOverrides({}); }}
             />
             <span>
-              <strong>Upload as new</strong>
-              <span className="hint">
-                Both files stay in the bin. Nothing on air changes — existing
-                layers keep the file they already have.
-              </span>
+              <strong>{t('editor.upload.asNew')}</strong>
+              <span className="hint">{t('editor.upload.asNewHint')}</span>
             </span>
           </label>
         </div>
@@ -195,10 +175,15 @@ export function UploadConflictDialog(): JSX.Element | null {
                 <span className="conflict-meta">
                   <span className="conflict-name">{collision.name}</span>
                   <span className="conflict-sub">
-                    in the bin as <em>{assetLabel(collision.existing)}</em> ·{' '}
-                    {formatBytes(collision.existing.bytes)} → {formatBytes(incoming?.size)}
-                    {sameSize && <span className="conflict-same"> · same size</span>} · added{' '}
-                    {formatAdded(collision.existing.addedAt)}
+                    {rt('editor.upload.inTheBinAs', {
+                      label: <em key="l">{assetLabel(collision.existing)}</em>,
+                    })}{' '}
+                    · {formatBytes(collision.existing.bytes, t, locale)} →{' '}
+                    {formatBytes(incoming?.size, t, locale)}
+                    {sameSize && (
+                      <span className="conflict-same"> · {t('editor.upload.sameSize')}</span>
+                    )}{' '}
+                    · {t('editor.upload.added')} {formatDate(collision.existing.addedAt, t, locale)}
                   </span>
                 </span>
                 {/*
@@ -213,11 +198,11 @@ export function UploadConflictDialog(): JSX.Element | null {
                   }
                   title={
                     choice === 'replace'
-                      ? 'Replacing — click to upload this one as a new asset instead'
-                      : 'Uploading as new — click to replace the existing file instead'
+                      ? t('editor.upload.overrideToNew')
+                      : t('editor.upload.overrideToReplace')
                   }
                 >
-                  {choice === 'replace' ? 'Replace' : 'Keep both'}
+                  {choice === 'replace' ? t('editor.upload.replace') : t('editor.upload.keepBoth')}
                 </button>
               </li>
             );
@@ -225,22 +210,20 @@ export function UploadConflictDialog(): JSX.Element | null {
         </ul>
 
         {clean > 0 && (
-          <p className="hint conflict-clean">
-            {clean} other {clean === 1 ? 'file' : 'files'} in this drop{' '}
-            {clean === 1 ? 'has' : 'have'} no conflict and will upload as normal.
-          </p>
+          <p className="hint conflict-clean">{t('editor.upload.cleanCount', { count: clean })}</p>
         )}
 
         <footer>
           <span className="hint">
-            {replacing === 0
-              ? 'Nothing will be replaced.'
-              : `${replacing} of ${collisions.length} will be replaced.`}
+            {t('editor.upload.replacingCount', {
+              count: replacing,
+              total: collisions.length,
+            })}
           </span>
           <span className="conflict-actions">
-            <button onClick={cancel}>Cancel</button>
+            <button onClick={cancel}>{t('editor.upload.cancel')}</button>
             <button className="primary" onClick={submit}>
-              Upload {files.length} {files.length === 1 ? 'file' : 'files'}
+              {t('editor.upload.submit', { count: files.length })}
             </button>
           </span>
         </footer>

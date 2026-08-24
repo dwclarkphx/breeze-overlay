@@ -410,6 +410,10 @@ const layerSchema = {
              * only authority that matters.
              */
             timezone: { type: 'string' },
+            // Not enumerated either, and for the same reason: `Intl` accepts far
+            // more tags than Breeze ships UI translations for, and the two lists
+            // have nothing to do with each other.
+            locale: { type: 'string' },
             tickSeconds: { type: 'number', exclusiveMinimum: 0, maximum: 3600 },
           },
           additionalProperties: false,

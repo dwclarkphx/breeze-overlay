@@ -299,6 +299,19 @@ export interface TextClock {
    */
   timezone?: string;
   /**
+   * BCP-47 tag for the month and weekday names — `de-DE` → `Montag`, `3. Aug`.
+   *
+   * A property of the graphic, not of the installation. I18N.md §5.3 is explicit
+   * that wiring this to `BREEZE_LOCALE` would put the operator's UI language in
+   * charge of what a scoreboard says on air; a station whose crew work in
+   * English still wants German day names if it broadcasts in German, and one
+   * feed can differ from another on the same server.
+   *
+   * Omitted means `en-US`, which is what every clock rendered before this field
+   * existed — so an untouched project reads exactly as it did.
+   */
+  locale?: string;
+  /**
    * Seconds between ticks. Omitted derives it from the format — a clock with no
    * seconds token has no reason to wake up 59 times for nothing.
    */
@@ -444,8 +457,15 @@ export interface SpriteLayer extends LayerBase {
 export const DEFAULT_CRAWL_SEPARATOR = '   •   ';
 
 export interface CrawlSeparatorPreset {
-  /** Shown in the picker. */
-  label: string;
+  /**
+   * Catalogue key for the picker label, not the label itself — `@breeze/schema`
+   * carries identifiers and values, never English (I18N.md §2.1).
+   *
+   * `value` is the opposite and stays exactly as written: it is the separator
+   * that goes to air, its padding is part of it, and it is content rather than
+   * chrome.
+   */
+  labelKey: string;
   value: string;
 }
 
@@ -455,21 +475,21 @@ export interface CrawlSeparatorPreset {
  * picking from a list beats typing a character most keyboards cannot produce.
  */
 export const CRAWL_SEPARATOR_PRESETS: CrawlSeparatorPreset[] = [
-  { label: 'Bullet  •', value: DEFAULT_CRAWL_SEPARATOR },
-  { label: 'Diamond  ◆', value: '   ◆   ' },
-  { label: 'Square  ■', value: '   ■   ' },
-  { label: 'Em dash  —', value: '   —   ' },
-  { label: 'Pipe  |', value: '   |   ' },
-  { label: 'Slash  /', value: '   /   ' },
-  { label: 'Arrow  ▶', value: '   ▶   ' },
-  { label: 'Star  ★', value: '   ★   ' },
+  { labelKey: 'schema.crawl.separator.bullet', value: DEFAULT_CRAWL_SEPARATOR },
+  { labelKey: 'schema.crawl.separator.diamond', value: '   ◆   ' },
+  { labelKey: 'schema.crawl.separator.square', value: '   ■   ' },
+  { labelKey: 'schema.crawl.separator.emdash', value: '   —   ' },
+  { labelKey: 'schema.crawl.separator.pipe', value: '   |   ' },
+  { labelKey: 'schema.crawl.separator.slash', value: '   /   ' },
+  { labelKey: 'schema.crawl.separator.arrow', value: '   ▶   ' },
+  { labelKey: 'schema.crawl.separator.star', value: '   ★   ' },
   /*
    * Wide gap, no glyph — a clean look that relies on spacing alone. Plain
    * spaces are safe here only because `.bz-crawl-block` is `white-space: pre`;
    * without that this preset would collapse to a single space and be no gap at
    * all. Same reason every preset above can pad with spaces rather than margin.
    */
-  { label: 'Wide gap (no glyph)', value: '        ' },
+  { labelKey: 'schema.crawl.separator.widegap', value: '        ' },
 ];
 
 export interface CrawlLayer extends LayerBase {

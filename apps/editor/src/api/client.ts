@@ -26,6 +26,8 @@ import type {
   Project,
 } from '@breeze/schema';
 
+import { msg, type Message, type Params } from '@breeze/i18n';
+
 export interface ValidationIssue {
   path: string;
   message: string;
@@ -50,18 +52,30 @@ export class ApiError extends Error {
    * that list in front of the user needs it without a second round trip.
    */
   readonly body: Record<string, unknown>;
+  /**
+   * A translatable version of the message, for the failures this client
+   * invents rather than receives.
+   *
+   * A refusal that came from the server carries the server's own English
+   * (I18N.md §5.1) and leaves this undefined, so the UI shows that text inside a
+   * translated wrapper. A network error or a cancel never reached a server, so
+   * there is no English to respect and the words are ours to translate.
+   */
+  readonly detail?: Message;
 
   constructor(
     message: string,
     status: number,
     issues: ValidationIssue[] = [],
     body: Record<string, unknown> = {},
+    detail?: Message,
   ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.issues = issues;
     this.body = body;
+    if (detail) this.detail = detail;
   }
 
   get isValidation(): boolean {
@@ -160,7 +174,12 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    let body: { error?: string; issues?: ValidationIssue[] } & Record<string, unknown> = {};
+    let body: {
+      error?: string;
+      code?: string;
+      params?: Params;
+      issues?: ValidationIssue[];
+    } & Record<string, unknown> = {};
     try {
       body = (await response.json()) as typeof body;
     } catch {
@@ -172,6 +191,12 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
       response.status,
       body.issues ?? [],
       body,
+      // I18N.md §5.1: a coded refusal is one a person meets in the product, and
+      // the code is the catalogue key. `body.error` stays the English the
+      // server sent — it is what reaches a log — while this is what the UI
+      // renders. An uncoded error leaves it undefined and the English shows
+      // through `editor.error.unexpected`, exactly as before.
+      typeof body.code === 'string' ? msg(body.code, body.params) : undefined,
     );
   }
 
@@ -338,9 +363,21 @@ export const api = {
       });
 
       xhr.addEventListener('error', () =>
-        reject(new ApiError('upload failed — the server could not be reached', 0)),
+        reject(
+          new ApiError(
+            // i18n-ignore-next-line — English for the stack trace; `detail` below is what is shown
+            'upload failed — the server could not be reached',
+            0,
+            [],
+            {},
+            msg('editor.upload.unreachable'),
+          ),
+        ),
       );
-      xhr.addEventListener('abort', () => reject(new ApiError('upload cancelled', 0)));
+      xhr.addEventListener('abort', () =>
+        // i18n-ignore-next-line — English for the stack trace; `detail` is what is shown
+        reject(new ApiError('upload cancelled', 0, [], {}, msg('editor.upload.cancelled'))),
+      );
 
       xhr.send(file);
     }),
@@ -435,7 +472,7 @@ export const api = {
    */
   listDataSources: (projectId: string, rows?: number) =>
     request<{ sources: DataSourceSummary[]; minPollInterval: number }>(
-      `/api/projects/${encodeURIComponent(projectId)}/datasources${rows ? `?rows=${rows}` : ''}`,
+      `/api/projects/${encodeURIComponent(projectId)}/datasources${rows ? `?rows=${rows}` : ''}`, // i18n-ignore — URL
     ),
 
   getDataSource: (projectId: string, sourceId: string, rows = 200) =>

@@ -11,6 +11,22 @@
    chrome around a transparent stage wrecks color judgment. */
 
 :root {
+  /*
+   * Tracking and capitals are Latin-script assumptions — I18N.md §6.3.
+   *
+   * `letter-spacing` on Arabic, Farsi or Urdu breaks the cursive join: the
+   * glyphs separate and the text stops reading as words. `text-transform:
+   * uppercase` does nothing in Arabic, Hebrew or CJK, and in Turkish it is
+   * actively wrong without a `lang` attribute, because dotted and dotless *i*
+   * uppercase differently — which the `lang` on `<html>` now settles.
+   *
+   * `--ui-tracking` is a multiplier rather than a value, so each declaration
+   * keeps the tracking it was designed with and a script group that must not
+   * have any sets the factor to 0. Every declaration goes through these two, so
+   * a script group is one rule rather than thirty edits.
+   */
+  --ui-tracking: 1;
+  --ui-caps: uppercase;
   --bg: #0d1117;
   --panel: #161b22;
   --panel-2: #1c2129;
@@ -24,6 +40,17 @@
   --row: 22px;
 }
 
+/*
+ * Script groups that take neither. Keyed on the `lang` attribute the shell now
+ * sets from the resolved locale, so this follows BREEZE_LOCALE without any
+ * JavaScript knowing about it.
+ */
+:root:lang(ar), :root:lang(fa), :root:lang(ur), :root:lang(he),
+:root:lang(zh), :root:lang(ja), :root:lang(ko), :root:lang(hi) {
+  --ui-tracking: 0;
+  --ui-caps: none;
+}
+
 * { box-sizing: border-box; }
 
 html, body, #root {
@@ -31,7 +58,14 @@ html, body, #root {
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  font: 13px/1.45 system-ui, "Segoe UI", sans-serif;
+  /*
+   * Per-script fallbacks — I18N.md §6.4. Segoe UI has no CJK coverage and
+   * patchy Arabic; without these the OS substitutes per glyph and one
+   * label ends up in three typefaces. UI chrome may use system fonts —
+   * the "always serve the same woff2" rule is about graphics, where the
+   * editor and the playout browser have to agree pixel for pixel.
+   */
+  font: 13px/1.45 system-ui, "Segoe UI", "Noto Sans Arabic", "Noto Sans Hebrew", "Noto Sans SC", "Noto Sans TC", "Noto Sans JP", "Noto Sans KR", "Noto Sans Devanagari", sans-serif;
 }
 
 button, select, input, textarea {
@@ -58,7 +92,7 @@ input[type='checkbox'] { width: auto; }
   background: var(--panel);
   border-bottom: 1px solid var(--border);
 }
-.brand { color: var(--accent); letter-spacing: 0.5px; }
+.brand { color: var(--accent); letter-spacing: calc(0.5px * var(--ui-tracking)); }
 /* Quiet by design — present when looked for, not competing with the transport. */
 .brand-version { color: var(--muted); font-weight: 400; font-size: 11px; letter-spacing: 0; }
 
@@ -84,7 +118,7 @@ input[type='checkbox'] { width: auto; }
   border-bottom: 1px solid var(--border);
 }
 .banner.error { background: #3d1518; color: #ffdcd8; }
-.banner ul { margin: 4px 0 0; padding-left: 18px; }
+.banner ul { margin: 4px 0 0; padding-inline-start: 18px; }
 .banner code { color: var(--key); }
 
 .app-body { flex: 1; display: flex; min-height: 0; }
@@ -212,7 +246,7 @@ input[type='checkbox'] { width: auto; }
   background: none; border: 0; color: #8b949e; cursor: pointer; font-size: 12px; padding: 0 2px;
 }
 .psd-report p { margin: 6px 0 4px; }
-.psd-report ul { margin: 0; padding-left: 16px; }
+.psd-report ul { margin: 0; padding-inline-start: 16px; }
 .psd-report li { margin: 2px 0; }
 .psd-report li strong { color: #c9d1d9; font-weight: 600; }
 .panel-body { padding: 8px 10px; overflow: auto; }
@@ -224,7 +258,7 @@ input[type='checkbox'] { width: auto; }
 .layer-list { overflow: auto; flex: 1; }
 .layer-row {
   display: flex; align-items: center; gap: 4px;
-  height: 26px; padding-right: 6px;
+  height: 26px; padding-inline-end: 6px;
   cursor: default; user-select: none;
   border-bottom: 1px solid rgba(48, 54, 61, 0.5);
 }
@@ -236,7 +270,7 @@ input[type='checkbox'] { width: auto; }
    no toggles and nothing to click — so it is deliberately not styled like one. */
 .layer-subhead {
   height: 20px; display: flex; align-items: center;
-  color: var(--muted); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--muted); font-size: 10px; letter-spacing: calc(0.06em * var(--ui-tracking)); text-transform: var(--ui-caps);
   user-select: none;
 }
 
@@ -246,7 +280,7 @@ input[type='checkbox'] { width: auto; }
    layer name is the thing that must survive, and a key that elbowed it out
    would make the panel worse than it was before cells appeared in it. */
 .layer-cell-key {
-  margin-left: auto;
+  margin-inline-start: auto;
   min-width: 0;
   padding: 0 4px;
   border-radius: 2px;
@@ -289,7 +323,7 @@ img.layer-thumb {
 .layer-thumb.table-thumb { flex-direction: column; gap: 1px; background: rgba(0, 0, 0, 0.35); }
 .layer-thumb.table-thumb i {
   font-style: normal; font-size: 6px; line-height: 6px;
-  color: var(--muted); letter-spacing: .5px;
+  color: var(--muted); letter-spacing: calc(.5px * var(--ui-tracking));
 }
 .layer-thumb.stack { position: relative; }
 .layer-thumb.stack .stack-item { position: absolute; transform: scale(0.6); transform-origin: 0 0; }
@@ -303,7 +337,7 @@ img.layer-thumb {
 .prop-section { margin-bottom: 14px; }
 .prop-section h3 {
   margin: 0 0 6px;
-  font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px;
+  font-size: 11px; text-transform: var(--ui-caps); letter-spacing: calc(0.6px * var(--ui-tracking));
   color: var(--muted);
   border-bottom: 1px solid var(--border);
   padding-bottom: 3px;
@@ -360,11 +394,11 @@ img.layer-thumb {
   padding: 4px 8px; background: var(--panel); border-bottom: 1px solid var(--border);
 }
 .zoom-readout { width: 48px; text-align: center; color: var(--muted); }
-.stage-size { margin-left: auto; color: var(--muted); font-size: 11px; }
+.stage-size { margin-inline-start: auto; color: var(--muted); font-size: 11px; }
 
 /* Answers "why can't I see the layer I just selected?" before it is asked. */
 .selection-hint {
-  margin-left: 12px;
+  margin-inline-start: 12px;
   padding: 2px 8px;
   border-radius: 10px;
   font-size: 11px;
@@ -653,11 +687,11 @@ img.layer-thumb {
 }
 /* A failing source is marked on the row, not only in the error text — the whole
    point of this panel is that a dead feed is obvious at a glance. */
-.source-row.failing { border-left: 2px solid #d1444f; padding-left: 6px; }
+.source-row.failing { border-inline-start: 2px solid #d1444f; padding-inline-start: 6px; }
 .source-head { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
 .source-name { font-weight: 600; }
 .source-id { color: var(--muted); font-size: 10px; }
-.source-type { color: var(--muted); font-size: 10px; margin-left: auto; }
+.source-type { color: var(--muted); font-size: 10px; margin-inline-start: auto; }
 .source-meta {
   display: flex; gap: 8px; flex-wrap: wrap;
   color: var(--muted); font-size: 10px; margin-top: 2px;
@@ -709,7 +743,7 @@ img.layer-thumb {
 .data-preview, .manual-table { overflow-x: auto; margin-bottom: 8px; }
 .data-preview table, .manual-table table { border-collapse: collapse; font-size: 11px; }
 .data-preview th, .manual-table th {
-  text-align: left; color: var(--muted); font-weight: 600;
+  text-align: start; color: var(--muted); font-weight: 600;
   padding: 2px 6px 4px; white-space: nowrap;
 }
 .data-preview td, .manual-table td { padding: 1px 6px; white-space: nowrap; }
@@ -724,8 +758,8 @@ img.layer-thumb {
   display: flex; align-items: center; gap: 4px; margin-bottom: 4px; flex-wrap: wrap;
 }
 .transform-op {
-  color: var(--key); font-size: 10px; text-transform: uppercase;
-  letter-spacing: .5px; min-width: 44px;
+  color: var(--key); font-size: 10px; text-transform: var(--ui-caps);
+  letter-spacing: calc(.5px * var(--ui-tracking)); min-width: 44px;
 }
 .transform-row select, .transform-row input { flex: 1 1 60px; min-width: 0; }
 .transform-move, .transform-del {
@@ -825,7 +859,7 @@ img.layer-thumb {
 .asset-uploads { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .asset-uploads li { display: flex; align-items: center; gap: 6px; font-size: 11px; }
 .asset-upload-name {
-  flex: 1; min-width: 0; text-align: left;
+  flex: 1; min-width: 0; text-align: start;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .asset-progress {
@@ -833,7 +867,7 @@ img.layer-thumb {
   background: var(--panel-2); overflow: hidden;
 }
 .asset-progress-fill { display: block; height: 100%; background: var(--accent); }
-.asset-upload-pct { flex: 0 0 34px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.asset-upload-pct { flex: 0 0 34px; text-align: end; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 .asset-error {
   margin: 0 6px 6px; padding: 4px 6px;
@@ -951,7 +985,7 @@ img.layer-thumb {
 .lib-uploads li { display: flex; align-items: center; gap: 8px; font-size: 11px; }
 .lib-upload-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lib-uploads .asset-progress { flex: 0 0 160px; }
-.lib-upload-pct { flex: 0 0 34px; text-align: right; color: var(--muted); }
+.lib-upload-pct { flex: 0 0 34px; text-align: end; color: var(--muted); }
 
 .lib-body { flex: 1 1 auto; display: flex; min-height: 0; }
 
@@ -959,19 +993,19 @@ img.layer-thumb {
 
 .lib-facets {
   flex: 0 0 190px; overflow-y: auto; padding: 10px;
-  border-right: 1px solid var(--border); background: var(--bg);
+  border-inline-end: 1px solid var(--border); background: var(--bg);
 }
 .lib-facet { margin-bottom: 14px; }
 .lib-facet h4 {
-  margin: 0 0 4px; font-size: 10px; text-transform: uppercase;
-  letter-spacing: 0.06em; color: var(--muted);
+  margin: 0 0 4px; font-size: 10px; text-transform: var(--ui-caps);
+  letter-spacing: calc(0.06em * var(--ui-tracking)); color: var(--muted);
 }
 .lib-facet ul { list-style: none; margin: 0; padding: 0; }
 .lib-facet li { margin: 1px 0; }
 .lib-facet button {
   display: flex; width: 100%; gap: 6px; align-items: baseline;
   border: none; background: none; padding: 2px 5px; border-radius: 3px;
-  color: var(--text); font: inherit; font-size: 11px; text-align: left;
+  color: var(--text); font: inherit; font-size: 11px; text-align: start;
 }
 .lib-facet button:hover { background: var(--panel-2); }
 .lib-facet button.active { background: var(--accent-dim); color: #fff; }
@@ -1002,7 +1036,7 @@ img.layer-thumb {
 
 /* The tick appears on hover or once anything is ticked — a checkbox on every
    card all the time reads as a form to fill in rather than a library. */
-.lib-tick { position: absolute; top: 5px; left: 5px; opacity: 0; z-index: 1; }
+.lib-tick { position: absolute; top: 5px; inset-inline-start: 5px; opacity: 0; z-index: 1; }
 .lib-card:hover .lib-tick, .lib-card.ticked .lib-tick { opacity: 1; }
 
 .lib-thumb {
@@ -1021,11 +1055,11 @@ img.layer-thumb {
 .lib-glyph { font-size: 26px; color: var(--muted); }
 
 .lib-badge {
-  position: absolute; bottom: 3px; right: 3px;
+  position: absolute; bottom: 3px; inset-inline-end: 3px;
   padding: 0 4px; border-radius: 3px; font-size: 10px; line-height: 15px;
 }
 .lib-badge.alpha { background: rgba(88, 166, 255, 0.25); color: var(--accent); }
-.lib-badge.expired { right: 22px; background: rgba(248, 81, 73, 0.28); color: var(--danger); font-weight: 700; }
+.lib-badge.expired { inset-inline-end: 22px; background: rgba(248, 81, 73, 0.28); color: var(--danger); font-weight: 700; }
 
 .lib-name { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lib-sub { font-size: 10px; color: var(--muted); }
@@ -1040,7 +1074,7 @@ img.layer-thumb {
 
 .lib-detail {
   flex: 0 0 300px; display: flex; flex-direction: column; min-height: 0;
-  border-left: 1px solid var(--border); background: var(--bg);
+  border-inline-start: 1px solid var(--border); background: var(--bg);
 }
 .lib-detail > header {
   display: flex; align-items: center; justify-content: space-between;
@@ -1077,7 +1111,7 @@ img.layer-thumb {
 .lib-tech dd { margin: 0; overflow: hidden; text-overflow: ellipsis; }
 
 .lib-usage { padding-top: 8px; border-top: 1px solid var(--border); }
-.lib-usage h4 { margin: 0 0 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.lib-usage h4 { margin: 0 0 4px; font-size: 10px; text-transform: var(--ui-caps); letter-spacing: calc(0.06em * var(--ui-tracking)); color: var(--muted); }
 .lib-usage ul { list-style: none; margin: 0; padding: 0; font-size: 11px; }
 .lib-usage li { margin: 2px 0; }
 
@@ -1098,7 +1132,7 @@ img.layer-thumb {
    without being able to say why. */
 
 .conflict-dialog {
-  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  position: fixed; top: 50%; inset-inline-start: 50%; transform: translate(-50%, -50%);
   display: flex; flex-direction: column; gap: 10px;
   width: min(620px, 92vw); max-height: 84vh;
   padding: 14px;
@@ -1140,8 +1174,8 @@ img.layer-thumb {
 /* A row that is going to be replaced is marked, because "Replace" as a button
    label describes what clicking does, not what the current state is — and with
    per-file overrides in play the two come apart. */
-.conflict-list li[data-choice='replace'] { border-left: 2px solid var(--key); }
-.conflict-list li[data-choice='new'] { border-left: 2px solid transparent; }
+.conflict-list li[data-choice='replace'] { border-inline-start: 2px solid var(--key); }
+.conflict-list li[data-choice='new'] { border-inline-start: 2px solid transparent; }
 
 .conflict-thumb {
   flex: 0 0 auto; width: 34px; height: 26px;
@@ -1164,7 +1198,7 @@ img.layer-thumb {
   display: flex; align-items: center; gap: 8px;
   padding-top: 4px; border-top: 1px solid var(--border);
 }
-.conflict-actions { margin-left: auto; display: flex; gap: 6px; }
+.conflict-actions { margin-inline-start: auto; display: flex; gap: 6px; }
 .conflict-dialog .primary { background: var(--accent-dim); border-color: var(--accent-dim); }
 
 /* What a replace changed, after the fact. A replace can rewrite layers in
@@ -1177,7 +1211,7 @@ img.layer-thumb {
   font-size: 11px;
   display: flex; align-items: baseline; gap: 6px;
 }
-.asset-replaced button { padding: 0 4px; margin-left: auto; font-size: 11px; }
+.asset-replaced button { padding: 0 4px; margin-inline-start: auto; font-size: 11px; }
 
 /* ------------------------------------------- project and scene dialogs */
 
@@ -1202,7 +1236,7 @@ img.layer-thumb {
    a raised panel, and a second filled surface inside it flattens both. */
 .dialog-warn {
   margin: 0; padding: 8px 10px; font-size: 12px; line-height: 1.6;
-  border-left: 3px solid var(--danger); background: rgba(248, 81, 73, 0.08);
+  border-inline-start: 3px solid var(--danger); background: rgba(248, 81, 73, 0.08);
   border-radius: 0 4px 4px 0;
 }
 
@@ -1217,7 +1251,7 @@ img.layer-thumb {
 }
 .dialog-list li { display: flex; align-items: baseline; gap: 6px; padding: 3px 0; }
 .dialog-tag {
-  margin-left: auto; padding: 0 6px; border-radius: 8px;
+  margin-inline-start: auto; padding: 0 6px; border-radius: 8px;
   border: 1px solid var(--border); color: var(--muted); font-size: 10px;
 }
 

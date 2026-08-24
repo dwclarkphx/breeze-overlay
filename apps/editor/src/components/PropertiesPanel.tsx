@@ -16,7 +16,7 @@
 
 // React 19's types removed the global `JSX` namespace, so it has to be imported
 // explicitly wherever `JSX.Element` is used as a return type.
-import { useEffect, useState, type JSX } from 'react';
+import { Fragment, useEffect, useState, type JSX } from 'react';
 import {
   ADVANCE_DEFAULTS,
   ANIMATABLE_PROPS,
@@ -40,6 +40,7 @@ import {
   type TextClock,
   type TextStyle,
 } from '@breeze/schema';
+import { useI18n, useRichT, useT } from '@breeze/i18n/react';
 import {
   ROW_ANIM_PRESETS,
   TEXT_ANIM_PRESETS,
@@ -53,18 +54,19 @@ import {
 import { useEditor } from '../state/store.js';
 import { baselineOf, displayValue, isAnimated as propIsAnimated } from '../state/layer-values.js';
 
-const TRANSFORM_FIELDS: Array<{ prop: AnimatableProp; label: string; step: number }> = [
-  { prop: 'x', label: 'X', step: 1 },
-  { prop: 'y', label: 'Y', step: 1 },
-  { prop: 'scaleX', label: 'Scale X', step: 0.01 },
-  { prop: 'scaleY', label: 'Scale Y', step: 0.01 },
-  { prop: 'rotation', label: 'Rotation', step: 1 },
-  { prop: 'opacity', label: 'Opacity', step: 0.01 },
-  { prop: 'skewX', label: 'Skew X', step: 1 },
-  { prop: 'skewY', label: 'Skew Y', step: 1 },
+const TRANSFORM_FIELDS: Array<{ prop: AnimatableProp; labelKey: string; step: number }> = [
+  { prop: 'x', labelKey: 'editor.properties.x', step: 1 },
+  { prop: 'y', labelKey: 'editor.properties.y', step: 1 },
+  { prop: 'scaleX', labelKey: 'editor.properties.scaleX', step: 0.01 },
+  { prop: 'scaleY', labelKey: 'editor.properties.scaleY', step: 0.01 },
+  { prop: 'rotation', labelKey: 'editor.properties.rotation', step: 1 },
+  { prop: 'opacity', labelKey: 'editor.properties.opacity', step: 0.01 },
+  { prop: 'skewX', labelKey: 'editor.properties.skewX', step: 1 },
+  { prop: 'skewY', labelKey: 'editor.properties.skewY', step: 1 },
 ];
 
 export function PropertiesPanel(): JSX.Element {
+  const t = useT();
   const composition = useEditor((s) => s.composition);
   const layer = useEditor((s) => s.activeLayer());
   const cellOwner = useEditor((s) => s.activeCellOwner());
@@ -81,36 +83,36 @@ export function PropertiesPanel(): JSX.Element {
   if (!layer) {
     return (
       <div className="panel properties-panel">
-        <div className="panel-header"><span>Composition</span></div>
+        <div className="panel-header"><span>{t('editor.properties.composition')}</span></div>
         <div className="panel-body">
-          <Field label="Name">
+          <Field label={t('editor.properties.name')}>
             <input
               value={composition.name}
               onChange={(e) => run({ kind: 'renameComposition', name: e.target.value })}
             />
           </Field>
-          <Field label="Width">
+          <Field label={t('editor.properties.width')}>
             <input
               type="number"
               value={composition.stage.width}
               onChange={(e) => run({ kind: 'setStage', patch: { width: Number(e.target.value) } })}
             />
           </Field>
-          <Field label="Height">
+          <Field label={t('editor.properties.height')}>
             <input
               type="number"
               value={composition.stage.height}
               onChange={(e) => run({ kind: 'setStage', patch: { height: Number(e.target.value) } })}
             />
           </Field>
-          <Field label="FPS">
+          <Field label={t('editor.properties.fps')}>
             <input
               type="number"
               value={composition.stage.fps}
               onChange={(e) => run({ kind: 'setStage', patch: { fps: Number(e.target.value) } })}
             />
           </Field>
-          <Field label="Duration">
+          <Field label={t('editor.properties.duration')}>
             <input
               type="number"
               step={0.1}
@@ -118,7 +120,7 @@ export function PropertiesPanel(): JSX.Element {
               onChange={(e) => run({ kind: 'setDuration', duration: Number(e.target.value) })}
             />
           </Field>
-          <p className="hint">Select a layer to edit its properties.</p>
+          <p className="hint">{t('editor.properties.selectALayer')}</p>
         </div>
       </div>
     );
@@ -236,12 +238,16 @@ export function PropertiesPanel(): JSX.Element {
       </div>
 
       <div className="panel-body">
-        <Section title="Transform">
-          {TRANSFORM_FIELDS.map(({ prop, label, step }) => (
-            <Field key={prop} label={label}>
+        <Section title={t('editor.properties.sectionTransform')}>
+          {TRANSFORM_FIELDS.map(({ prop, labelKey, step }) => (
+            <Field key={prop} label={t(labelKey)}>
               <button
                 className={`stopwatch${isAnimated(prop) ? ' on' : ''}`}
-                title={isAnimated(prop) ? 'Remove all keyframes' : 'Animate this property'}
+                title={t(
+                  isAnimated(prop)
+                    ? 'editor.properties.removeKeyframes'
+                    : 'editor.properties.animateProperty',
+                )}
                 onClick={() => toggleKeyframe(prop)}
               >
                 ⏱
@@ -255,11 +261,11 @@ export function PropertiesPanel(): JSX.Element {
               {isAnimated(prop) && (
                 <button
                   className={`add-key${hasKeyframeAtPlayhead(prop) ? ' on' : ''}`}
-                  title={
+                  title={t(
                     hasKeyframeAtPlayhead(prop)
-                      ? 'Keyframe at the playhead'
-                      : 'Add a keyframe at the playhead'
-                  }
+                      ? 'editor.properties.keyframeHere'
+                      : 'editor.properties.addKeyframeHere',
+                  )}
                   onClick={() => addKeyframe(prop)}
                 >
                   ◆
@@ -270,15 +276,15 @@ export function PropertiesPanel(): JSX.Element {
         </Section>
 
         {layer.size && (
-          <Section title="Size">
-            <Field label="Width">
+          <Section title={t('editor.properties.sectionSize')}>
+            <Field label={t('editor.properties.width')}>
               <input
                 type="number"
                 value={layer.size.width}
                 onChange={(e) => patch({ size: { ...layer.size!, width: Number(e.target.value) } })}
               />
             </Field>
-            <Field label="Height">
+            <Field label={t('editor.properties.height')}>
               <input
                 type="number"
                 value={layer.size.height}
@@ -297,15 +303,15 @@ export function PropertiesPanel(): JSX.Element {
           supplies the list.
         */}
         {cellOwner && (
-          <Section title="Cell">
-            <Field label="Column">
+          <Section title={t('editor.properties.sectionCell')}>
+            <Field label={t('editor.properties.column')}>
               <select
                 value={layer.cell ?? ''}
                 onChange={(e) =>
                   patch({ cell: e.target.value === '' ? undefined : e.target.value } as Partial<Layer>)
                 }
               >
-                <option value="">— none —</option>
+                <option value="">{t('editor.properties.noColumn')}</option>
                 {cellColumns.map((key) => (
                   <option key={key} value={key}>{key}</option>
                 ))}
@@ -316,15 +322,13 @@ export function PropertiesPanel(): JSX.Element {
                   repointed — losing authoring work to a transient outage.
                 */}
                 {layer.cell && !cellColumns.includes(layer.cell) && (
-                  <option value={layer.cell}>{layer.cell} (not in source)</option>
+                  <option value={layer.cell}>
+                    {t('editor.properties.columnNotInSource', { key: layer.cell })}
+                  </option>
                 )}
               </select>
             </Field>
-            <p className="hint">
-              Drawn once per data row. Keyframe times are measured from the row's
-              arrival, not the composition's start, so a cell rides its row's
-              reveal stagger.
-            </p>
+            <p className="hint">{t('editor.properties.cellClockHint')}</p>
           </Section>
         )}
 
@@ -335,8 +339,8 @@ export function PropertiesPanel(): JSX.Element {
           two numbers that are never read back.
         */}
         {!cellOwner && (
-          <Section title="Timing">
-            <Field label="In">
+          <Section title={t('editor.properties.sectionTiming')}>
+            <Field label={t('editor.properties.in')}>
               <input
                 type="number"
                 step={0.05}
@@ -344,12 +348,12 @@ export function PropertiesPanel(): JSX.Element {
                 onChange={(e) => patch({ in: Number(e.target.value) })}
               />
             </Field>
-            <Field label="Out">
+            <Field label={t('editor.properties.out')}>
               <input
                 type="number"
                 step={0.05}
                 value={layer.out ?? ''}
-                placeholder="end"
+                placeholder={t('editor.properties.outPlaceholder')}
                 onChange={(e) =>
                   patch({ out: e.target.value === '' ? undefined : Number(e.target.value) })
                 }
@@ -359,21 +363,21 @@ export function PropertiesPanel(): JSX.Element {
         )}
 
         {layer.type === 'shape' && (
-          <Section title="Shape">
-            <Field label="Kind">
+          <Section title={t('editor.properties.sectionShape')}>
+            <Field label={t('editor.properties.kind')}>
               <select value={layer.shape} onChange={(e) => patch({ shape: e.target.value as 'rect' | 'ellipse' } as Partial<Layer>)}>
-                <option value="rect">Rectangle</option>
-                <option value="ellipse">Ellipse</option>
+                <option value="rect">{t('editor.properties.shapeRect')}</option>
+                <option value="ellipse">{t('editor.properties.shapeEllipse')}</option>
               </select>
             </Field>
-            <Field label="Fill">
+            <Field label={t('editor.properties.fill')}>
               <input
                 type="color"
                 value={typeof layer.fill === 'string' ? layer.fill : '#1f6feb'}
                 onChange={(e) => patch({ fill: e.target.value } as Partial<Layer>)}
               />
             </Field>
-            <Field label="Radius">
+            <Field label={t('editor.properties.radius')}>
               <input
                 type="number"
                 value={layer.cornerRadius ?? 0}
@@ -385,19 +389,19 @@ export function PropertiesPanel(): JSX.Element {
 
         {layer.type === 'text' && (
           <>
-            <Section title="Text">
-              <Field label="Content">
+            <Section title={t('editor.properties.sectionText')}>
+              <Field label={t('editor.properties.content')}>
                 <textarea
                   rows={2}
                   value={layer.text}
                   onChange={(e) => patch({ text: e.target.value } as Partial<Layer>)}
                 />
               </Field>
-              <Field label="Binding">
+              <Field label={t('editor.properties.binding')}>
                 <input
                   value={layer.binding ?? ''}
-                  placeholder="e.g. name"
-                  title="Operators can update this field live"
+                  placeholder={t('editor.properties.bindingTextPlaceholder')}
+                  title={t('editor.properties.bindingTextTitle')}
                   onChange={(e) =>
                     patch({ binding: e.target.value || undefined } as Partial<Layer>)
                   }
@@ -408,8 +412,8 @@ export function PropertiesPanel(): JSX.Element {
               style={layer.style}
               onChange={(style) => patch({ style } as Partial<Layer>)}
             />
-            <Section title="Fit width">
-              <Field label="Mode">
+            <Section title={t('editor.properties.sectionFitWidth')}>
+              <Field label={t('editor.properties.mode')}>
                 <select
                   value={layer.fit?.mode ?? 'none'}
                   onChange={(e) =>
@@ -418,11 +422,11 @@ export function PropertiesPanel(): JSX.Element {
                     } as Partial<Layer>)
                   }
                 >
-                  <option value="none">None</option>
-                  <option value="width">Fit width</option>
+                  <option value="none">{t('editor.properties.fitNone')}</option>
+                  <option value="width">{t('editor.properties.fitWidth')}</option>
                 </select>
               </Field>
-              <Field label="Max width">
+              <Field label={t('editor.properties.maxWidth')}>
                 <input
                   type="number"
                   value={layer.fit?.maxWidth ?? layer.size?.width ?? 0}
@@ -433,7 +437,7 @@ export function PropertiesPanel(): JSX.Element {
                   }
                 />
               </Field>
-              <Field label="Min scale">
+              <Field label={t('editor.properties.minScale')}>
                 <input
                   type="number"
                   step={0.05}
@@ -456,8 +460,7 @@ export function PropertiesPanel(): JSX.Element {
               */}
               {overflowing && (
                 <p className="prop-warning" data-warning="fit-overflow">
-                  Still wider than the box at min scale — the text will overrun
-                  its strap. Widen the box, lower Min scale, or shorten the copy.
+                  {t('editor.properties.fitOverflow')}
                 </p>
               )}
             </Section>
@@ -484,49 +487,49 @@ export function PropertiesPanel(): JSX.Element {
         */}
         {layer.type === 'crawl' && (
           <>
-            <Section title="Crawl">
-              <Field label="Speed">
+            <Section title={t('editor.properties.sectionCrawl')}>
+              <Field label={t('editor.properties.speed')}>
                 <input
                   type="number"
                   step={10}
                   min={1}
                   value={layer.speed}
-                  title="Pixels per second, independent of the composition's duration"
+                  title={t('editor.properties.speedTitle')}
                   onChange={(e) =>
                     patch({ speed: Math.max(1, Number(e.target.value)) } as Partial<Layer>)
                   }
                 />
               </Field>
-              <Field label="Direction">
+              <Field label={t('editor.properties.direction')}>
                 <select
                   value={layer.direction}
                   onChange={(e) =>
                     patch({ direction: e.target.value as 'left' | 'right' } as Partial<Layer>)
                   }
                 >
-                  <option value="left">Right to left</option>
-                  <option value="right">Left to right</option>
+                  <option value="left">{t('editor.properties.directionRtl')}</option>
+                  <option value="right">{t('editor.properties.directionLtr')}</option>
                 </select>
               </Field>
               <CrawlSeparatorField
                 value={layer.separator}
                 onChange={(separator) => patch({ separator } as Partial<Layer>)}
               />
-              <Field label="Binding">
+              <Field label={t('editor.properties.binding')}>
                 <input
                   value={layer.binding ?? ''}
-                  placeholder="e.g. headlines"
-                  title="Operators can replace the whole item list live; the new copy is swapped in at the loop seam"
+                  placeholder={t('editor.properties.bindingCrawlPlaceholder')}
+                  title={t('editor.properties.bindingCrawlTitle')}
                   onChange={(e) =>
                     patch({ binding: e.target.value || undefined } as Partial<Layer>)
                   }
                 />
               </Field>
-              <Field label="Items">
+              <Field label={t('editor.properties.items')}>
                 <textarea
                   rows={4}
                   value={layer.items.join('\n')}
-                  title="One headline per line"
+                  title={t('editor.properties.itemsTitle')}
                   onChange={(e) =>
                     patch({
                       // Blank lines dropped: an empty item renders as two
@@ -536,7 +539,7 @@ export function PropertiesPanel(): JSX.Element {
                   }
                 />
               </Field>
-              <p className="hint">One per line. The loop is seamless — the list repeats end to end.</p>
+              <p className="hint">{t('editor.properties.itemsHint')}</p>
             </Section>
 
             <CrawlSourceSection
@@ -552,11 +555,11 @@ export function PropertiesPanel(): JSX.Element {
         )}
 
         {layer.type === 'composition' && (
-          <Section title="Composition">
-            <Field label="Reference">
+          <Section title={t('editor.properties.composition')}>
+            <Field label={t('editor.properties.reference')}>
               <input
                 value={layer.ref}
-                placeholder="composition id"
+                placeholder={t('editor.properties.referencePlaceholder')}
                 onChange={(e) => patch({ ref: e.target.value } as Partial<Layer>)}
               />
             </Field>
@@ -566,11 +569,11 @@ export function PropertiesPanel(): JSX.Element {
               A composition holding independent children is what the guide calls
               a scene — there is no separate scene type to create.
             */}
-            <Field label="Independent">
+            <Field label={t('editor.properties.independent')}>
               <input
                 type="checkbox"
                 checked={layer.independent ?? false}
-                title="Give this element its own timeline and its own PLAY, triggered separately from everything else on the page"
+                title={t('editor.properties.independentTitle')}
                 onChange={(e) => {
                   const independent = e.target.checked;
                   /*
@@ -589,11 +592,11 @@ export function PropertiesPanel(): JSX.Element {
               />
             </Field>
             {layer.independent && (
-              <Field label="Channel">
+              <Field label={t('editor.properties.channel')}>
                 <input
                   value={layer.channel ?? ''}
                   placeholder={layer.ref}
-                  title="The name an operator triggers: /api/control/<project>/<channel>/play. Defaults to the referenced composition's id."
+                  title={t('editor.properties.channelTitle')}
                   onChange={(e) => {
                     // Normalized as typed rather than validated on save: the
                     // rules are the URL's, not this field's, and an operator
@@ -618,7 +621,7 @@ export function PropertiesPanel(): JSX.Element {
         )}
 
         {(layer.type === 'image' || layer.type === 'video' || layer.type === 'sprite') && (
-          <Section title="Source">
+          <Section title={t('editor.properties.sectionSource')}>
             {/*
               A picker over the asset bin, with the free-text path kept below it.
 
@@ -630,7 +633,7 @@ export function PropertiesPanel(): JSX.Element {
               another tab and not yet in this list, and a path that is
               deliberately not in the bin at all.
             */}
-            <Field label="Asset">
+            <Field label={t('editor.properties.asset')}>
               <select
                 value={assetsOfKind.some((a) => a.path === layer.src) ? layer.src : ''}
                 onChange={(e) => {
@@ -639,21 +642,23 @@ export function PropertiesPanel(): JSX.Element {
               >
                 <option value="">
                   {assetsOfKind.length
-                    ? '— pick an asset —'
+                    ? t('editor.properties.pickAnAsset')
                     // A sprite draws from the image assets, so "no sprite
                     // assets uploaded" would send the operator looking for a
                     // kind of file the bin does not have.
-                    : `no ${layer.type === 'sprite' ? 'image' : layer.type} assets uploaded`}
+                    : t('editor.properties.noAssetsOfKind', {
+                        kind: layer.type === 'sprite' ? 'image' : layer.type,
+                      })}
                 </option>
                 {assetsOfKind.map((a) => (
                   <option key={a.id} value={a.path}>{a.originalName ?? a.path}</option>
                 ))}
               </select>
             </Field>
-            <Field label="Path">
+            <Field label={t('editor.properties.path')}>
               <input
                 value={layer.src}
-                placeholder="assets/logo.png"
+                placeholder={t('editor.properties.pathPlaceholder')}
                 onChange={(e) => patch({ src: e.target.value } as Partial<Layer>)}
               />
             </Field>
@@ -665,7 +670,7 @@ export function PropertiesPanel(): JSX.Element {
               actually knows.
             */}
             {layer.src && !assets.some((a) => a.path === layer.src) && (
-              <p className="hint">Not in the asset bin — check the file exists in the project.</p>
+              <p className="hint">{t('editor.properties.notInBin')}</p>
             )}
             {/*
               Withheld from a multi-frame sprite rather than shown and rejected
@@ -676,7 +681,7 @@ export function PropertiesPanel(): JSX.Element {
               be offered.
             */}
             {!(layer.type === 'sprite' && layer.cols * layer.rows > 1) && (
-              <Field label="Binding">
+              <Field label={t('editor.properties.binding')}>
                 <input
                   value={layer.binding ?? ''}
                   onChange={(e) => patch({ binding: e.target.value || undefined } as Partial<Layer>)}
@@ -684,15 +689,12 @@ export function PropertiesPanel(): JSX.Element {
               </Field>
             )}
             {layer.type === 'sprite' && layer.cols * layer.rows > 1 && (
-              <p className="hint">
-                A multi-frame sheet cannot be bound — the incoming sheet would be
-                stepped through this one&rsquo;s grid.
-              </p>
+              <p className="hint">{t('editor.properties.spriteNoBinding')}</p>
             )}
 
             {layer.type === 'sprite' && (
               <>
-                <Field label="Columns">
+                <Field label={t('editor.properties.columns')}>
                   <input
                     type="number"
                     min={1}
@@ -701,7 +703,7 @@ export function PropertiesPanel(): JSX.Element {
                     onChange={(e) => patch({ cols: Math.max(1, Math.round(Number(e.target.value))) } as Partial<Layer>)}
                   />
                 </Field>
-                <Field label="Rows">
+                <Field label={t('editor.properties.rows')}>
                   <input
                     type="number"
                     min={1}
@@ -717,7 +719,7 @@ export function PropertiesPanel(): JSX.Element {
                   dimension — and a frame count one export behind is six frames
                   of empty cells at the end of the animation.
                 */}
-                <Field label="Frames">
+                <Field label={t('editor.properties.frames')}>
                   <input
                     type="number"
                     min={1}
@@ -733,10 +735,14 @@ export function PropertiesPanel(): JSX.Element {
                 </Field>
                 {layer.frameCount !== undefined && layer.frameCount > layer.cols * layer.rows && (
                   <p className="hint">
-                    Only {layer.cols * layer.rows} cells in a {layer.cols}×{layer.rows} grid.
+                    {t('editor.properties.framesOverGrid', {
+                      cells: layer.cols * layer.rows,
+                      cols: layer.cols,
+                      rows: layer.rows,
+                    })}
                   </p>
                 )}
-                <Field label="FPS">
+                <Field label={t('editor.properties.fps')}>
                   <input
                     type="number"
                     min={1}
@@ -753,17 +759,18 @@ export function PropertiesPanel(): JSX.Element {
                   nothing change.
                 */}
                 <p className="hint">
-                  {(layer.frameCount ?? layer.cols * layer.rows)} frames at {layer.fps}fps
-                  {' — '}
-                  {((layer.frameCount ?? layer.cols * layer.rows) / layer.fps).toFixed(2)}s.
-                  Independent of the layer&rsquo;s in/out points.
+                  {t('editor.properties.spriteTiming', {
+                    frames: layer.frameCount ?? layer.cols * layer.rows,
+                    fps: layer.fps,
+                    seconds: ((layer.frameCount ?? layer.cols * layer.rows) / layer.fps).toFixed(2),
+                  })}
                 </p>
               </>
             )}
 
             {(layer.type === 'video' || layer.type === 'sprite') && (
               <>
-                <Field label="Start at">
+                <Field label={t('editor.properties.startAt')}>
                   <input
                     type="number"
                     step={0.1}
@@ -771,7 +778,7 @@ export function PropertiesPanel(): JSX.Element {
                     onChange={(e) => patch({ startAt: Number(e.target.value) } as Partial<Layer>)}
                   />
                 </Field>
-                <Field label="Loop">
+                <Field label={t('editor.properties.loop')}>
                   <input
                     type="checkbox"
                     checked={layer.loop ?? false}
@@ -784,21 +791,18 @@ export function PropertiesPanel(): JSX.Element {
                   author concludes the setting is broken.
                 */}
                 {!layer.loop && (
-                  <Field label="At end">
+                  <Field label={t('editor.properties.atEnd')}>
                     <select
                       value={layer.onEnd ?? 'hold'}
                       onChange={(e) => patch({ onEnd: e.target.value as 'hold' | 'clear' } as Partial<Layer>)}
                     >
-                      <option value="hold">Hold last frame</option>
-                      <option value="clear">Clear</option>
+                      <option value="hold">{t('editor.properties.onEndHold')}</option>
+                      <option value="clear">{t('editor.properties.onEndClear')}</option>
                     </select>
                   </Field>
                 )}
                 {!layer.loop && layer.onEnd !== 'clear' && (
-                  <p className="hint">
-                    A stinger usually wants Clear — a held final frame stays over
-                    the program feed once the transition is done.
-                  </p>
+                  <p className="hint">{t('editor.properties.stingerHint')}</p>
                 )}
                 {/*
                   A layer pointing at a format that cannot carry transparency.
@@ -809,19 +813,15 @@ export function PropertiesPanel(): JSX.Element {
                   box over live pictures.
                 */}
                 {layer.src && /\.(mov|mp4|m4v)$/i.test(layer.src) && (
-                  <p className="hint">
-                    This format cannot carry an alpha channel in a browser
-                    source. Transcode it in the asset bin if it needs
-                    transparency.
-                  </p>
+                  <p className="hint">{t('editor.properties.noAlphaHint')}</p>
                 )}
               </>
             )}
           </Section>
         )}
 
-        <Section title="Effects">
-          <Field label="Blur">
+        <Section title={t('editor.properties.sectionEffects')}>
+          <Field label={t('editor.properties.blur')}>
             <button
               className={`stopwatch${isAnimated('blur') ? ' on' : ''}`}
               onClick={() => toggleKeyframe('blur')}
@@ -833,7 +833,7 @@ export function PropertiesPanel(): JSX.Element {
               onChange={(e) => setValue('blur', Number(e.target.value))}
             />
           </Field>
-          <Field label="Brightness">
+          <Field label={t('editor.properties.brightness')}>
             <button
               className={`stopwatch${isAnimated('brightness') ? ' on' : ''}`}
               onClick={() => toggleKeyframe('brightness')}
@@ -845,7 +845,7 @@ export function PropertiesPanel(): JSX.Element {
               onChange={(e) => setValue('brightness', Number(e.target.value))}
             />
           </Field>
-          <Field label="Blend">
+          <Field label={t('editor.properties.blend')}>
             <select
               value={layer.blendMode ?? 'normal'}
               onChange={(e) => patch({ blendMode: e.target.value === 'normal' ? undefined : e.target.value })}
@@ -858,10 +858,15 @@ export function PropertiesPanel(): JSX.Element {
         </Section>
 
         <details className="raw-json">
-          <summary>Animated properties</summary>
+          <summary>{t('editor.properties.animatedProperties')}</summary>
           <ul>
             {ANIMATABLE_PROPS.filter((p) => isAnimated(p)).map((p) => (
-              <li key={p}>{p} — {layer.keyframes?.[p]?.length} keyframes</li>
+              <li key={p}>
+                {t('editor.properties.keyframeCount', {
+                  prop: p,
+                  count: layer.keyframes?.[p]?.length ?? 0,
+                })}
+              </li>
             ))}
           </ul>
         </details>
@@ -877,29 +882,30 @@ function TextStyleSection({
   style: TextStyle;
   onChange: (style: TextStyle) => void;
 }): JSX.Element {
+  const t = useT();
   const set = (patch: Partial<TextStyle>) => onChange({ ...style, ...patch });
 
   return (
-    <Section title="Type">
-      <Field label="Font">
+    <Section title={t('editor.properties.sectionType')}>
+      <Field label={t('editor.properties.font')}>
         <input value={style.fontFamily} onChange={(e) => set({ fontFamily: e.target.value })} />
       </Field>
-      <Field label="Size">
+      <Field label={t('editor.properties.size')}>
         <input type="number" value={style.fontSize} onChange={(e) => set({ fontSize: Number(e.target.value) })} />
       </Field>
-      <Field label="Weight">
+      <Field label={t('editor.properties.weight')}>
         <select value={String(style.fontWeight ?? 400)} onChange={(e) => set({ fontWeight: Number(e.target.value) })}>
           {[300, 400, 500, 600, 700, 800, 900].map((w) => <option key={w} value={w}>{w}</option>)}
         </select>
       </Field>
-      <Field label="Color">
+      <Field label={t('editor.properties.color')}>
         <input
           type="color"
           value={typeof style.fill === 'string' ? style.fill : '#ffffff'}
           onChange={(e) => set({ fill: e.target.value })}
         />
       </Field>
-      <Field label="Tracking">
+      <Field label={t('editor.properties.tracking')}>
         <input
           type="number"
           step={0.1}
@@ -907,22 +913,22 @@ function TextStyleSection({
           onChange={(e) => set({ letterSpacing: Number(e.target.value) })}
         />
       </Field>
-      <Field label="Align">
+      <Field label={t('editor.properties.align')}>
         <select value={style.align ?? 'left'} onChange={(e) => set({ align: e.target.value as TextStyle['align'] })}>
-          <option value="left">Left</option>
-          <option value="center">Center</option>
-          <option value="right">Right</option>
+          <option value="left">{t('editor.properties.alignLeft')}</option>
+          <option value="center">{t('editor.properties.alignCenter')}</option>
+          <option value="right">{t('editor.properties.alignRight')}</option>
         </select>
       </Field>
-      <Field label="Case">
+      <Field label={t('editor.properties.case')}>
         <select
           value={style.textTransform ?? 'none'}
           onChange={(e) => set({ textTransform: e.target.value as TextStyle['textTransform'] })}
         >
-          <option value="none">As typed</option>
-          <option value="uppercase">UPPERCASE</option>
-          <option value="lowercase">lowercase</option>
-          <option value="capitalize">Capitalize</option>
+          <option value="none">{t('editor.properties.caseNone')}</option>
+          <option value="uppercase">{t('editor.properties.caseUpper')}</option>
+          <option value="lowercase">{t('editor.properties.caseLower')}</option>
+          <option value="capitalize">{t('editor.properties.caseCapitalize')}</option>
         </select>
       </Field>
     </Section>
@@ -937,16 +943,54 @@ function TextStyleSection({
  * renders as a plausible-looking number rather than as an error. The field
  * underneath still accepts anything, so the list is a starting point rather
  * than a limit.
+ *
+ * Format strings only. Each option is labelled by running the real formatter
+ * over the real current time in this clock's own language and zone, so the
+ * picker cannot promise something the output does not deliver — which is
+ * exactly what a hardcoded `Mon 3 Aug` started doing the moment the language
+ * became selectable.
  */
-const CLOCK_FORMAT_PRESETS: Array<{ label: string; value: string }> = [
-  { label: '6:42 PM', value: 'h:mm A' },
-  { label: '6:42:07 PM', value: 'h:mm:ss A' },
-  { label: '18:42', value: 'HH:mm' },
-  { label: '18:42:07', value: 'HH:mm:ss' },
-  { label: 'Mon 3 Aug', value: 'ddd D MMM' },
-  { label: 'Monday, August 3', value: 'dddd, MMMM D' },
-  { label: '03/08/26', value: 'DD/MM/YY' },
+// i18n-ignore-start — token strings, identical in every locale; see CLOCK_TOKENS
+const CLOCK_FORMATS = [
+  'h:mm A',
+  'h:mm:ss A',
+  'HH:mm',
+  'HH:mm:ss',
+  'ddd D MMM',
+  'dddd, MMMM D',
+  'DD/MM/YY',
 ];
+// i18n-ignore-end
+
+/**
+ * Languages offered for a clock's month and weekday names.
+ *
+ * The UI locale set from I18N.md §8, reused because it is the same judgement —
+ * these are the languages Breeze considers relevant — but the two are not the
+ * same setting and must not be wired together. A station whose crew work in
+ * English still broadcasts in its own language, and two graphics on one server
+ * can differ.
+ *
+ * Names come from `Intl.DisplayNames` rather than a hand-written table: 28
+ * language names would otherwise be 28 catalogue entries that a translator has
+ * to get right, when the platform already knows them in every locale.
+ */
+const CLOCK_LOCALES = [
+  'en', 'en-GB', 'es', 'fr', 'de', 'pt-BR', 'pt-PT', 'it', 'nl', 'pl', 'sv', 'nb', 'da',
+  'fi', 'cs', 'hu', 'ro', 'tr', 'id', 'vi', 'ru', 'uk', 'zh-Hans', 'zh-Hant', 'ja', 'ko',
+  'hi', 'ar', 'he', 'fa',
+];
+
+/** The tag's own language name, in the editor's locale. Falls back to the tag. */
+function languageName(tag: string, uiLocale: string): string {
+  try {
+    return new Intl.DisplayNames([uiLocale], { type: 'language' }).of(tag) ?? tag;
+  } catch {
+    // A runtime without DisplayNames, or a tag it does not know. The tag is
+    // still a correct answer, just a less friendly one.
+    return tag;
+  }
+}
 
 /**
  * Live clock on a text layer.
@@ -963,6 +1007,9 @@ function ClockSection({
   layer: TextLayer;
   onChange: (clock: TextClock | undefined) => void;
 }): JSX.Element {
+  const t = useT();
+  const rt = useRichT();
+  const { locale: uiLocale } = useI18n();
   const clock = layer.clock;
   const [now, setNow] = useState(() => new Date());
 
@@ -974,57 +1021,91 @@ function ClockSection({
     return () => clearInterval(timer);
   }, [clock]);
 
+  /** One option's label: this format, run for real. Falls back to the tokens. */
+  const sample = (at: Date, base: TextClock, format: string): string => {
+    try {
+      return formatClock(at, { ...base, format });
+    } catch {
+      // A bad timezone throws for every format, and the field below already
+      // says so. Showing the token string beats showing an empty list.
+      return format;
+    }
+  };
+
   let preview = '';
   let error = '';
   if (clock) {
     try {
       preview = formatClock(now, clock);
     } catch {
-      error = 'That time zone is not one this machine knows.';
+      error = t('editor.properties.timezoneUnknown');
     }
   }
 
   return (
-    <Section title="Clock">
-      <Field label="Live clock">
+    <Section title={t('editor.properties.sectionClock')}>
+      <Field label={t('editor.properties.liveClock')}>
         <input
           type="checkbox"
           checked={Boolean(clock)}
-          title="Render the host's wall-clock time into this layer"
+          title={t('editor.properties.liveClockTitle')}
+          // i18n-ignore-next-line — a format token string, the same in every locale
           onChange={(e) => onChange(e.target.checked ? { format: 'h:mm A' } : undefined)}
         />
       </Field>
 
       {clock && (
         <>
-          <Field label="Preset">
+          <Field label={t('editor.properties.preset')}>
             <select
-              value={
-                CLOCK_FORMAT_PRESETS.some((p) => p.value === clock.format) ? clock.format : ''
-              }
+              value={CLOCK_FORMATS.includes(clock.format) ? clock.format : ''}
               onChange={(e) => e.target.value && onChange({ ...clock, format: e.target.value })}
             >
-              <option value="">Custom…</option>
-              {CLOCK_FORMAT_PRESETS.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
+              <option value="">{t('editor.properties.presetCustom')}</option>
+              {CLOCK_FORMATS.map((format) => (
+                <option key={format} value={format}>
+                  {sample(now, clock, format)}
                 </option>
               ))}
             </select>
           </Field>
-          <Field label="Format">
+          <Field label={t('editor.properties.format')}>
             <input
               value={clock.format}
+              // i18n-ignore-next-line — a token string, the same in every locale
               placeholder="h:mm A"
-              title="Tokens: HH H hh h mm m ss s A a · DD D MMMM MMM MM M · dddd ddd YYYY YY · [literal]"
+              title={t('editor.properties.formatTitle')}
               onChange={(e) => onChange({ ...clock, format: e.target.value })}
             />
           </Field>
-          <Field label="Time zone">
+          <Field label={t('editor.properties.clockLanguage')}>
+            <select
+              value={clock.locale ?? ''}
+              onChange={(e) => {
+                const { locale: _drop, ...rest } = clock;
+                onChange(e.target.value ? { ...rest, locale: e.target.value } : rest);
+              }}
+            >
+              <option value="">{t('editor.properties.clockLanguageDefault')}</option>
+              {CLOCK_LOCALES.map((tag) => (
+                <option key={tag} value={tag}>{languageName(tag, uiLocale)}</option>
+              ))}
+              {/*
+                A tag set by hand keeps its own option, the same way a cell's
+                column does above. Dropping it would silently rewrite the
+                document back to the default the moment the panel opened.
+              */}
+              {clock.locale && !CLOCK_LOCALES.includes(clock.locale) && (
+                <option value={clock.locale}>{languageName(clock.locale, uiLocale)}</option>
+              )}
+            </select>
+          </Field>
+
+          <Field label={t('editor.properties.timezone')}>
             <input
               value={clock.timezone ?? ''}
-              placeholder="host local"
-              title="IANA zone, e.g. America/Phoenix. Blank uses the render machine's own zone."
+              placeholder={t('editor.properties.timezonePlaceholder')}
+              title={t('editor.properties.timezoneTitle')}
               onChange={(e) => {
                 const { timezone: _drop, ...rest } = clock;
                 onChange(e.target.value ? { ...rest, timezone: e.target.value } : rest);
@@ -1038,7 +1119,7 @@ function ClockSection({
             </p>
           ) : (
             <p className="prop-note" data-preview="clock">
-              Now: <strong>{preview}</strong>
+              {rt('editor.properties.clockNow', { preview: <strong>{preview}</strong> })}
             </p>
           )}
 
@@ -1048,14 +1129,11 @@ function ClockSection({
             an author who edits Content and sees nothing change on the output
             has no other way to find that out.
           */}
-          <p className="prop-note">
-            Content above is a placeholder — the canvas and a still export use
-            it, a renderer never does.
-          </p>
+          <p className="prop-note">{t('editor.properties.clockLanguageHint')}</p>
+          <p className="prop-note">{t('editor.properties.clockPlaceholderNote')}</p>
           {layer.binding && (
             <p className="prop-warning" data-warning="clock-binding">
-              This layer also has a binding. A clock always wins, so the
-              operator field would do nothing — clear one or the other.
+              {t('editor.properties.clockBindingClash')}
             </p>
           )}
         </>
@@ -1084,6 +1162,7 @@ function TextRevealSection({
   pieces: number;
   onChange: (preset: TextLayer['textAnimPreset']) => void;
 }): JSX.Element {
+  const t = useT();
   const preset = layer.textAnimPreset;
   const resolved = resolveTextAnim(preset);
 
@@ -1111,8 +1190,8 @@ function TextRevealSection({
   };
 
   return (
-    <Section title="Reveal">
-      <Field label="Preset">
+    <Section title={t('editor.properties.sectionReveal')}>
+      <Field label={t('editor.properties.preset')}>
         <select
           className="reveal-preset"
           value={preset?.id ?? ''}
@@ -1123,47 +1202,49 @@ function TextRevealSection({
             onChange(id ? { id: id as TextAnimPresetId } : undefined);
           }}
         >
-          <option value="">None</option>
+          <option value="">{t('editor.properties.revealNone')}</option>
           {TEXT_ANIM_PRESETS.map((p) => (
-            <option key={p.id} value={p.id}>{p.label}</option>
+            <option key={p.id} value={p.id}>{t(p.labelKey)}</option>
           ))}
         </select>
       </Field>
 
       {resolved && (
         <>
-          <Field label="Stagger">
+          <Field label={t('editor.properties.stagger')}>
             <input
               type="number"
               step={0.005}
               min={0}
               placeholder={String(resolved.defaults.stagger)}
               value={preset?.stagger ?? ''}
-              title="Seconds between consecutive pieces. 0 animates them together."
+              title={t('editor.properties.staggerTitle')}
               onChange={(e) =>
                 update({ stagger: e.target.value === '' ? undefined : Number(e.target.value) })
               }
             />
           </Field>
-          <Field label="Duration">
+          <Field label={t('editor.properties.pieceDuration')}>
             <input
               type="number"
               step={0.05}
               min={0.05}
               placeholder={String(resolved.defaults.duration)}
               value={preset?.duration ?? ''}
-              title="Seconds each individual piece takes"
+              title={t('editor.properties.pieceDurationTitle')}
               onChange={(e) =>
                 update({ duration: e.target.value === '' ? undefined : Number(e.target.value) })
               }
             />
           </Field>
-          <Field label="Ease">
+          <Field label={t('editor.properties.ease')}>
             <select
               value={typeof preset?.ease === 'string' ? preset.ease : ''}
               onChange={(e) => update({ ease: e.target.value || undefined })}
             >
-              <option value="">{`Preset (${String(resolved.defaults.ease)})`}</option>
+              <option value="">
+                {t('editor.properties.easeFromPreset', { ease: String(resolved.defaults.ease) })}
+              </option>
               {NAMED_EASES.map((ease) => (
                 <option key={ease} value={ease}>{ease}</option>
               ))}
@@ -1177,15 +1258,21 @@ function TextRevealSection({
           */}
           <p className="hint reveal-readout" data-pieces={pieces} data-total={round(total)}>
             {pieces > 0
-              ? `${pieces} ${resolved.unit} · ${round(total)}s total`
-              : `Waiting on the preview to measure the ${resolved.unit}`}
+              ? t('editor.properties.revealReadout', {
+                  count: pieces,
+                  unit: resolved.unit,
+                  seconds: round(total),
+                })
+              : t('editor.properties.revealWaiting', { unit: resolved.unit })}
           </p>
 
           {overruns && (
             <p className="prop-warning" data-warning="reveal-overrun">
-              {`Reveal runs ${round(total)}s but only has ${round(budget)}s before ` +
-                `${hold === undefined ? 'the end of the composition' : 'the hold'} — ` +
-                'it will still be assembling on air. Shorten the stagger or the duration.'}
+              {t('editor.properties.revealOverrun', {
+                total: round(total),
+                budget: round(budget),
+                limit: hold === undefined ? 'end' : 'hold',
+              })}
             </p>
           )}
         </>
@@ -1196,11 +1283,14 @@ function TextRevealSection({
 
 /* ------------------------------------------------------------------ table */
 
-const FILTER_LABEL: Record<FilterOp, string> = {
-  eq: 'is', ne: 'is not',
-  gt: '>', gte: '≥', lt: '<', lte: '≤',
-  contains: 'contains', startsWith: 'starts with', endsWith: 'ends with',
-  empty: 'is empty', notEmpty: 'is not empty',
+const FILTER_LABEL_KEY: Record<FilterOp, string> = {
+  eq: 'editor.properties.filterEq', ne: 'editor.properties.filterNe',
+  gt: 'editor.properties.filterGt', gte: 'editor.properties.filterGte',
+  lt: 'editor.properties.filterLt', lte: 'editor.properties.filterLte',
+  contains: 'editor.properties.filterContains',
+  startsWith: 'editor.properties.filterStartsWith',
+  endsWith: 'editor.properties.filterEndsWith',
+  empty: 'editor.properties.filterEmpty', notEmpty: 'editor.properties.filterNotEmpty',
 };
 
 /**
@@ -1232,6 +1322,7 @@ function CrawlSeparatorField({
   value: string | undefined;
   onChange: (separator: string | undefined) => void;
 }): JSX.Element {
+  const t = useT();
   const current = value ?? DEFAULT_CRAWL_SEPARATOR;
   const preset = CRAWL_SEPARATOR_PRESETS.find((p) => p.value === current);
   const [custom, setCustom] = useState(!preset);
@@ -1249,10 +1340,10 @@ function CrawlSeparatorField({
 
   return (
     <>
-      <Field label="Separator">
+      <Field label={t('editor.properties.separator')}>
         <select
           value={custom ? '__custom__' : current}
-          title="Printed between items, and again between the last and the first"
+          title={t('editor.properties.separatorTitle')}
           onChange={(e) => {
             if (e.target.value === '__custom__') {
               setCustom(true);
@@ -1263,18 +1354,18 @@ function CrawlSeparatorField({
           }}
         >
           {CRAWL_SEPARATOR_PRESETS.map((p) => (
-            <option key={p.label} value={p.value}>{p.label}</option>
+            <option key={p.labelKey} value={p.value}>{t(p.labelKey)}</option>
           ))}
-          <option value="__custom__">Custom…</option>
+          <option value="__custom__">{t('editor.properties.separatorCustomOption')}</option>
         </select>
       </Field>
 
       {custom && (
-        <Field label="Custom">
+        <Field label={t('editor.properties.separatorCustom')}>
           <input
             value={current}
             placeholder={DEFAULT_CRAWL_SEPARATOR}
-            title="Spaces count — include the padding you want either side of the glyph"
+            title={t('editor.properties.separatorCustomPlaceholder2')}
             onChange={(e) => onChange(e.target.value || undefined)}
           />
         </Field>
@@ -1282,8 +1373,8 @@ function CrawlSeparatorField({
 
       <p className="hint">
         {custom
-          ? 'Spaces are part of the value — pad either side of the glyph, or the items run together.'
-          : `Renders as “A${current}B${current}”, wrapping round to the first item.`}
+          ? t('editor.properties.separatorCustomHint')
+          : t('editor.properties.separatorPreviewHint', { sep: current })}
       </p>
     </>
   );
@@ -1306,12 +1397,14 @@ function CrawlSourceSection({
   sources: Array<{ id: string; name: string; columns: DataColumn[] }>;
   onPatch: (patch: Partial<CrawlLayer>) => void;
 }): JSX.Element {
+  const t = useT();
+  const rt = useRichT();
   const bound = sources.find((s) => s.id === layer.source);
   const columns = bound?.columns ?? [];
 
   return (
-    <Section title="Crawl data">
-      <Field label="Source">
+    <Section title={t('editor.properties.sectionCrawlData')}>
+      <Field label={t('editor.properties.sectionSource')}>
         <select
           value={layer.source ?? ''}
           onChange={(e) => {
@@ -1331,7 +1424,7 @@ function CrawlSourceSection({
             });
           }}
         >
-          <option value="">— typed items —</option>
+          <option value="">{t('editor.properties.typedItems')}</option>
           {sources.map((s) => (
             <option key={s.id} value={s.id}>{s.name}</option>
           ))}
@@ -1339,12 +1432,12 @@ function CrawlSourceSection({
       </Field>
 
       {layer.source && (
-        <Field label="Column">
+        <Field label={t('editor.properties.column')}>
           <select
             value={layer.column ?? ''}
             onChange={(e) => onPatch({ column: e.target.value || undefined })}
           >
-            <option value="">— pick a column —</option>
+            <option value="">{t('editor.properties.pickAColumn')}</option>
             {columns.map((c) => (
               <option key={c.key} value={c.key}>{c.label ?? c.key}</option>
             ))}
@@ -1354,19 +1447,15 @@ function CrawlSourceSection({
 
       {layer.source && !bound && (
         <p className="hint warn">
-          No data source with id <code>{layer.source}</code> in this project. The ticker falls back
-          to its typed items.
+          {rt('editor.properties.crawlNoSource', { id: <code>{layer.source}</code> })}
         </p>
       )}
       {layer.source && bound && !layer.column && (
-        <p className="hint warn">
-          Pick a column — until one is set the ticker keeps using its typed items.
-        </p>
+        <p className="hint warn">{t('editor.properties.crawlNoColumn')}</p>
       )}
       {layer.source && layer.column && (
         <p className="hint">
-          Items come from <code>{layer.column}</code>, refreshed whenever the source changes. Empty
-          cells are skipped, and if the column comes back empty the typed items stay up.
+          {rt('editor.properties.crawlColumnHint', { column: <code>{layer.column}</code> })}
         </p>
       )}
     </Section>
@@ -1391,9 +1480,10 @@ function ColumnPick({
   columns: DataColumn[];
   onChange: (next: string | undefined) => void;
 }): JSX.Element {
+  const t = useT();
   return (
     <select value={value ?? ''} onChange={(e) => onChange(e.target.value || undefined)}>
-      <option value="">{fallback} (default)</option>
+      <option value="">{t('editor.properties.columnDefault', { name: fallback })}</option>
       {columns.map((c) => (
         <option key={c.key} value={c.key}>{c.key}</option>
       ))}
@@ -1411,74 +1501,76 @@ function ColumnPick({
  * the day it is set up, invisible afterwards.
  */
 function AdvanceFields({
-  t,
+  advance,
   columns,
   onChange,
 }: {
-  t: AdvanceTransform;
+  advance: AdvanceTransform;
   columns: DataColumn[];
   onChange: (next: AdvanceTransform) => void;
 }): JSX.Element {
-  const fields = t.fields?.length ? t.fields : [...ADVANCE_DEFAULTS.fields];
-  const scoring = Boolean(t.scores);
+  const t = useT();
+  const fields = advance.fields?.length ? advance.fields : [...ADVANCE_DEFAULTS.fields];
+  const scoring = Boolean(advance.scores);
 
   return (
     <div className="transform-advance">
       <label>
-        <span>Slot</span>
+        <span>{t('editor.properties.advanceSlot')}</span>
         <ColumnPick
-          value={t.slot}
+          value={advance.slot}
           fallback={ADVANCE_DEFAULTS.slot}
           columns={columns}
-          onChange={(slot) => onChange({ ...t, slot })}
+          onChange={(slot) => onChange({ ...advance, slot })}
         />
       </label>
       <label>
-        <span>Round</span>
+        <span>{t('editor.properties.advanceRound')}</span>
         <ColumnPick
-          value={t.round}
+          value={advance.round}
           fallback={ADVANCE_DEFAULTS.round}
           columns={columns}
-          onChange={(round) => onChange({ ...t, round })}
+          onChange={(round) => onChange({ ...advance, round })}
         />
       </label>
       <label>
-        <span>Winner</span>
+        <span>{t('editor.properties.advanceWinner')}</span>
         <ColumnPick
-          value={t.winner}
+          value={advance.winner}
           fallback={ADVANCE_DEFAULTS.winner}
           columns={columns}
-          onChange={(winner) => onChange({ ...t, winner })}
+          onChange={(winner) => onChange({ ...advance, winner })}
         />
       </label>
-      <label title="Optional per-row routing, e.g. QFL-1:home. Blank rows use the implied tree.">
-        <span>Routes</span>
+      <label title={t('editor.properties.advanceRoutesTitle')}>
+        <span>{t('editor.properties.advanceRoutes')}</span>
         <ColumnPick
-          value={t.feeds}
+          value={advance.feeds}
           fallback={ADVANCE_DEFAULTS.feeds}
           columns={columns}
-          onChange={(feeds) => onChange({ ...t, feeds })}
+          onChange={(feeds) => onChange({ ...advance, feeds })}
         />
       </label>
-      <label title="Where a loser goes — this is how a third-place play-off gets filled.">
-        <span>Loser routes</span>
+      <label title={t('editor.properties.advanceLoserRoutesTitle')}>
+        <span>{t('editor.properties.advanceLoserRoutes')}</span>
         <ColumnPick
-          value={t.feedsLoser}
+          value={advance.feedsLoser}
           fallback={ADVANCE_DEFAULTS.feedsLoser}
           columns={columns}
-          onChange={(feedsLoser) => onChange({ ...t, feedsLoser })}
+          onChange={(feedsLoser) => onChange({ ...advance, feedsLoser })}
         />
       </label>
-      <label title="Side-prefixed suffixes carried forward together, e.g. Team, Code.">
-        <span>Carry</span>
+      <label title={t('editor.properties.advanceCarryTitle')}>
+        <span>{t('editor.properties.advanceCarry')}</span>
         <input
           value={fields.join(', ')}
+          // i18n-ignore-next-line — a data column name, matching ADVANCE_DEFAULTS.fields
           placeholder="Team"
           onChange={(e) => {
             const next = e.target.value.split(',').map((s) => s.trim()).filter(Boolean);
             // An empty list would mean "carry nothing", which advances a team
             // into a slot and writes none of it. Fall back to the default.
-            onChange({ ...t, fields: next.length ? next : undefined });
+            onChange({ ...advance, fields: next.length ? next : undefined });
           }}
         />
       </label>
@@ -1490,81 +1582,81 @@ function AdvanceFields({
           onChange={(e) =>
             onChange(
               e.target.checked
-                ? { ...t, scores: { home: 'homeScore', away: 'awayScore' } }
-                : { ...t, scores: undefined },
+                ? { ...advance, scores: { home: 'homeScore', away: 'awayScore' } }
+                : { ...advance, scores: undefined },
             )
           }
         />
-        <span>Decide from scores when no winner is named</span>
+        <span>{t('editor.properties.advanceScores')}</span>
       </label>
 
-      {t.scores && (
+      {advance.scores && (
         <>
           <label>
-            <span>Home score</span>
+            <span>{t('editor.properties.advanceHomeScore')}</span>
             <ColumnPick
-              value={t.scores.home}
+              value={advance.scores.home}
               fallback="homeScore"
               columns={columns}
-              onChange={(home) => onChange({ ...t, scores: { ...t.scores!, home: home ?? 'homeScore' } })}
+              onChange={(home) => onChange({ ...advance, scores: { ...advance.scores!, home: home ?? 'homeScore' } })}
             />
           </label>
           <label>
-            <span>Away score</span>
+            <span>{t('editor.properties.advanceAwayScore')}</span>
             <ColumnPick
-              value={t.scores.away}
+              value={advance.scores.away}
               fallback="awayScore"
               columns={columns}
-              onChange={(away) => onChange({ ...t, scores: { ...t.scores!, away: away ?? 'awayScore' } })}
+              onChange={(away) => onChange({ ...advance, scores: { ...advance.scores!, away: away ?? 'awayScore' } })}
             />
           </label>
           <label className="transform-advance-toggle">
             <input
               type="checkbox"
-              checked={Boolean(t.scores.shootout)}
+              checked={Boolean(advance.scores.shootout)}
               onChange={(e) =>
                 onChange({
-                  ...t,
+                  ...advance,
                   scores: {
-                    ...t.scores!,
+                    ...advance.scores!,
                     shootout: e.target.checked ? { home: 'homePens', away: 'awayPens' } : undefined,
                   },
                 })
               }
             />
-            <span>Shoot-out columns break a draw</span>
+            <span>{t('editor.properties.advanceShootout')}</span>
           </label>
-          {t.scores.shootout && (
+          {advance.scores.shootout && (
             <>
               <label>
-                <span>Home pens</span>
+                <span>{t('editor.properties.advanceHomePens')}</span>
                 <ColumnPick
-                  value={t.scores.shootout.home}
+                  value={advance.scores.shootout.home}
                   fallback="homePens"
                   columns={columns}
                   onChange={(home) =>
                     onChange({
-                      ...t,
+                      ...advance,
                       scores: {
-                        ...t.scores!,
-                        shootout: { ...t.scores!.shootout!, home: home ?? 'homePens' },
+                        ...advance.scores!,
+                        shootout: { ...advance.scores!.shootout!, home: home ?? 'homePens' },
                       },
                     })
                   }
                 />
               </label>
               <label>
-                <span>Away pens</span>
+                <span>{t('editor.properties.advanceAwayPens')}</span>
                 <ColumnPick
-                  value={t.scores.shootout.away}
+                  value={advance.scores.shootout.away}
                   fallback="awayPens"
                   columns={columns}
                   onChange={(away) =>
                     onChange({
-                      ...t,
+                      ...advance,
                       scores: {
-                        ...t.scores!,
-                        shootout: { ...t.scores!.shootout!, away: away ?? 'awayPens' },
+                        ...advance.scores!,
+                        shootout: { ...advance.scores!.shootout!, away: away ?? 'awayPens' },
                       },
                     })
                   }
@@ -1575,9 +1667,7 @@ function AdvanceFields({
         </>
       )}
 
-      <p className="hint">
-        A match with no winner advances nobody — an unplayed slot stays blank rather than guessing.
-      </p>
+      <p className="hint">{t('editor.properties.advanceHint')}</p>
     </div>
   );
 }
@@ -1595,6 +1685,8 @@ function TableSection({
   pages: { page: number; pageCount: number; rows: number } | undefined;
   onPatch: (patch: Partial<TableLayer>) => void;
 }): JSX.Element {
+  const t = useT();
+  const rt = useRichT();
   const bound = sources.find((s) => s.id === layer.source);
   // Live columns where a source is attached, the authored snapshot otherwise —
   // the author needs the keys that will actually arrive, not the placeholder.
@@ -1613,120 +1705,131 @@ function TableSection({
 
   return (
     <>
-      <Section title="Table data">
-        <Field label="Source">
+      <Section title={t('editor.properties.sectionTableData')}>
+        <Field label={t('editor.properties.sectionSource')}>
           <select
             value={layer.source ?? ''}
             onChange={(e) => onPatch({ source: e.target.value || undefined })}
           >
-            <option value="">— authored rows —</option>
+            <option value="">{t('editor.properties.authoredRows')}</option>
             {sources.map((s) => (
               <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </select>
         </Field>
-        <Field label="Binding">
+        <Field label={t('editor.properties.binding')}>
           <input
             value={layer.binding ?? ''}
-            placeholder="e.g. standings"
-            title="Operators can replace the whole table live from the control panel"
+            placeholder={t('editor.properties.bindingTablePlaceholder')}
+            title={t('editor.properties.bindingTableTitle')}
             onChange={(e) => onPatch({ binding: e.target.value || undefined })}
           />
         </Field>
         {layer.source && !bound && (
           <p className="hint warn">
-            No data source with id <code>{layer.source}</code> in this project. The table falls back
-            to its authored rows.
+            {rt('editor.properties.tableNoSource', { id: <code>{layer.source}</code> })}
           </p>
         )}
         <p className="hint">
           {columns.length
-            ? <>Columns: {columns.map((c) => <code key={c.key}>{c.key}</code>).reduce<React.ReactNode[]>((acc, el, i) => (i ? [...acc, ' ', el] : [el]), [])}</>
-            : 'No columns yet — attach a source or paste rows into a manual table.'}
+            ? rt('editor.properties.tableColumns', {
+                columns: (
+                  <>
+                    {columns.map((c, i) => (
+                      <Fragment key={c.key}>
+                        {i > 0 && ' '}
+                        <code>{c.key}</code>
+                      </Fragment>
+                    ))}
+                  </>
+                ),
+              })
+            : t('editor.properties.tableNoColumns')}
         </p>
       </Section>
 
-      <Section title="Transforms">
-        {transforms.length === 0 && <p className="hint">Rows are used in source order.</p>}
+      <Section title={t('editor.properties.sectionTransforms')}>
+        {transforms.length === 0 && (
+          <p className="hint">{t('editor.properties.transformsSourceOrder')}</p>
+        )}
 
         {/*
           Not a validator error — filtering before advancing is legal and
           occasionally deliberate. But it silently resolves nothing, which is
           the kind of failure that only shows up on air, so say it here.
         */}
-        {transforms.some((t, i) => t.op === 'advance' && transforms.slice(0, i).some(
+        {transforms.some((tr, i) => tr.op === 'advance' && transforms.slice(0, i).some(
           (p) => p.op === 'filter' || p.op === 'limit' || p.op === 'offset',
         )) && (
           <p className="hint warn">
-            <strong>advance</strong> needs every round in the data. Anything that drops rows before
-            it — filter, limit, offset — leaves it nothing to advance from. Move it to the top.
+            {rt('editor.properties.advanceOrderWarning', { advance: <strong>advance</strong> })}
           </p>
         )}
 
-        {transforms.map((t, i) => (
+        {transforms.map((transform, i) => (
           <div key={i} className="transform-row">
-            <span className="transform-op">{t.op}</span>
+            <span className="transform-op">{transform.op}</span>
 
-            {(t.op === 'sort' || t.op === 'filter') && (
+            {(transform.op === 'sort' || transform.op === 'filter') && (
               <select
-                value={t.key}
-                onChange={(e) => setTransform(i, { ...t, key: e.target.value })}
+                value={transform.key}
+                onChange={(e) => setTransform(i, { ...transform, key: e.target.value })}
               >
                 {columns.map((c) => <option key={c.key} value={c.key}>{c.key}</option>)}
-                {!columns.some((c) => c.key === t.key) && <option value={t.key}>{t.key}</option>}
+                {!columns.some((c) => c.key === transform.key) && <option value={transform.key}>{transform.key}</option>}
               </select>
             )}
 
-            {t.op === 'sort' && (
+            {transform.op === 'sort' && (
               <select
-                value={t.dir ?? 'asc'}
-                onChange={(e) => setTransform(i, { ...t, dir: e.target.value as 'asc' | 'desc' })}
+                value={transform.dir ?? 'asc'}
+                onChange={(e) => setTransform(i, { ...transform, dir: e.target.value as 'asc' | 'desc' })}
               >
-                <option value="asc">ascending</option>
-                <option value="desc">descending</option>
+                <option value="asc">{t('editor.properties.sortAsc')}</option>
+                <option value="desc">{t('editor.properties.sortDesc')}</option>
               </select>
             )}
 
-            {t.op === 'filter' && (
+            {transform.op === 'filter' && (
               <>
                 <select
-                  value={t.cmp}
-                  onChange={(e) => setTransform(i, { ...t, cmp: e.target.value as FilterOp })}
+                  value={transform.cmp}
+                  onChange={(e) => setTransform(i, { ...transform, cmp: e.target.value as FilterOp })}
                 >
                   {FILTER_OPS.map((op) => (
-                    <option key={op} value={op}>{FILTER_LABEL[op]}</option>
+                    <option key={op} value={op}>{t(FILTER_LABEL_KEY[op])}</option>
                   ))}
                 </select>
-                {t.cmp !== 'empty' && t.cmp !== 'notEmpty' && (
+                {transform.cmp !== 'empty' && transform.cmp !== 'notEmpty' && (
                   <input
-                    value={String(t.value ?? '')}
-                    onChange={(e) => setTransform(i, { ...t, value: e.target.value })}
+                    value={String(transform.value ?? '')}
+                    onChange={(e) => setTransform(i, { ...transform, value: e.target.value })}
                   />
                 )}
               </>
             )}
 
-            {(t.op === 'limit' || t.op === 'offset') && (
+            {(transform.op === 'limit' || transform.op === 'offset') && (
               <input
                 type="number"
                 min={0}
-                value={t.n}
-                onChange={(e) => setTransform(i, { ...t, n: Math.max(0, Number(e.target.value)) })}
+                value={transform.n}
+                onChange={(e) => setTransform(i, { ...transform, n: Math.max(0, Number(e.target.value)) })}
               />
             )}
 
-            {t.op === 'rank' && (
+            {transform.op === 'rank' && (
               <input
-                value={t.as ?? ''}
+                value={transform.as ?? ''}
                 placeholder="rank"
-                title="Column the position is written to"
-                onChange={(e) => setTransform(i, { ...t, as: e.target.value || undefined })}
+                title={t('editor.properties.rankTitle')}
+                onChange={(e) => setTransform(i, { ...transform, as: e.target.value || undefined })}
               />
             )}
 
-            {t.op === 'advance' && (
+            {transform.op === 'advance' && (
               <AdvanceFields
-                t={t}
+                advance={transform}
                 columns={columns}
                 onChange={(next) => setTransform(i, next)}
               />
@@ -1734,7 +1837,7 @@ function TableSection({
 
             <button
               className="transform-move"
-              title="Move earlier"
+              title={t('editor.properties.moveEarlier')}
               disabled={i === 0}
               onClick={() => {
                 const list = [...transforms];
@@ -1742,11 +1845,15 @@ function TableSection({
                 onPatch({ transforms: list });
               }}
             >▲</button>
-            <button className="transform-del" title="Remove" onClick={() => setTransform(i, null)}>×</button>
+            <button
+              className="transform-del"
+              title={t('editor.properties.removeTransform')}
+              onClick={() => setTransform(i, null)}
+            >×</button>
           </div>
         ))}
 
-        <Field label="Add">
+        <Field label={t('editor.properties.addTransform')}>
           <select
             value=""
             onChange={(e) => {
@@ -1771,19 +1878,19 @@ function TableSection({
               });
             }}
           >
-            <option value="">+ transform…</option>
-            <option value="sort">Sort</option>
-            <option value="filter">Filter</option>
-            <option value="rank">Rank</option>
-            <option value="limit">Limit</option>
-            <option value="offset">Offset</option>
-            <option value="advance">Advance bracket</option>
+            <option value="">{t('editor.properties.addTransformOption')}</option>
+            <option value="sort">{t('editor.properties.opSort')}</option>
+            <option value="filter">{t('editor.properties.opFilter')}</option>
+            <option value="rank">{t('editor.properties.opRank')}</option>
+            <option value="limit">{t('editor.properties.opLimit')}</option>
+            <option value="offset">{t('editor.properties.opOffset')}</option>
+            <option value="advance">{t('editor.properties.opAdvance')}</option>
           </select>
         </Field>
       </Section>
 
-      <Section title="Rows">
-        <Field label="Row height">
+      <Section title={t('editor.properties.sectionRows')}>
+        <Field label={t('editor.properties.rowHeight')}>
           <input
             type="number"
             min={1}
@@ -1793,7 +1900,7 @@ function TableSection({
             }
           />
         </Field>
-        <Field label="Gap">
+        <Field label={t('editor.properties.gap')}>
           <input
             type="number"
             min={0}
@@ -1801,31 +1908,32 @@ function TableSection({
             onChange={(e) => onPatch({ row: { ...layer.row, gap: Math.max(0, Number(e.target.value)) } })}
           />
         </Field>
-        <Field label="Rows per page">
+        <Field label={t('editor.properties.rowsPerPage')}>
           <input
             type="number"
             min={0}
             value={layer.rowsPerPage ?? 0}
-            title="0 shows every row that fits the layer box; NEXT steps through pages while the graphic holds"
+            title={t('editor.properties.rowsPerPageTitle')}
             onChange={(e) => onPatch({ rowsPerPage: Math.max(0, Number(e.target.value)) || undefined })}
           />
         </Field>
 
         {pages && (
           <p className="hint">
-            {pages.rows} rows · page {pages.page + 1} of {pages.pageCount}
+            {t('editor.properties.pageReadout', {
+              rows: pages.rows,
+              page: pages.page + 1,
+              pageCount: pages.pageCount,
+            })}
           </p>
         )}
         {overflowing && (
-          <p className="hint warn">
-            More rows than fit. NEXT pages through them while the graphic holds — add a STOP marker
-            so it has somewhere to hold, or raise the layer height.
-          </p>
+          <p className="hint warn">{t('editor.properties.tableOverflow')}</p>
         )}
       </Section>
 
-      <Section title="Row reveal">
-        <Field label="Preset">
+      <Section title={t('editor.properties.sectionRowReveal')}>
+        <Field label={t('editor.properties.preset')}>
           <select
             className="reveal-preset"
             value={layer.rowAnim?.id ?? 'none'}
@@ -1836,16 +1944,16 @@ function TableSection({
               onPatch({ rowAnim: { id: e.target.value as RowAnimPresetId } })
             }
           >
-            <option value="none">None</option>
+            <option value="none">{t('editor.properties.revealNone')}</option>
             {ROW_ANIM_PRESETS.map((preset) => (
-              <option key={preset.id} value={preset.id}>{preset.label}</option>
+              <option key={preset.id} value={preset.id}>{t(preset.labelKey)}</option>
             ))}
           </select>
         </Field>
 
         {anim && (
           <>
-            <Field label="Stagger">
+            <Field label={t('editor.properties.stagger')}>
               <input
                 type="number"
                 step={0.01}
@@ -1856,7 +1964,7 @@ function TableSection({
                 }
               />
             </Field>
-            <Field label="Duration">
+            <Field label={t('editor.properties.pieceDuration')}>
               <input
                 type="number"
                 step={0.05}
@@ -1867,17 +1975,19 @@ function TableSection({
                 }
               />
             </Field>
-            <p className="hint">Reveal takes {revealSeconds.toFixed(2)}s at the current row count.</p>
+            <p className="hint">
+              {t('editor.properties.rowRevealReadout', { seconds: revealSeconds.toFixed(2) })}
+            </p>
           </>
         )}
 
-        <Field label="Re-sort">
+        <Field label={t('editor.properties.resort')}>
           <input
             type="number"
             step={0.05}
             min={0}
             value={layer.flip?.duration ?? 0.5}
-            title="Seconds rows take to slide to a new order when the data re-sorts. 0 snaps."
+            title={t('editor.properties.resortTitle')}
             onChange={(e) => onPatch({ flip: { ...(layer.flip ?? {}), duration: Number(e.target.value) } })}
           />
         </Field>

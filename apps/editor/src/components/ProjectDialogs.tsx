@@ -20,6 +20,8 @@
 
 import { useEffect, useRef, useState, type JSX } from 'react';
 
+import { useRichT, useT } from '@breeze/i18n/react';
+
 import { api, ApiError, type CompositionReferrer } from '../api/client.js';
 
 /**
@@ -98,6 +100,7 @@ function NameKeyDialog({
   onSubmit: (name: string, key: string | undefined) => Promise<void>;
   onClose: () => void;
 }): JSX.Element {
+  const t = useT();
   const [name, setName] = useState('');
   const [key, setKey] = useState('');
   /*
@@ -148,7 +151,7 @@ function NameKeyDialog({
   return (
     <Modal title={title} onClose={onClose}>
       <label className="dialog-field">
-        <span>Name</span>
+        <span>{t('editor.project.name')}</span>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -158,7 +161,7 @@ function NameKeyDialog({
       </label>
 
       <label className="dialog-field">
-        <span>URL key</span>
+        <span>{t('editor.project.urlKey')}</span>
         <input
           value={key}
           onChange={(e) => { setKeyTouched(true); setKey(e.target.value); }}
@@ -174,7 +177,7 @@ function NameKeyDialog({
       {error && <p className="dialog-error">{error}</p>}
 
       <div className="dialog-actions">
-        <button onClick={onClose}>Cancel</button>
+        <button onClick={onClose}>{t('editor.upload.cancel')}</button>
         <button className="primary" onClick={() => void submit()} disabled={busy || name.trim() === ''}>
           {busy ? busyLabel : submitLabel}
         </button>
@@ -197,18 +200,21 @@ export function NewProjectDialog({
   onCreated: (projectId: string) => void;
   onClose: () => void;
 }): JSX.Element {
+  const t = useT();
+  const rt = useRichT();
   return (
     <NameKeyDialog
-      title="New project"
-      namePlaceholder="Riverside Hawks Basketball"
+      title={t('editor.project.newProjectTitle')}
+      namePlaceholder={t('editor.project.namePlaceholder')}
       keyPlaceholder="rahb"
-      submitLabel="Create project"
-      busyLabel="Creating…"
+      submitLabel={t('editor.project.createProject')}
+      busyLabel={t('editor.project.creating')}
       keyNote={(key) => (
         <>
-          Lowercase letters, digits and hyphens. The server appends a short suffix, so this
-          becomes something like <code>{(key || 'project')}-1k3f9</code>. It goes in every
-          control and browser-source URL and <strong>cannot be changed later</strong>.
+          {rt('editor.project.keyNoteProject', {
+            example: <code key="e">{(key || 'project')}-1k3f9</code>,
+            fixed: <strong key="f">{t('editor.project.cannotChange')}</strong>,
+          })}
         </>
       )}
       onSubmit={async (name, key) => {
@@ -237,19 +243,22 @@ export function NewSceneDialog({
   onCreated: (compositionId: string) => void;
   onClose: () => void;
 }): JSX.Element {
+  const t = useT();
+  const rt = useRichT();
   return (
     <NameKeyDialog
-      title="New scene"
-      namePlaceholder="Lower Third — Name"
+      title={t('editor.project.newSceneTitle')}
+      namePlaceholder={t('editor.project.scenePlaceholder')}
       keyPlaceholder="l3rd"
-      submitLabel="Create scene"
-      busyLabel="Creating…"
+      submitLabel={t('editor.project.createScene')}
+      busyLabel={t('editor.project.creating')}
       keyNote={(key) => (
         <>
           Lowercase letters, digits and hyphens. The server appends a short suffix, so this
           becomes something like <code>{(key || 'comp')}-4b2c</code>, and it must not clash
-          with a scene or a scene element this project already answers to. It goes in every
-          control and browser-source URL and <strong>cannot be changed later</strong>.
+          {rt('editor.project.keyNoteSceneTail', {
+            fixed: <strong key="f">{t('editor.project.cannotChange')}</strong>,
+          })}
         </>
       )}
       onSubmit={async (name, key) => {
@@ -285,6 +294,8 @@ export function DeleteProjectDialog({
   onDeleted: () => void;
   onClose: () => void;
 }): JSX.Element {
+  const t = useT();
+  const rt = useRichT();
   const [typed, setTyped] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -307,15 +318,17 @@ export function DeleteProjectDialog({
   };
 
   return (
-    <Modal title="Delete project" onClose={onClose}>
+    <Modal title={t('editor.project.deleteProjectTitle')} onClose={onClose}>
       <p className="dialog-warn">
-        This deletes <strong>{projectName}</strong> — {sceneCount} scene{sceneCount === 1 ? '' : 's'},
-        every uploaded asset and every data source in it — from disk. It cannot be undone, and any
-        browser source or Stream Deck button pointing at <code>{projectId}</code> will stop working.
+        {rt('editor.project.deleteProjectWarn', {
+          count: sceneCount,
+          project: <strong key="p">{projectName}</strong>,
+          id: <code key="i">{projectId}</code>,
+        })}
       </p>
 
       <label className="dialog-field">
-        <span>Type <strong>{projectName}</strong> to confirm</span>
+        <span>{rt('editor.project.typeToConfirm', { name: <strong key="n">{projectName}</strong> })}</span>
         <input
           value={typed}
           onChange={(e) => setTyped(e.target.value)}
@@ -328,9 +341,9 @@ export function DeleteProjectDialog({
       {error && <p className="dialog-error">{error}</p>}
 
       <div className="dialog-actions">
-        <button onClick={onClose}>Cancel</button>
+        <button onClick={onClose}>{t('editor.upload.cancel')}</button>
         <button className="danger" onClick={() => void submit()} disabled={!confirmed || busy}>
-          {busy ? 'Deleting…' : 'Delete project'}
+          {busy ? t('editor.project.deleting') : t('editor.project.deleteProject')}
         </button>
       </div>
     </Modal>
@@ -363,6 +376,8 @@ export function DeleteSceneDialog({
   onDeleted: () => void;
   onClose: () => void;
 }): JSX.Element {
+  const t = useT();
+  const rt = useRichT();
   const [referrers, setReferrers] = useState<CompositionReferrer[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -403,21 +418,27 @@ export function DeleteSceneDialog({
   };
 
   return (
-    <Modal title="Delete scene" onClose={onClose}>
-      {referrers === null && <p className="dialog-hint">Checking what uses this scene…</p>}
+    <Modal title={t('editor.project.deleteSceneTitle')} onClose={onClose}>
+      {referrers === null && <p className="dialog-hint">{t('editor.project.checkingUsage')}</p>}
 
       {blocked && (
         <>
           <p className="dialog-warn">
-            <strong>{sceneName}</strong> cannot be deleted — it is mounted as a layer by
-            {referrers.length === 1 ? ' another scene' : ` ${referrers.length} other scenes`}.
-            Remove {referrers.length === 1 ? 'that layer' : 'those layers'} first.
+            {rt('editor.project.sceneBlocked', {
+              count: referrers.length,
+              scene: <strong key="s">{sceneName}</strong>,
+            })}
           </p>
           <ul className="dialog-list">
             {referrers.map((r, i) => (
               <li key={`${r.id}-${r.layer}-${i}`}>
-                <strong>{r.name}</strong> → layer <code>{r.layer}</code>
-                {r.independent && <span className="dialog-tag">scene element</span>}
+                {rt('editor.project.referrerRow', {
+                  scene: <strong key="s">{r.name}</strong>,
+                  layer: <code key="l">{r.layer}</code>,
+                })}
+                {r.independent && (
+                  <span className="dialog-tag">{t('editor.project.sceneElement')}</span>
+                )}
               </li>
             ))}
           </ul>
@@ -426,20 +447,27 @@ export function DeleteSceneDialog({
 
       {referrers !== null && !blocked && (
         <p className="dialog-warn">
-          This deletes the scene <strong>{sceneName}</strong> and everything in it. It cannot be
-          undone, and any browser source or Stream Deck button pointing at{' '}
-          <code>{projectId}/{sceneId}</code> will stop working.
-          {isLastScene && ' This is the only scene in the project.'}
+          {rt('editor.project.deleteSceneWarn', {
+            scene: <strong key="s">{sceneName}</strong>,
+            id: (
+              <code key="i">
+                {projectId}/{sceneId}
+              </code>
+            ),
+          })}
+          {isLastScene && ` ${t('editor.project.lastScene')}`}
         </p>
       )}
 
       {error && <p className="dialog-error">{error}</p>}
 
       <div className="dialog-actions">
-        <button onClick={onClose}>{blocked ? 'Close' : 'Cancel'}</button>
+        <button onClick={onClose}>
+          {blocked ? t('editor.project.close') : t('editor.upload.cancel')}
+        </button>
         {!blocked && (
           <button className="danger" onClick={() => void submit()} disabled={referrers === null || busy}>
-            {busy ? 'Deleting…' : 'Delete scene'}
+            {busy ? t('editor.project.deleting') : t('editor.project.deleteScene')}
           </button>
         )}
       </div>

@@ -13,6 +13,7 @@ import type { FastifyInstance } from 'fastify';
 import { config, projectAssetsDir } from '../config.js';
 import type { DataRegistry } from '../data/registry.js';
 import { playPage } from '../pages.js';
+import { fail } from '../errors.js';
 import { assertSafeId, getComposition, getDependencies, readProject } from '../store.js';
 
 const MIME: Record<string, string> = {
@@ -81,7 +82,7 @@ export async function registerPlayRoutes(
     const resolved = path.resolve(base, req.params['*']);
     if (!resolved.startsWith(base + path.sep)) {
       reply.code(403);
-      return { error: 'forbidden' };
+      return fail('error.forbidden');
     }
 
     try {
@@ -100,7 +101,7 @@ export async function registerPlayRoutes(
     const resolved = path.resolve(config.publicDir, req.params['*']);
     if (!resolved.startsWith(config.publicDir + path.sep)) {
       reply.code(403);
-      return { error: 'forbidden' };
+      return fail('error.forbidden');
     }
     try {
       const data = await fs.readFile(resolved);
