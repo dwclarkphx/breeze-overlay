@@ -72,11 +72,11 @@ export interface Demo {
 export const DEMOS: Demo[] = [
   { file: 'world-cup-scene.json', sources: 'world-cup-datasources.json' },
   { file: 'world-cup-bracket.json', sources: 'world-cup-datasources.json' },
-  { file: 'lower-third.json', sources: 'datasources.json' },
+  { file: 'breeze-demo.json', sources: 'datasources.json' },
 ];
 
 /* Kept for the tests and tooling that reference the original demo by name. */
-export const EXAMPLE_PROJECT_PATH = examples('lower-third.json');
+export const EXAMPLE_PROJECT_PATH = examples('breeze-demo.json');
 export const EXAMPLE_DATASOURCES_PATH = examples('datasources.json');
 
 export async function loadExampleProject(): Promise<Project> {

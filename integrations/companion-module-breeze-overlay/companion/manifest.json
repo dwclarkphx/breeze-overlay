@@ -6,7 +6,7 @@
   "shortname": "Breeze",
   "description": "Self-hosted broadcast overlay/graphics server — play, stop and update HTML5 graphics on air",
   "version": "0.2.0",
-  "license": "MPL-2.0",
+  "license": "MIT",
   "repository": "git+https://github.com/dwclarkphx/breeze-overlay.git",
   "bugs": "https://github.com/dwclarkphx/breeze-overlay/issues",
   "maintainers": [

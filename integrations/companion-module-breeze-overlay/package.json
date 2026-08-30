@@ -9,7 +9,7 @@
     "check": "companion-module-check",
     "package": "yarn build && companion-module-build"
   },
-  "license": "MPL-2.0",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dwclarkphx/breeze-overlay.git"

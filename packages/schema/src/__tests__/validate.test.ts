@@ -17,7 +17,7 @@ import { compositionDuration, validateComposition, validateProject } from '../va
 import type { Composition, Project } from '../types.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const examplePath = path.resolve(here, '../../../../examples/lower-third.json');
+const examplePath = path.resolve(here, '../../../../examples/breeze-demo.json');
 const example = JSON.parse(readFileSync(examplePath, 'utf8')) as Project;
 
 // Look compositions up by id, not array position — adding one to the example

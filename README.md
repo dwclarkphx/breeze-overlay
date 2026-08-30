@@ -120,7 +120,7 @@ Ports below 1024 need root; 7331 does not, so run the server as an ordinary
 user. For an unattended install, run it under systemd rather than a login
 shell — or use the container, which handles restart-on-boot already.
 
-Then open `http://<host>:7331/`. You will have access to the [Editor](#editor), Project list, and the **[User Guide](docs/USER-GUIDE.md)**. On first run the server seeds a demo project from `examples/lower-third.json`.
+Then open `http://<host>:7331/`. You will have access to the [Editor](#editor), Project list, and the **[User Guide](docs/USER-GUIDE.md)**. On first run the server seeds a demo project from `examples/breeze-demo.json`.
 
 `<host>` is whatever reaches the machine running the server — `localhost` if
 that is the machine you are sitting at, otherwise its LAN address or hostname.
@@ -606,6 +606,8 @@ Per-layer effects — blur, drop-shadow and the rest of the CSS filter family, k
 ## License
 
 Breeze Overlay is licensed under the [Mozilla Public License 2.0](LICENSE). Every source file carries the MPL notice; modifications to those files must stay under MPL-2.0, while new files combined with them may be licensed as you choose (MPL §3.3). Source lives at https://github.com/dwclarkphx/breeze-overlay.
+
+**One exception:** [`integrations/companion-module-breeze-overlay`](integrations/companion-module-breeze-overlay/LICENSE) — the Bitfocus Companion connector — is [MIT](integrations/companion-module-breeze-overlay/LICENSE), not MPL-2.0. Companion's own module requirements call for MIT to be eligible for listing and bundling, and a connector talking to Breeze over HTTP has no MPL-covered code to combine with in the first place. Everything else in the repo stays MPL-2.0.
 
 Breeze **requires** [GSAP](https://gsap.com) (GreenSock Animation Platform), (C) Webflow, but does not bundle it. `gsap.min.js` and `SplitText.min.js` are copied verbatim from the npm package into `apps/server/public/vendor/gsap/` at build time and loaded by a script tag — so no GreenSock code is compiled into any Breeze bundle, and the files can be replaced with a different GSAP release without rebuilding Breeze (see [Upgrading the animation engine](docs/USER-GUIDE.md#17-upgrading-the-animation-engine)).
 

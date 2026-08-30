@@ -14,6 +14,11 @@ That matters: v2 removed `runEntrypoint` and changed `InstanceBase` to be generi
 manifest schema, so a v1-era module will not load in v5 and vice versa. The compatibility
 table lives in the module-base README.
 
+**License: MIT**, not the MPL-2.0 that covers the rest of this repo. Bitfocus requires
+MIT for a module to be eligible for listing and bundling in Companion itself. See
+[`LICENSE`](companion-module-breeze-overlay/LICENSE), and both `package.json` and
+`companion/manifest.json` in this directory.
+
 ### Building
 
 ```bash

@@ -267,7 +267,7 @@ test('update() changes bound text live while holding', async ({ page }) => {
  * us) rather than hard-coded pixel counts that only hold on one box.
  */
 const MAX_WIDTH = 700;
-const MIN_SCALE = 0.6; // from examples/lower-third.json
+const MIN_SCALE = 0.6; // from examples/breeze-demo.json
 
 async function measureFit(page: Page) {
   return page.evaluate(() => {

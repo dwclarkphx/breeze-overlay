@@ -16,7 +16,7 @@ import { cubicBezier, resolveEase, sampleEase, steppedEase } from '../ease.js';
 import { buildPlan, evaluatePlan, nextHoldAfter } from '../plan.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const examplePath = path.resolve(here, '../../../../examples/lower-third.json');
+const examplePath = path.resolve(here, '../../../../examples/breeze-demo.json');
 const project = JSON.parse(readFileSync(examplePath, 'utf8')) as Project;
 const lowerThird = project.compositions[0] as Composition;
 

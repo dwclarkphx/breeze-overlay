@@ -19,4 +19,6 @@ This project is maintained by a single developer and code changes are written by
 
 The project is licensed under the Mozilla Public License 2.0: free to use, including commercially and in your productions. Copyleft is file-scoped — changes to the project's files must remain under MPL-2.0, while your own new files may carry any license, even in a combined work (MPL §3.3). See LICENSE.
 
-Should pull requests open in the future, contributions will be accepted under MPL-2.0 (which carries its own patent grant, §2.1).
+`integrations/companion-module-breeze-overlay` is the one exception — it's MIT, per Bitfocus Companion's own module requirements. See its own LICENSE.
+
+Should pull requests open in the future, contributions will be accepted under MPL-2.0 (which carries its own patent grant, §2.1), except to that one directory, where MIT applies.

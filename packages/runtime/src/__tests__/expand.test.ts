@@ -18,7 +18,7 @@ import { buildPlan, derivedDuration } from '../plan.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const project = JSON.parse(
-  readFileSync(path.resolve(here, '../../../../examples/lower-third.json'), 'utf8'),
+  readFileSync(path.resolve(here, '../../../../examples/breeze-demo.json'), 'utf8'),
 ) as Project;
 
 const byId = new Map(project.compositions.map((c) => [c.id, c]));
