@@ -256,7 +256,7 @@ Each row has a visibility dot, a lock, a thumbnail of the layer's actual content
 | Move up / down the stack | The `▲` and `▼` arrows |
 | Delete | The bin button, or press `Delete` with the layer selected |
 
-**Adding a layer.** The `+ Add…` menu offers **Text**, **Shape**, **Image**, **Video**, **Crawl**, **Table** and **Group**.
+**Adding a layer.** The `+ Add…` menu offers **Text**, **Shape**, **Image**, **Video**, **Sprite**, **Crawl**, **Table**, **Group** and **Composition** (for nesting another composition — see [section 13](#13-scenes--several-graphics-one-browser-source) for using this to build a scene).
 
 > **Worth knowing:** a new layer starts at the playhead, as it would in After Effects. Add one with the playhead parked at 2 seconds and the layer does not exist before 2 seconds. If that is not what you wanted, drag its bar left in the timeline, or set **In** to `0` in the properties panel.
 
@@ -664,12 +664,16 @@ An ordinary composition layer is *absorbed* into the timeline it sits in — tha
 
 1. Build the lower third and the bug as normal compositions, and get them working on their own.
 2. Make a new composition for the scene.
-3. Add each one as a composition layer, and tick **Independent** on each.
+3. For each one, use **+ Add… → Composition** in the layers panel, then set its **Reference** to the composition you built in step 1 and tick **Independent** in the properties panel. Leave **Channel** blank for now — see [Triggering them](#triggering-them) below.
 4. Order them in the layers panel. Top of the list paints on top, exactly as with any other layer — that is what decides whether the bug sits over or under the strap when both are up.
 
-Because an independent element brings its own timeline, the scene has nothing to say about *when* it moves. Keyframes and the In/Out lifetime bar are therefore switched off on an independent layer, and the save is refused if a file somehow has them. Position still works normally — drag it on the stage to nudge a full-frame element without going back and editing it.
+Because an independent element brings its own timeline, the scene has nothing to say about *when* it moves. Keyframes and the In/Out lifetime bar are therefore switched off on an independent layer, and the save is refused if a file somehow has them.
+
+**Position, scale and opacity on this layer are not applied to what airs — by design, not as a bug.** An independent element is a link and a trigger channel, nothing more: it always renders the referenced composition exactly as that composition is built, at its own size. If the bug or the lower third needs to sit somewhere other than where it was designed, or at a different size or opacity, build that into the referenced composition itself. The payoff is that the same composition then renders identically wherever it is mounted — standalone, or inside any number of scenes — instead of depending on where it happens to be dropped this time.
 
 Anything in the scene that is **not** independent — a shared background band, a common shadow — belongs to the scene's own timeline and plays with the scene itself.
+
+> **Worth knowing:** an already-open browser source or preview tab keeps running whatever it loaded when it was opened. Turning a composition into a scene, or adding a new independent element to one, does not change a page that is already sitting open — reload it (and the control panel, if that is open too) so it re-reads the composition and mounts the new element on its own channel. Until then, the page still behaves exactly as it did before the change: the old, already-loaded version responds to its own trigger, and the new element's channel reaches nobody at all. See [section 16](#16-when-something-looks-wrong) if this catches you out.
 
 ### Triggering them
 
@@ -1068,6 +1072,8 @@ If the second returns `"delivered": 0`, the URL is right and the browser source 
 **The graphic looks cropped when I open the play URL in a browser.** It is not. The output page is 1:1 at full stage size — a 1920×1080 graphic in a smaller desktop window will clip. Use the **Debug URL** on the portal instead, or add `?scale=contain` to see it fitted to the window. A graphic low in the frame, like a ticker at y=1000, is the confusing case: it plays correctly and is simply below the bottom of the window, so PLAY looks as though it did nothing.
 
 **In a scene, triggering one element rolls both of them.** They are sharing a name. This happens when the same composition is used twice in one scene — two copies of a badge, say. Give each one its own **Channel** in the properties panel and trigger those names instead. See [section 13](#13-scenes--several-graphics-one-browser-source).
+
+**Triggering an individual element does nothing, but the scene's own PLAY brings everything up.** The output page (or control panel) was already open before you added or changed an independent element. What to mount, and which channels to listen on, is written into the page once, when it loads — it does not update itself when the composition changes underneath it. Reload the browser source and the control panel so each re-reads the current composition. After that, the scene's own address should do nothing at all once every layer in it is independent, and each element's own address should work on its own. See [Building one](#building-one) in section 13.
 
 **A scene element will not take keyframes.** That is deliberate. An independent element brings its own timeline, so the scene has no say in when it moves — animate it in its own composition instead. Position on the stage still works.
 

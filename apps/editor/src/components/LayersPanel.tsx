@@ -212,6 +212,7 @@ export function LayersPanel(): JSX.Element {
             <option value="import:psd">{t('editor.layers.importPsd')}</option>
             <option value="table">{t('editor.layers.typeTable')}</option>
             <option value="group">{t('editor.layers.typeGroup')}</option>
+            <option value="composition">{t('editor.layers.typeComposition')}</option>
             {/*
               Cell options appear only with a table in context. Offered
               unconditionally they would be the most common way to add a layer

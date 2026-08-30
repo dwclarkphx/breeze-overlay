@@ -312,6 +312,7 @@
   "editor.layers.show": "Show",
   "editor.layers.sizeMismatch": "The file is {width}×{height}; this stage is not. Layers keep their original positions — resize the stage in Composition settings if you want them to line up.",
   "editor.layers.title": "Layers",
+  "editor.layers.typeComposition": "Composition",
   "editor.layers.typeCrawl": "Crawl",
   "editor.layers.typeGroup": "Group",
   "editor.layers.typeImage": "Image",

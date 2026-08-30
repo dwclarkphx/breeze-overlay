@@ -118,11 +118,15 @@ export function expandComposition(comp: Composition, options: ExpandOptions = {}
       /*
        * Independent elements are not expanded (SCENES.md §3).
        *
-       * The instance above is still pushed — the scene needs it for paint
-       * order, for its container, and for the static transform that positions
-       * the element — but the walk stops here. Its layers belong to a separate
-       * runtime with a separate timeline, and inlining them is precisely the
-       * behavior independence exists to switch off.
+       * The instance above is still pushed, for the scene's own paint order —
+       * but the walk stops here, so this instance never gets children and its
+       * DOM node stays empty. The visible graphic is mounted separately, by
+       * the player, into its own full-frame container built from the
+       * referenced composition's own stage; this instance's `transform` is
+       * not read for that. Confirmed as the intended shape (SCENES.md §2): an
+       * independent element is a link and a channel, not a placement — move,
+       * resize or restyle it by editing the referenced composition, not this
+       * layer.
        */
       if (layer.independent) continue;
 
