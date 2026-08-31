@@ -76,6 +76,30 @@ async function control(page: Page, channel: string, verb: string): Promise<void>
 }
 
 /**
+ * Wait until an element's playhead has actually advanced.
+ *
+ * **State leads time by a frame, and the gap is observable.** `play()` sets
+ * `playbackState` to `playing-in` and starts the timeline synchronously, but
+ * `currentTime` reads the GSAP timeline, which stays at 0 until the first tick
+ * renders. Waiting only for the state and then *sampling* the time is a race
+ * that a fast machine loses — it passed locally every run and failed on CI,
+ * where headless Chromium's frame scheduling is less generous.
+ *
+ * Polled rather than slept: the wait is over when the thing being waited for is
+ * true, not when a guessed interval expires.
+ */
+async function waitForRolling(page: Page, channel: string): Promise<void> {
+  await page.waitForFunction(
+    (ch) => {
+      const runtime = (window as any).breeze?.elements?.get(ch)?.runtime;
+      return Boolean(runtime) && runtime.playbackState !== 'idle' && runtime.currentTime > 0;
+    },
+    channel,
+    { timeout: 10_000 },
+  );
+}
+
+/**
  * Wait until the hub has a renderer registered on every channel named.
  *
  * **A mounted runtime is not a connected one, and the gap is a real race.** The
@@ -159,10 +183,18 @@ test.describe('nothing goes to air on load', () => {
 test.describe('the elements trigger independently', () => {
   test('playing the lower third leaves the bug untouched', async ({ page }) => {
     await control(page, LOWER_THIRD, 'play');
-    await page.waitForFunction(
-      (ch) => (window as any).breeze.elements.get(ch).runtime.playbackState !== 'idle',
-      LOWER_THIRD,
-    );
+
+    /*
+     * The positive control, and it comes first now.
+     *
+     * Waiting for the lower third to be genuinely rolling is what proves the
+     * play arrived — without it the rest of this test would pass on a page
+     * where nothing was dispatched at all, which is the vacuous shape the whole
+     * file exists to avoid. Making it the wait rather than a later assertion
+     * also removes the frame-boundary race: by the time the bug is checked, the
+     * scene has definitely ticked.
+     */
+    await waitForRolling(page, LOWER_THIRD);
 
     /*
      * `idle`, not "invisible". The bug is invisible either way — before it has
@@ -171,43 +203,37 @@ test.describe('the elements trigger independently', () => {
      */
     expect(await elementState(page, BUG)).toBe('idle');
     expect(await elementTime(page, BUG)).toBe(0);
-
-    // The positive control. Without it this test would still pass on a page
-    // where the play never arrived at all — which is the vacuous shape the
-    // whole file is written to avoid.
-    expect(await elementTime(page, LOWER_THIRD)).toBeGreaterThan(0);
   });
 
   test('playing the bug leaves the lower third untouched', async ({ page }) => {
     // The mirror case. Dispatch that happened to favour the first-mounted
     // element would pass the test above and fail this one.
     await control(page, BUG, 'play');
-    await page.waitForFunction(
-      (ch) => (window as any).breeze.elements.get(ch).runtime.playbackState !== 'idle',
-      BUG,
-    );
+    await waitForRolling(page, BUG);
 
     expect(await elementState(page, LOWER_THIRD)).toBe('idle');
     expect(await elementTime(page, LOWER_THIRD)).toBe(0);
-    expect(await elementTime(page, BUG)).toBeGreaterThan(0);
   });
 
   test('both can be on air at once, each at its own point', async ({ page }) => {
     await control(page, LOWER_THIRD, 'play');
+    // Started deliberately apart, so the two playheads cannot coincide.
     await page.waitForTimeout(250);
     await control(page, BUG, 'play');
 
-    await page.waitForFunction(
-      () => {
-        const els = (window as any).breeze.elements;
-        return ['l3rd-name', 'screen-bug'].every(
-          (ch) => els.get(ch).runtime.playbackState !== 'idle',
-        );
-      },
-    );
+    /*
+     * Both genuinely rolling before either is read.
+     *
+     * Waiting only for `playbackState !== 'idle'` would let this sample two
+     * playheads that are both still 0 — the same frame-boundary race that broke
+     * the sibling test on CI — and `|0 − 0| > 0.05` fails for a reason that has
+     * nothing to do with what is being tested.
+     */
+    await waitForRolling(page, LOWER_THIRD);
+    await waitForRolling(page, BUG);
 
-    // Started a quarter-second apart, so their playheads must differ — the same
-    // runtime driving both would report one time.
+    // Read in one evaluate, so the two are sampled from the same frame: read
+    // separately, the gap between the calls is itself part of the difference.
     const [a, b] = await page.evaluate(() => {
       const els = (window as any).breeze.elements;
       return [
@@ -215,6 +241,8 @@ test.describe('the elements trigger independently', () => {
         els.get('screen-bug').runtime.currentTime as number,
       ];
     });
+
+    // The same runtime driving both would report one time for both.
     expect(Math.abs(a - b)).toBeGreaterThan(0.05);
   });
 });
