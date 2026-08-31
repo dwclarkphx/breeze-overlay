@@ -375,22 +375,39 @@ export function applyStaticEffects(el: HTMLElement, layer: Layer): void {
   el.style.filter = composeFilter(layer, {});
 }
 
-export function composeFilter(
-  layer: Layer,
-  animated: { blur?: number; brightness?: number },
-): string {
+/**
+ * Filter props a timeline can drive. `dropShadow` is deliberately absent —
+ * MASKS.md §3.2: a keyframe track is a track of scalars, a drop shadow is a
+ * 4-tuple, and it stays a static baseline read straight from `fx` below.
+ */
+export interface AnimatedFilterProps {
+  blur?: number;
+  brightness?: number;
+  contrast?: number;
+  saturate?: number;
+  hueRotate?: number;
+  grayscale?: number;
+  sepia?: number;
+}
+
+export function composeFilter(layer: Layer, animated: AnimatedFilterProps): string {
   const fx = layer.effects ?? {};
   const parts: string[] = [];
   const blur = animated.blur ?? fx.blur;
   const brightness = animated.brightness ?? fx.brightness;
+  const contrast = animated.contrast ?? fx.contrast;
+  const saturate = animated.saturate ?? fx.saturate;
+  const hueRotate = animated.hueRotate ?? fx.hueRotate;
+  const grayscale = animated.grayscale ?? fx.grayscale;
+  const sepia = animated.sepia ?? fx.sepia;
 
   if (blur) parts.push(`blur(${blur}px)`);
   if (brightness !== undefined && brightness !== 1) parts.push(`brightness(${brightness})`);
-  if (fx.contrast !== undefined && fx.contrast !== 1) parts.push(`contrast(${fx.contrast})`);
-  if (fx.saturate !== undefined && fx.saturate !== 1) parts.push(`saturate(${fx.saturate})`);
-  if (fx.hueRotate) parts.push(`hue-rotate(${fx.hueRotate}deg)`);
-  if (fx.grayscale) parts.push(`grayscale(${fx.grayscale})`);
-  if (fx.sepia) parts.push(`sepia(${fx.sepia})`);
+  if (contrast !== undefined && contrast !== 1) parts.push(`contrast(${contrast})`);
+  if (saturate !== undefined && saturate !== 1) parts.push(`saturate(${saturate})`);
+  if (hueRotate) parts.push(`hue-rotate(${hueRotate}deg)`);
+  if (grayscale) parts.push(`grayscale(${grayscale})`);
+  if (sepia) parts.push(`sepia(${sepia})`);
   if (fx.dropShadow) {
     const d = fx.dropShadow;
     parts.push(`drop-shadow(${d.offsetX}px ${d.offsetY}px ${d.blur}px ${d.color})`);

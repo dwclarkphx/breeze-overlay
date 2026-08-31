@@ -74,6 +74,11 @@ export const ANIMATABLE_PROPS = [
   'skewX', 'skewY',
   'blur',
   'brightness',
+  'contrast',
+  'saturate',
+  'hueRotate',
+  'grayscale',
+  'sepia',
   'maskOffset',
 ] as const;
 
@@ -196,7 +201,12 @@ export interface LayerEffects {
 }
 
 export interface LayerMask {
-  /** Reserved for Phase 7. Only `rect` is honoured by the Phase-1 runtime. */
+  /**
+   * All three have been rendered by `packages/runtime/src/mask.ts` since
+   * Phase 1 — `rect`/`ellipse` as SVG primitives, `image` as a luminance mask
+   * — but had no authoring surface until Phase 8 Wave A gave this field a
+   * panel (MASKS.md §2).
+   */
   type: 'rect' | 'ellipse' | 'image';
   x: number;
   y: number;

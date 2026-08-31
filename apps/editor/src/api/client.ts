@@ -31,6 +31,8 @@ import { msg, type Message, type Params } from '@breeze/i18n';
 export interface ValidationIssue {
   path: string;
   message: string;
+  /** Absent means an error. A warning is returned but never blocks a save. */
+  severity?: 'error' | 'warning';
 }
 
 /** One composition that mounts another as a layer — why a delete was refused. */

@@ -377,6 +377,11 @@ img.layer-thumb {
 /* Filled when a keyframe already sits at the playhead, matching the timeline. */
 .add-key.on { color: var(--key); opacity: 1; }
 .raw-json { color: var(--muted); font-size: 11px; }
+.mask-preset-btn {
+  border: 1px solid var(--border); background: none; color: var(--text);
+  padding: 3px 8px; margin: 2px 0 6px; font-size: 11px; border-radius: 3px; cursor: pointer;
+}
+.mask-preset-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 /* Authoring warnings: things that will look like a fault on air but are a
    timing or sizing mistake here, where they can still be fixed. Amber rather

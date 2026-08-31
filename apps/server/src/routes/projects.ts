@@ -36,6 +36,7 @@ import {
   listProjects,
   newProject,
   putComposition,
+  readAssets,
   readProject,
   writeProject,
 } from '../store.js';
@@ -203,7 +204,11 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
     '/api/projects/:id/compositions/:compId',
     async (req) => {
       const comp = { ...req.body, id: req.params.compId };
-      assertValidComposition(comp);
+      // Asset-aware, so a mask `src` pointing at nothing in the bin is
+      // refused here rather than rendering as no mask at all, silently
+      // (MASKS.md §2.4).
+      const { assets } = await readAssets(req.params.id);
+      assertValidComposition(comp, assets);
       return putComposition(req.params.id, comp);
     },
   );

@@ -86,6 +86,11 @@ export function baselineValue(layer: Layer, prop: AnimatableProp): number {
     case 'opacity': return layer.opacity ?? 1;
     case 'blur': return layer.effects?.blur ?? 0;
     case 'brightness': return layer.effects?.brightness ?? 1;
+    case 'contrast': return layer.effects?.contrast ?? 1;
+    case 'saturate': return layer.effects?.saturate ?? 1;
+    case 'hueRotate': return layer.effects?.hueRotate ?? 0;
+    case 'grayscale': return layer.effects?.grayscale ?? 0;
+    case 'sepia': return layer.effects?.sepia ?? 0;
     case 'maskOffset': return 0;
     default: {
       const exhaustive: never = prop;
@@ -224,16 +229,43 @@ export function derivedDuration(instances: LayerInstance[]): number {
   return max;
 }
 
-/** Value a property has when nothing sets it. */
+/**
+ * Value a property has when nothing sets it.
+ *
+ * Made exhaustive in Phase 8 Wave B (MASKS.md §3.3), with the same `never`
+ * case `baselineValue` already uses to fail the build on an unhandled prop.
+ * It used to be a two-branch fallback — list the props defaulting to `1`,
+ * return `0` for everything else — which agreed with `baselineValue` only by
+ * coincidence and would have silently defaulted `contrast`/`saturate` to `0`
+ * (flat grey) the moment they were added here without touching this switch.
+ * `FilterProxy` in `runtime.ts` is now built FROM this function rather than
+ * duplicating it as a literal, which is what makes disagreement here a build
+ * failure instead of a bug that only shows up once a timeline ticks.
+ */
 export function defaultFor(prop: AnimatableProp): number {
   switch (prop) {
     case 'scaleX':
     case 'scaleY':
     case 'opacity':
     case 'brightness':
+    case 'contrast':
+    case 'saturate':
       return 1;
-    default:
+    case 'x':
+    case 'y':
+    case 'rotation':
+    case 'skewX':
+    case 'skewY':
+    case 'blur':
+    case 'hueRotate':
+    case 'grayscale':
+    case 'sepia':
+    case 'maskOffset':
       return 0;
+    default: {
+      const exhaustive: never = prop;
+      throw new Error(`unhandled prop ${String(exhaustive)}`);
+    }
   }
 }
 

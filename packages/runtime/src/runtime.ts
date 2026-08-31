@@ -47,7 +47,7 @@ import {
 } from './dom.js';
 import type { ExpandWarning } from './expand.js';
 import { applyMaskReference, createMask, createMaskHost, type MaskHandle } from './mask.js';
-import { buildPlan, layerMotion, nextHoldAfter, type TimelinePlan } from './plan.js';
+import { buildPlan, defaultFor, layerMotion, nextHoldAfter, type TimelinePlan } from './plan.js';
 import { injectRuntimeStyles } from './styles.js';
 import {
   TableBlock,
@@ -197,11 +197,18 @@ const GSAP_PROP: Partial<Record<AnimatableProp, string>> = {
   opacity: 'opacity',
 };
 
-interface FilterProxy {
-  blur: number;
-  brightness: number;
-  maskOffset: number;
-}
+/**
+ * Filter/mask props that ride the GSAP proxy path rather than a real CSS
+ * property — see `proxyFor`. Kept as one list so the proxy's shape and its
+ * defaults cannot drift apart (MASKS.md §3.3).
+ */
+const FILTER_PROXY_PROPS = [
+  'blur', 'brightness', 'contrast', 'saturate', 'hueRotate', 'grayscale', 'sepia', 'maskOffset',
+] as const satisfies readonly AnimatableProp[];
+
+type FilterProxyProp = (typeof FILTER_PROXY_PROPS)[number];
+
+type FilterProxy = Record<FilterProxyProp, number>;
 
 let instanceCounter = 0;
 
@@ -329,7 +336,21 @@ export class BreezeRuntime {
           this.maskHost,
           `${this.uid}-${instance.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`,
           instance.layer.mask,
-          instance.layer.size ?? { width: this.composition.stage.width, height: this.composition.stage.height },
+          /*
+           * Always the stage, never `instance.layer.size`.
+           *
+           * `maskUnits` is `userSpaceOnUse`, so the region and the mask shape
+           * share one coordinate space and the region's only job is to be big
+           * enough — the shape carries the geometry (MASKS.md §2.3). Deriving
+           * it from the layer used to make a mask on an unsized layer (text
+           * has no `size`) fall back to the stage and look right by accident,
+           * then cut off square the moment the same mask was given to a sized
+           * layer. Measuring the element instead would be worse: a layer with
+           * an in-point is `display:none` at build time and measures
+           * `offsetWidth 0`, which would mask a not-yet-visible layer to
+           * nothing the instant it entered.
+           */
+          { width: this.composition.stage.width, height: this.composition.stage.height },
           this.resolveAsset,
         );
         applyMaskReference(nodes.el, handle.reference);
@@ -904,7 +925,20 @@ export class BreezeRuntime {
   private proxyFor(layerId: string): FilterProxy {
     let p = this.proxies.get(layerId);
     if (!p) {
-      p = { blur: 0, brightness: 1, maskOffset: 0 };
+      /*
+       * Built FROM `defaultFor` rather than written out as a literal.
+       *
+       * The literal used to read `{ blur: 0, brightness: 1, maskOffset: 0 }`,
+       * agreeing with `defaultFor` only because someone kept the two in sync
+       * by hand. `layerMotion` only emits a baseline `set` when it differs
+       * from `defaultFor(prop)`, so a proxy constructed with the wrong
+       * default resets a layer's static effect to that wrong value the first
+       * time the timeline ticks — visible only while playing (MASKS.md §3.3).
+       * One list removes the chance to disagree.
+       */
+      p = Object.fromEntries(
+        FILTER_PROXY_PROPS.map((prop) => [prop, defaultFor(prop)]),
+      ) as FilterProxy;
       this.proxies.set(layerId, p);
     }
     return p;
@@ -1040,6 +1074,11 @@ export class BreezeRuntime {
     node.el.style.filter = composeFilter(node.layer, {
       blur: proxy.blur,
       brightness: proxy.brightness,
+      contrast: proxy.contrast,
+      saturate: proxy.saturate,
+      hueRotate: proxy.hueRotate,
+      grayscale: proxy.grayscale,
+      sepia: proxy.sepia,
     });
 
     this.masks.get(layerId)?.setOffset(proxy.maskOffset);

@@ -27,6 +27,7 @@ import {
   normalizeKey,
   type AdvanceTransform,
   type AnimatableProp,
+  type AssetRef,
   type Composition,
   type CrawlLayer,
   type DataColumn,
@@ -164,6 +165,18 @@ export function PropertiesPanel(): JSX.Element {
   );
 
   /**
+   * Assets offered by the mask's own image picker.
+   *
+   * Independent of `assetsOfKind` above: a mask can sit on any layer type,
+   * not just image/video/sprite, and it always wants an `image`-kind asset
+   * regardless of what the layer itself renders — a mask on a text layer
+   * still masks with a picture, not with text.
+   */
+  const maskAssetsOfKind = assets.filter(
+    (a) => (a.state !== 'retired' || a.path === layer.mask?.src) && a.kind === 'image',
+  );
+
+  /**
    * Column keys offered to a selected cell.
    *
    * Same precedence the table panel uses — live source columns where one is
@@ -229,6 +242,32 @@ export function PropertiesPanel(): JSX.Element {
 
   const hasKeyframeAtPlayhead = (prop: AnimatableProp) =>
     (layer.keyframes?.[prop] ?? []).some((kf) => Math.abs(kf.t - playhead) < 1e-6);
+
+  /**
+   * The wipe reveal — MASKS.md §2.2. Six numeric fields plus two keyframes is
+   * the entire content of the most common mask in broadcast, and nobody
+   * builds it by typing: seed a `rect` mask the size of the layer with a
+   * feather, and a two-keyframe `maskOffset` track that slides it across.
+   * Ordinary fields, written once — nothing downstream knows a preset was
+   * used, and the operator can hand-tune every value afterward.
+   */
+  const applyWipePreset = () => {
+    const width = layer.size?.width ?? composition.stage.width;
+    const height = layer.size?.height ?? 120;
+    const feather = Math.round(Math.min(width, height) * 0.15) || 20;
+    const duration = 0.6;
+
+    patch({
+      mask: { type: 'rect', x: 0, y: 0, width, height, feather },
+      keyframes: {
+        ...(layer.keyframes ?? {}),
+        maskOffset: [
+          { t: playhead, v: -width },
+          { t: playhead + duration, v: 0, ease: 'power2.out' },
+        ],
+      },
+    } as Partial<Layer>);
+  };
 
   return (
     <div className="panel properties-panel">
@@ -845,6 +884,28 @@ export function PropertiesPanel(): JSX.Element {
               onChange={(e) => setValue('brightness', Number(e.target.value))}
             />
           </Field>
+          {(
+            [
+              { prop: 'contrast', labelKey: 'editor.properties.contrast', step: 0.05 },
+              { prop: 'saturate', labelKey: 'editor.properties.saturate', step: 0.05 },
+              { prop: 'hueRotate', labelKey: 'editor.properties.hueRotate', step: 1 },
+              { prop: 'grayscale', labelKey: 'editor.properties.grayscale', step: 0.05 },
+              { prop: 'sepia', labelKey: 'editor.properties.sepia', step: 0.05 },
+            ] as const
+          ).map(({ prop, labelKey, step }) => (
+            <Field key={prop} label={t(labelKey)}>
+              <button
+                className={`stopwatch${isAnimated(prop) ? ' on' : ''}`}
+                onClick={() => toggleKeyframe(prop)}
+              >⏱</button>
+              <input
+                type="number"
+                step={step}
+                value={round(displayValue(layer, prop, playhead))}
+                onChange={(e) => setValue(prop, Number(e.target.value))}
+              />
+            </Field>
+          ))}
           <Field label={t('editor.properties.blend')}>
             <select
               value={layer.blendMode ?? 'normal'}
@@ -855,7 +916,102 @@ export function PropertiesPanel(): JSX.Element {
               ))}
             </select>
           </Field>
+          {/*
+            Drop shadow stays a static baseline, deliberately (MASKS.md §3.2):
+            a keyframe track is scalars, a shadow is a 4-tuple, and four rows
+            in the timeline for one visual property is not worth it for an
+            effect whose broadcast use is a static lift off a busy plate.
+          */}
+          <Field label={t('editor.properties.dropShadowColor')}>
+            <input
+              type="color"
+              value={layer.effects?.dropShadow?.color ?? '#000000'}
+              onChange={(e) =>
+                patch({
+                  effects: {
+                    ...(layer.effects ?? {}),
+                    dropShadow: {
+                      offsetX: layer.effects?.dropShadow?.offsetX ?? 4,
+                      offsetY: layer.effects?.dropShadow?.offsetY ?? 4,
+                      blur: layer.effects?.dropShadow?.blur ?? 6,
+                      ...layer.effects?.dropShadow,
+                      color: e.target.value,
+                    },
+                  },
+                })
+              }
+            />
+            {layer.effects?.dropShadow && (
+              <button
+                className="linkish"
+                onClick={() =>
+                  patch({ effects: { ...(layer.effects ?? {}), dropShadow: undefined } })
+                }
+              >
+                {t('editor.properties.dropShadowRemove')}
+              </button>
+            )}
+          </Field>
+          {layer.effects?.dropShadow && (
+            <>
+              <Field label={t('editor.properties.dropShadowOffsetX')}>
+                <input
+                  type="number"
+                  value={layer.effects.dropShadow.offsetX}
+                  onChange={(e) =>
+                    patch({
+                      effects: {
+                        ...layer.effects,
+                        dropShadow: { ...layer.effects!.dropShadow!, offsetX: Number(e.target.value) },
+                      },
+                    })
+                  }
+                />
+              </Field>
+              <Field label={t('editor.properties.dropShadowOffsetY')}>
+                <input
+                  type="number"
+                  value={layer.effects.dropShadow.offsetY}
+                  onChange={(e) =>
+                    patch({
+                      effects: {
+                        ...layer.effects,
+                        dropShadow: { ...layer.effects!.dropShadow!, offsetY: Number(e.target.value) },
+                      },
+                    })
+                  }
+                />
+              </Field>
+              <Field label={t('editor.properties.dropShadowBlur')}>
+                <input
+                  type="number"
+                  min={0}
+                  value={layer.effects.dropShadow.blur}
+                  onChange={(e) =>
+                    patch({
+                      effects: {
+                        ...layer.effects,
+                        dropShadow: { ...layer.effects!.dropShadow!, blur: Math.max(0, Number(e.target.value)) },
+                      },
+                    })
+                  }
+                />
+              </Field>
+            </>
+          )}
         </Section>
+
+        <MaskSection
+          layer={layer}
+          playhead={playhead}
+          maskAssets={maskAssetsOfKind}
+          allAssets={assets}
+          isAnimated={isAnimated}
+          toggleKeyframe={toggleKeyframe}
+          setValue={setValue}
+          onPatch={patch}
+          onWipePreset={applyWipePreset}
+        />
 
         <details className="raw-json">
           <summary>{t('editor.properties.animatedProperties')}</summary>
@@ -872,6 +1028,186 @@ export function PropertiesPanel(): JSX.Element {
         </details>
       </div>
     </div>
+  );
+}
+
+/**
+ * Mask authoring — MASKS.md Wave A.
+ *
+ * `packages/runtime/src/mask.ts` has rendered `rect`/`ellipse`/`image` masks,
+ * feathered and invertible, since Phase 1; this is the first panel that can
+ * write `layer.mask` at all. Shown for every layer type — masks are a
+ * `LayerBase` field and there is no type they are wrong for.
+ */
+function MaskSection({
+  layer,
+  playhead,
+  maskAssets,
+  allAssets,
+  isAnimated,
+  toggleKeyframe,
+  setValue,
+  onPatch,
+  onWipePreset,
+}: {
+  layer: Layer;
+  playhead: number;
+  maskAssets: AssetRef[];
+  allAssets: AssetRef[];
+  isAnimated: (prop: AnimatableProp) => boolean;
+  toggleKeyframe: (prop: AnimatableProp) => void;
+  setValue: (prop: AnimatableProp, value: number) => void;
+  onPatch: (patch: Partial<Layer>) => void;
+  onWipePreset: () => void;
+}): JSX.Element {
+  const t = useT();
+  const mask = layer.mask;
+
+  const setMask = (patch: Partial<NonNullable<Layer['mask']>>) => {
+    if (!mask) return;
+    onPatch({ mask: { ...mask, ...patch } });
+  };
+
+  return (
+    <Section title={t('editor.properties.sectionMask')}>
+      <Field label={t('editor.properties.maskType')}>
+        <select
+          value={mask?.type ?? 'none'}
+          onChange={(e) => {
+            const type = e.target.value as 'none' | 'rect' | 'ellipse' | 'image';
+            if (type === 'none') {
+              // The schema's own representation of "no mask" is the field
+              // being absent — writing a `{ type: 'none' }` sentinel would
+              // give every reader two ways to say the same thing.
+              onPatch({ mask: undefined });
+              return;
+            }
+            onPatch({
+              mask: {
+                type,
+                x: mask?.x ?? 0,
+                y: mask?.y ?? 0,
+                width: mask?.width ?? layer.size?.width ?? 200,
+                height: mask?.height ?? layer.size?.height ?? 200,
+                ...(mask?.feather !== undefined ? { feather: mask.feather } : {}),
+                ...(mask?.invert !== undefined ? { invert: mask.invert } : {}),
+                ...(type === 'image' && mask?.src !== undefined ? { src: mask.src } : {}),
+              },
+            });
+          }}
+        >
+          <option value="none">{t('editor.properties.maskNone')}</option>
+          <option value="rect">{t('editor.properties.maskRect')}</option>
+          <option value="ellipse">{t('editor.properties.maskEllipse')}</option>
+          <option value="image">{t('editor.properties.maskImage')}</option>
+        </select>
+      </Field>
+
+      {mask && (
+        <>
+          <Field label={t('editor.properties.x')}>
+            <input
+              type="number"
+              value={mask.x}
+              onChange={(e) => setMask({ x: Number(e.target.value) })}
+            />
+          </Field>
+          <Field label={t('editor.properties.y')}>
+            <input
+              type="number"
+              value={mask.y}
+              onChange={(e) => setMask({ y: Number(e.target.value) })}
+            />
+          </Field>
+          <Field label={t('editor.properties.width')}>
+            <input
+              type="number"
+              min={0}
+              value={mask.width}
+              onChange={(e) => setMask({ width: Math.max(0, Number(e.target.value)) })}
+            />
+          </Field>
+          <Field label={t('editor.properties.height')}>
+            <input
+              type="number"
+              min={0}
+              value={mask.height}
+              onChange={(e) => setMask({ height: Math.max(0, Number(e.target.value)) })}
+            />
+          </Field>
+          <Field label={t('editor.properties.maskFeather')}>
+            <input
+              type="number"
+              min={0}
+              value={mask.feather ?? 0}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setMask({ feather: v > 0 ? v : undefined });
+              }}
+            />
+          </Field>
+          <Field label={t('editor.properties.maskInvert')}>
+            <input
+              type="checkbox"
+              checked={mask.invert ?? false}
+              onChange={(e) => setMask({ invert: e.target.checked || undefined })}
+            />
+          </Field>
+
+          {mask.type === 'image' && (
+            <>
+              <Field label={t('editor.properties.asset')}>
+                <select
+                  value={maskAssets.some((a) => a.path === mask.src) ? mask.src : ''}
+                  onChange={(e) => {
+                    if (e.target.value) setMask({ src: e.target.value });
+                  }}
+                >
+                  <option value="">
+                    {maskAssets.length
+                      ? t('editor.properties.pickAnAsset')
+                      : t('editor.properties.noAssetsOfKind', { kind: 'image' })}
+                  </option>
+                  {maskAssets.map((a) => (
+                    <option key={a.id} value={a.path}>{a.originalName ?? a.path}</option>
+                  ))}
+                </select>
+              </Field>
+              {!mask.src && (
+                <p className="hint">{t('editor.properties.maskImageRequiresSrc')}</p>
+              )}
+              {mask.src && !allAssets.some((a) => a.path === mask.src) && (
+                <p className="hint">{t('editor.properties.notInBin')}</p>
+              )}
+            </>
+          )}
+
+          <Field label={t('editor.properties.maskOffset')}>
+            <button
+              className={`stopwatch${isAnimated('maskOffset') ? ' on' : ''}`}
+              onClick={() => toggleKeyframe('maskOffset')}
+            >⏱</button>
+            <input
+              type="number"
+              step={1}
+              value={round(displayValue(layer, 'maskOffset', playhead))}
+              onChange={(e) => setValue('maskOffset', Number(e.target.value))}
+            />
+          </Field>
+
+        </>
+      )}
+
+      {/*
+        Always available, mask or no mask — MASKS.md §2.2. It writes the mask
+        outright (a `rect` sized to the layer) rather than requiring one to
+        already exist, since the whole point is to skip typing six fields by
+        hand.
+      */}
+      <button className="mask-preset-btn" onClick={onWipePreset}>
+        {t('editor.properties.maskWipePreset')}
+      </button>
+    </Section>
   );
 }
 

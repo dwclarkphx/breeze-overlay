@@ -28,6 +28,11 @@ export function baselineOf(layer: Layer, prop: AnimatableProp): number {
   if (prop === 'opacity') return layer.opacity ?? 1;
   if (prop === 'blur') return layer.effects?.blur ?? 0;
   if (prop === 'brightness') return layer.effects?.brightness ?? 1;
+  if (prop === 'contrast') return layer.effects?.contrast ?? 1;
+  if (prop === 'saturate') return layer.effects?.saturate ?? 1;
+  if (prop === 'hueRotate') return layer.effects?.hueRotate ?? 0;
+  if (prop === 'grayscale') return layer.effects?.grayscale ?? 0;
+  if (prop === 'sepia') return layer.effects?.sepia ?? 0;
   if (prop === 'maskOffset') return 0;
   return t[prop as keyof typeof t] ?? 0;
 }

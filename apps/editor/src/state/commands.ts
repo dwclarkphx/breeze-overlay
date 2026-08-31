@@ -592,8 +592,22 @@ function applyValues(
     }
 
     if (prop === 'opacity') opacity = value;
-    else if (prop === 'blur' || prop === 'brightness') effects[prop] = value;
-    else transform[prop] = value;
+    else if (
+      prop === 'blur' ||
+      prop === 'brightness' ||
+      prop === 'contrast' ||
+      prop === 'saturate' ||
+      prop === 'hueRotate' ||
+      prop === 'grayscale' ||
+      prop === 'sepia'
+    ) {
+      effects[prop] = value;
+    } else if (prop === 'maskOffset') {
+      // Not a static field at all — `baselineValue` always reads 0 for it,
+      // so a non-animated edit here has nothing to write to. The stopwatch
+      // is the only way this property does anything (MASKS.md §2.1).
+      continue;
+    } else transform[prop] = value;
   }
 
   const patch: Record<string, unknown> = {};

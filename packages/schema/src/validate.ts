@@ -51,11 +51,24 @@ export interface ValidationIssue {
   /** JSON pointer into the document, e.g. `/layers/2/keyframes/x/0/t`. */
   path: string;
   message: string;
+  /**
+   * Absent means `'error'`. A `'warning'` is legal and will save — it names
+   * something that reads exactly like a fault on air but is a sizing or
+   * timing choice the author may have meant, e.g. a mask `width`/`height` of
+   * 0 at the start of an animated reveal (MASKS.md §2.4). Every rule that
+   * predates this field is an error, unchanged.
+   */
+  severity?: 'error' | 'warning';
 }
 
 export interface ValidationResult {
   valid: boolean;
   errors: ValidationIssue[];
+}
+
+/** A warning never blocks a save; only the absence of `severity` or `'error'` does. */
+function isBlocking(issue: ValidationIssue): boolean {
+  return issue.severity !== 'warning';
 }
 
 const ajv = new Ajv2020({
@@ -86,11 +99,26 @@ function toIssues(errors: ErrorObject[] | null | undefined): ValidationIssue[] {
 
 /* ------------------------------------------------- semantic (non-schema) */
 
+export interface SemanticContext {
+  /**
+   * The project's asset index, for the one rule that needs it — a mask
+   * `src` resolving to a real file. Assets live in a sibling `assets.json`
+   * (ASSETS.md §6), not in the `Project` document this module otherwise
+   * validates, so a caller with no asset list simply gets that one rule
+   * skipped rather than a required argument it may not have.
+   */
+  assets?: readonly AssetRef[];
+}
+
 /**
  * Rules the JSON Schema cannot express: unique ids, monotonic keyframe times,
  * markers inside the composition, sane in/out windows.
  */
-export function validateCompositionSemantics(comp: Composition): ValidationIssue[] {
+export function validateCompositionSemantics(
+  comp: Composition,
+  context: SemanticContext = {},
+): ValidationIssue[] {
+  const { assets } = context;
   const issues: ValidationIssue[] = [];
   const seenIds = new Set<string>();
   /** Resolved channel → the layer path that claimed it, for the duplicate check. */
@@ -348,6 +376,52 @@ export function validateCompositionSemantics(comp: Composition): ValidationIssue
       }
     }
 
+    if (layer.mask) {
+      /*
+       * MASKS.md §2.4 — there were no rules for `mask` before Wave A; the
+       * JSON schema checks shape (required x/y/width/height) and stops.
+       */
+      const m = layer.mask;
+
+      if (m.type === 'image' && !m.src) {
+        issues.push({
+          path: `${path}/mask/src`,
+          message: 'an image mask needs `src` — without it the mask renders as nothing at all, silently',
+        });
+      }
+
+      if (m.type === 'image' && m.src && assets && !assets.some((a) => a.path === m.src)) {
+        issues.push({
+          path: `${path}/mask/src`,
+          message: `mask references unknown asset "${m.src}"`,
+        });
+      }
+
+      // Legal — a typo'd unit, almost always, and the shape blurs away to
+      // nothing rather than failing loudly, so a warning is what fits.
+      if (m.feather !== undefined && m.feather > Math.min(m.width, m.height)) {
+        issues.push({
+          path: `${path}/mask/feather`,
+          severity: 'warning',
+          message:
+            `feather ${m.feather} is larger than the mask's smaller dimension ` +
+            `(${Math.min(m.width, m.height)}) — the shape blurs away to nothing`,
+        });
+      }
+
+      // Also legal, on the same grounds the JSON schema's own `minimum: 0`
+      // allows it: the natural start value of a mask being animated open.
+      if (m.width === 0 || m.height === 0) {
+        issues.push({
+          path: `${path}/mask/${m.width === 0 ? 'width' : 'height'}`,
+          severity: 'warning',
+          message:
+            'mask has zero width or height — legal as the start of an animated reveal, ' +
+            'but it masks everything away until it grows',
+        });
+      }
+    }
+
     for (const [prop, track] of Object.entries(layer.keyframes ?? {})) {
       if (!track || track.length === 0) continue;
       for (let i = 1; i < track.length; i++) {
@@ -383,16 +457,16 @@ export function validateCompositionSemantics(comp: Composition): ValidationIssue
 
 /* ----------------------------------------------------------- public API */
 
-export function validateComposition(doc: unknown): ValidationResult {
+export function validateComposition(doc: unknown, assets?: readonly AssetRef[]): ValidationResult {
   const ok = validateCompositionSchema(doc);
   const errors = toIssues(validateCompositionSchema.errors);
   if (!ok) return { valid: false, errors };
 
-  const semantic = validateCompositionSemantics(doc as Composition);
-  return { valid: semantic.length === 0, errors: semantic };
+  const semantic = validateCompositionSemantics(doc as Composition, { assets });
+  return { valid: semantic.filter(isBlocking).length === 0, errors: semantic };
 }
 
-export function validateProject(doc: unknown): ValidationResult {
+export function validateProject(doc: unknown, assets?: readonly AssetRef[]): ValidationResult {
   const ok = validateProjectSchema(doc);
   const errors = toIssues(validateProjectSchema.errors);
   if (!ok) return { valid: false, errors };
@@ -406,8 +480,8 @@ export function validateProject(doc: unknown): ValidationResult {
       semantic.push({ path: `/compositions/${i}/id`, message: `duplicate composition id "${comp.id}"` });
     }
     seen.add(comp.id);
-    for (const issue of validateCompositionSemantics(comp)) {
-      semantic.push({ path: `/compositions/${i}${issue.path}`, message: issue.message });
+    for (const issue of validateCompositionSemantics(comp, { assets })) {
+      semantic.push({ path: `/compositions/${i}${issue.path}`, message: issue.message, ...(issue.severity ? { severity: issue.severity } : {}) });
     }
   });
 
@@ -429,7 +503,7 @@ export function validateProject(doc: unknown): ValidationResult {
     });
   });
 
-  return { valid: semantic.length === 0, errors: semantic };
+  return { valid: semantic.filter(isBlocking).length === 0, errors: semantic };
 }
 
 /**
@@ -538,15 +612,15 @@ export function validateAssets(doc: unknown): ValidationResult {
 }
 
 /** Throwing variant for server routes. */
-export function assertValidComposition(doc: unknown): asserts doc is Composition {
-  const result = validateComposition(doc);
+export function assertValidComposition(doc: unknown, assets?: readonly AssetRef[]): asserts doc is Composition {
+  const result = validateComposition(doc, assets);
   if (!result.valid) {
     throw new CompositionValidationError('Invalid composition', result.errors);
   }
 }
 
-export function assertValidProject(doc: unknown): asserts doc is Project {
-  const result = validateProject(doc);
+export function assertValidProject(doc: unknown, assets?: readonly AssetRef[]): asserts doc is Project {
+  const result = validateProject(doc, assets);
   if (!result.valid) {
     throw new CompositionValidationError('Invalid project', result.errors);
   }
