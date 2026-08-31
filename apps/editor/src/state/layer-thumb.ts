@@ -25,6 +25,7 @@ export type LayerThumb =
   | { kind: 'image'; src: string; fit: string }
   | { kind: 'video'; src: string }
   | { kind: 'sprite'; src: string; cols: number; rows: number }
+  | { kind: 'composition'; ref: string; glyph: string }
   | { kind: 'shape'; fill: string; stroke?: { color: string; width: number }; radius: number; ellipse: boolean }
   | { kind: 'text'; sample: string; fontFamily: string; color: string; weight: string; italic: boolean }
   | { kind: 'stack'; children: LayerThumb[]; count: number }
@@ -125,8 +126,22 @@ export function layerThumb(layer: Layer): LayerThumb {
         count: layer.children.length,
       };
 
+    /*
+     * A composition names the graphic to render; it cannot render it here.
+     *
+     * This module is pure — it decides what a thumbnail *is* from the layer
+     * alone — and a nested composition needs the project to resolve `ref`, a
+     * DOM to build into, and a runtime to pose. All three belong to
+     * `LayerThumb.tsx`, so the decision stops at "render this ref as a still"
+     * and the impure half acts on it. Same split as `image` naming a `src` it
+     * does not load.
+     *
+     * The glyph survives as the fallback for a ref that resolves to nothing —
+     * and for scenes, which a single runtime renders wrongly rather than not at
+     * all (see `composition-thumb.ts`).
+     */
     case 'composition':
-      return { kind: 'glyph', glyph: TYPE_GLYPH.composition };
+      return { kind: 'composition', ref: layer.ref, glyph: TYPE_GLYPH.composition };
 
     default: {
       const exhaustive: never = layer;

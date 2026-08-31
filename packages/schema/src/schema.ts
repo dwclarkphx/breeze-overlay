@@ -620,6 +620,10 @@ export const compositionSchema = {
       },
     },
     layers: { type: 'array', items: { $ref: '#/$defs/layer' } },
+    // Authoring only — the frame a thumbnail poses at. Not bounded against
+    // `duration` here: duration is optional and derived when absent, so the
+    // relation cannot be stated in JSON Schema. `posterTimeOf` clamps instead.
+    posterTime: { type: 'number', minimum: 0 },
     meta: { type: 'object' },
   },
   additionalProperties: false,

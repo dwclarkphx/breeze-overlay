@@ -19,8 +19,14 @@
 
 import type { VideoLayer } from '@breeze/schema';
 
-/** Below this, seeking every frame costs more than it buys. */
-const SEEK_EPSILON = 0.04; // ~1 frame at 25fps
+/**
+ * Below this, seeking every frame costs more than it buys.
+ *
+ * Exported because the poster path re-uses it as its "has the pose actually
+ * moved" test: a still that is seeked twice to times a millisecond apart should
+ * not decode the clip twice.
+ */
+export const SEEK_EPSILON = 0.04; // ~1 frame at 25fps
 
 /**
  * `HTMLMediaElement.HAVE_METADATA`, inlined.
@@ -37,6 +43,36 @@ export interface VideoBinding {
   layer: VideoLayer;
   /** Nested-composition time offset applied to `startAt`. */
   offset: number;
+}
+
+/**
+ * Composition time → media time, with no element involved.
+ *
+ * Pulled out of the method below because a still has no `<video>` to read a
+ * duration off: it captures one frame and throws the element away, and the
+ * duration only exists for the moment the capture holds it (see `poster.ts`).
+ * Both callers have to agree on this arithmetic exactly — a poster frame that
+ * disagreed with the live path would make a thumbnail a picture of a graphic
+ * nobody will see — so there is one copy of it and two ways in.
+ *
+ * `duration` may be `NaN` or `0` before metadata lands, which is the honest
+ * "not known yet" and yields the raw elapsed time.
+ */
+export function mediaTimeAt(
+  layer: VideoLayer,
+  offset: number,
+  compTime: number,
+  duration: number,
+): number | null {
+  const start = offset + (layer.startAt ?? 0);
+  const elapsed = compTime - start;
+  if (elapsed < 0) return null;
+
+  if (!Number.isFinite(duration) || duration <= 0) return elapsed;
+
+  if (elapsed <= duration) return elapsed;
+  if (layer.loop) return elapsed % duration;
+  return duration; // hold the last frame
 }
 
 export class VideoSync {
@@ -63,16 +99,7 @@ export class VideoSync {
 
   /** Media time for a given composition time, or null if it should not show. */
   mediaTimeFor(binding: VideoBinding, compTime: number): number | null {
-    const start = binding.offset + (binding.layer.startAt ?? 0);
-    const elapsed = compTime - start;
-    if (elapsed < 0) return null;
-
-    const duration = binding.el.duration;
-    if (!Number.isFinite(duration) || duration <= 0) return elapsed;
-
-    if (elapsed <= duration) return elapsed;
-    if (binding.layer.loop) return elapsed % duration;
-    return duration; // hold the last frame
+    return mediaTimeAt(binding.layer, binding.offset, compTime, binding.el.duration);
   }
 
   /**

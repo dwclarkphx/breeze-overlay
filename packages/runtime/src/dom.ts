@@ -45,6 +45,14 @@ export interface LayerNodes {
   crawlTrack?: HTMLElement;
   media?: HTMLImageElement | HTMLVideoElement;
   video?: HTMLVideoElement;
+  /**
+   * Video-in-a-still only: the `<img>` standing in for the element.
+   *
+   * Mutually exclusive with `video` — a still never builds one — which is what
+   * lets the runtime decide between `VideoSync` and `PosterSync` by asking
+   * which of the two is set rather than by re-reading its own mode.
+   */
+  poster?: HTMLImageElement;
   /** Sprite-only: the box carrying the sheet as a background. */
   sprite?: HTMLElement;
 }
@@ -53,6 +61,14 @@ export interface BuildContext {
   doc: Document;
   /** Resolves `assets/logo.png` to a URL the page can load. */
   resolveAsset: (src: string) => string;
+  /**
+   * Building one paused frame — see `RuntimeOptions.still`.
+   *
+   * Only video reads it today: a still shows a captured poster frame instead of
+   * instantiating media. Everything else builds identically, which is the
+   * property `still.dom.test.ts` guards.
+   */
+  still?: boolean;
 }
 
 export function fillToCss(fill: Fill | undefined, fallback = 'transparent'): string {
@@ -227,6 +243,25 @@ function buildVideo(layer: VideoLayer, ctx: BuildContext): HTMLVideoElement {
   return video;
 }
 
+/**
+ * A video layer in a still: an `<img>` waiting for a captured frame.
+ *
+ * No `src` yet, and that is on purpose — an `<img>` with no source renders as
+ * nothing, where one pointed at an `.mp4` renders the browser's broken-image
+ * icon. `PosterSync` fills it in once the composition has been posed and it
+ * knows which frame to take. Same class as a real video so the stylesheet does
+ * not need to know the difference, and the same `object-fit`, so a poster is
+ * cropped exactly the way the clip would have been.
+ */
+function buildVideoPoster(layer: VideoLayer, ctx: BuildContext): HTMLImageElement {
+  const img = ctx.doc.createElement('img');
+  img.className = 'bz-video';
+  img.draggable = false;
+  img.alt = '';
+  img.style.objectFit = layer.fit ?? 'contain';
+  return img;
+}
+
 function buildCrawl(layer: CrawlLayer, ctx: BuildContext): { el: HTMLElement; track: HTMLElement } {
   const el = ctx.doc.createElement('div');
   el.className = 'bz-crawl';
@@ -286,6 +321,12 @@ export function buildLayerElement(instance: LayerInstance, ctx: BuildContext): L
       break;
     }
     case 'video': {
+      if (ctx.still) {
+        const poster = buildVideoPoster(layer, ctx);
+        content.appendChild(poster);
+        nodes.poster = poster;
+        break;
+      }
       const video = buildVideo(layer, ctx);
       content.appendChild(video);
       nodes.media = video;

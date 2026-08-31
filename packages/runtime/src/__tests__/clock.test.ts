@@ -209,6 +209,114 @@ describe('ClockTicker', () => {
   });
 });
 
+/**
+ * Tick-once — what a still uses.
+ *
+ * The distinction being guarded is narrow and easy to lose: this is not "no
+ * clock in a thumbnail". A frozen clock layer would leave the *authored
+ * placeholder* on screen, which is the reason the mode was deferred rather than
+ * shipped as a skip. The write stays; only the timer goes.
+ */
+describe('ClockTicker in tick-once mode', () => {
+  const once = (state: { now: Date; changes: number; text: Record<string, string> }) =>
+    new ClockTicker(
+      () => (state.changes += 1),
+      () => state.now,
+      true,
+    );
+
+  function state(iso = '2026-08-03T01:42:07Z') {
+    return { now: new Date(iso), changes: 0, text: {} as Record<string, string> };
+  }
+
+  it('writes the real time on add, exactly as the ticking mode does', () => {
+    const s = state();
+    const ticker = once(s);
+    ticker.add('a', {
+      clock: { format: 'h:mm A', timezone: PHX },
+      write: (t) => (s.text['a'] = t),
+    });
+
+    // A thumbnail showing `PLACEHOLDER` is worse than one a few minutes stale.
+    expect(s.text['a']).toBe('6:42 PM');
+    ticker.destroy();
+  });
+
+  it('starts no interval, however many targets are added', () => {
+    vi.useFakeTimers();
+    try {
+      const s = state();
+      const ticker = once(s);
+      ticker.add('time', {
+        // Seconds: the format that asks for the *finest* period there is, so a
+        // timer that slipped through could not be missed by advancing the clock.
+        clock: { format: 'h:mm:ss A', timezone: PHX },
+        write: (t) => (s.text['time'] = t),
+      });
+      ticker.add('date', {
+        clock: { format: 'ddd D MMM', timezone: PHX },
+        write: (t) => (s.text['date'] = t),
+      });
+
+      expect(vi.getTimerCount()).toBe(0);
+
+      s.now = new Date('2026-08-04T01:44:01Z');
+      vi.advanceTimersByTime(30_000);
+
+      expect(s.text['time']).toBe('6:42:07 PM');
+      expect(s.changes).toBe(0);
+      ticker.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('proves the harness by ticking under the same advance when not once', () => {
+    /*
+     * The other half of the case above, and the reason it is not vacuous. A
+     * `getTimerCount()` of 0 also happens when the harness never installed
+     * anything — so the identical setup, one flag apart, has to move.
+     */
+    vi.useFakeTimers();
+    try {
+      const s = state();
+      const ticker = new ClockTicker(
+        () => (s.changes += 1),
+        () => s.now,
+      );
+      ticker.add('time', {
+        clock: { format: 'h:mm:ss A', timezone: PHX },
+        write: (t) => (s.text['time'] = t),
+      });
+
+      expect(vi.getTimerCount()).toBe(1);
+
+      s.now = new Date('2026-08-04T01:44:01Z');
+      vi.advanceTimersByTime(30_000);
+
+      expect(s.text['time']).toBe('6:44:01 PM');
+      expect(s.changes).toBe(1);
+      ticker.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('still renders on an explicit tick, so a cached thumbnail can be refreshed', () => {
+    const s = state();
+    const ticker = once(s);
+    ticker.add('a', {
+      clock: { format: 'h:mm A', timezone: PHX },
+      write: (t) => (s.text['a'] = t),
+    });
+
+    s.now = new Date('2026-08-03T01:43:01Z');
+    expect(ticker.tick()).toBe(true);
+    expect(s.text['a']).toBe('6:43 PM');
+    ticker.destroy();
+  });
+});
+
 describe('locale', () => {
   const at = new Date('2026-08-03T18:42:07Z');
   const fmt = (format: string, locale?: string): string =>

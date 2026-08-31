@@ -202,3 +202,69 @@ describe('still mode', () => {
     expect(scrub(b.innerHTML)).toBe(scrub(a.innerHTML));
   });
 });
+
+/**
+ * Video layers — the one place a still deliberately builds different DOM.
+ *
+ * Everything above rests on "same layers, same content, different scaffolding".
+ * This is the exception, and it earns it: a `<video preload="auto">` is a
+ * decoder and a download held for as long as the thumbnail is on screen, and a
+ * composition picker showing twenty graphics with a stinger in them held twenty
+ * of them to play exactly no frames. A still shows one captured frame instead.
+ *
+ * What is *not* asserted here is the frame itself. happy-dom has no decoder, so
+ * the capture resolves null and the `<img>` stays empty — `poster.test.ts`
+ * drives the capture against a fake document where the seek and the draw can be
+ * read back.
+ */
+describe('still mode: video layers', () => {
+  const withVideo = (): Composition => {
+    const c = composition();
+    c.layers = [
+      ...c.layers,
+      {
+        id: 'sting',
+        type: 'video',
+        src: 'assets/sting.webm',
+        fit: 'cover',
+        size: { width: 1920, height: 1080 },
+      },
+    ] as never;
+    return c;
+  };
+
+  const videos = (el: HTMLElement): number => el.querySelectorAll('video').length;
+  const posters = (el: HTMLElement): number => el.querySelectorAll('img.bz-video').length;
+
+  it('builds a poster img instead of a media element', () => {
+    const { container: normal } = mount(withVideo(), false);
+    const { container: still } = mount(withVideo(), true);
+
+    // Both directions, because "no video" is also true of a composition whose
+    // layer failed to build at all — the poster has to be there in its place.
+    expect(videos(normal)).toBe(1);
+    expect(posters(normal)).toBe(0);
+
+    expect(videos(still)).toBe(0);
+    expect(posters(still)).toBe(1);
+  });
+
+  it('leaves the poster sourceless until a frame is captured', () => {
+    // An `<img>` pointed at a `.webm` is the browser's broken-image icon, which
+    // reads as a bug in the editor rather than as a clip still decoding.
+    const { container } = mount(withVideo(), true);
+    const img = container.querySelector('img.bz-video')!;
+
+    expect(img.hasAttribute('src')).toBe(false);
+  });
+
+  it('crops the poster the way the clip would have been cropped', () => {
+    // `fit: 'cover'` on the layer means the frame fills the box and overflows,
+    // and a thumbnail that letterboxed instead would be a picture of a graphic
+    // nobody sees.
+    const { container } = mount(withVideo(), true);
+    const img = container.querySelector('img.bz-video') as HTMLElement;
+
+    expect(img.style.objectFit).toBe('cover');
+  });
+});

@@ -220,6 +220,24 @@ input[type='checkbox'] { width: auto; }
 .panel-sub { color: var(--muted); font-weight: 400; font-size: 11px; }
 .panel-actions { display: flex; gap: 4px; }
 
+/* A nested composition's still. The host is sized by the mount helper, which
+   owns the single transform that scales the stage down — see
+   state/composition-thumb.ts. Never `display: none`: a hidden box measures
+   zero and the runtime measures elements, which breaks Fit Width silently. */
+.comp-thumb-host { display: inline-block; overflow: hidden; line-height: 0; }
+.comp-thumb { pointer-events: none; }
+
+/* Hover preview. Fixed and portalled to body because .layer-list is
+   overflow:auto and would clip anything rendered inside the row.
+   `pointer-events: none` keeps it from sitting under the cursor and fighting
+   its own hover boundary, which is how a tooltip flickers forever. */
+.comp-preview-layer {
+  position: fixed; z-index: 60; pointer-events: none;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: #0d1117; box-shadow: 0 8px 24px rgba(0, 0, 0, .55);
+  line-height: 0; overflow: hidden;
+}
+
 /* PSD import progress and report. Both sit above the layer list rather than
    over it: an import that covers the thing it is changing hides the only
    evidence that it worked. */

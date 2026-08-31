@@ -13,12 +13,26 @@
  * No bitmap rasterisation of the stage, and no dependency to do it with.
  */
 
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { createPortal } from 'react-dom';
 
 import { useT, type Translate } from '@breeze/i18n/react';
+import { capturePoster } from '@breeze/runtime';
 import type { Layer } from '@breeze/schema';
 
+import {
+  mountCompositionThumb,
+  placePreview,
+  type ThumbMount,
+} from '../state/composition-thumb.js';
+
+/** Longest side of a hover preview, in px. */
+const PREVIEW_MAX_PX = 320;
+
+/** How long the pointer must rest on a thumbnail before a preview opens. */
+const HOVER_INTENT_MS = 350;
 import { layerThumb, TYPE_GLYPH, type LayerThumb as Thumb } from '../state/layer-thumb.js';
+import { useEditor } from '../state/store.js';
 
 export interface LayerThumbProps {
   layer: Layer;
@@ -34,53 +48,201 @@ function resolve(src: string, assetBase: string | undefined): string {
 }
 
 /**
+ * A nested composition, rendered as a still posed at its rest frame.
+ *
+ * Phase 7.6's payoff: without this, every `composition` layer in a project is
+ * the same `⧉` and two nested comps in a list are indistinguishable.
+ *
+ * Scenes render too: the mount builds one runtime per independent element, each
+ * posed at its own rest frame.
+ *
+ * **Falls back to the glyph in two cases, both honest.** A `ref` that resolves
+ * to nothing has no graphic to draw. And a build that throws takes the glyph
+ * rather than the panel: a thumbnail is a convenience, and one bad composition
+ * must not blank the layers list.
+ */
+function CompositionThumb({
+  refId,
+  glyph,
+  size,
+}: {
+  refId: string;
+  glyph: string;
+  size: number;
+}): JSX.Element {
+  const host = useRef<HTMLSpanElement>(null);
+  const project = useEditor((s) => s.project);
+  const projectId = useEditor((s) => s.projectId);
+  const [failed, setFailed] = useState(false);
+
+  /*
+   * The live mount, held so the preview can clone it.
+   *
+   * A ref rather than state: it changes as a side effect of the build and no
+   * render depends on its identity, so putting it in state would re-render the
+   * row for nothing every time the panel rebuilt.
+   */
+  const mountRef = useRef<ThumbMount | null>(null);
+  const [preview, setPreview] = useState<{ x: number; y: number } | null>(null);
+  const pending = useRef<HTMLElement | null>(null);
+  const hoverTimer = useRef<number | undefined>(undefined);
+
+  const composition = useMemo(
+    () => project?.compositions.find((c) => c.id === refId),
+    [project, refId],
+  );
+
+  useEffect(() => {
+    const box = host.current;
+    if (!box || !composition) return;
+
+    // Typed as the real thing rather than a structural subset: the local shape
+    // was written before `preview` existed and silently stopped matching.
+    let mount: ThumbMount | null = null;
+    try {
+      mount = mountCompositionThumb({
+        composition,
+        size,
+        resolveComposition: (id) => project?.compositions.find((c) => c.id === id),
+        resolveAsset: (src) =>
+          /^(https?:)?\/\//.test(src) || src.startsWith('data:')
+            ? src
+            : `/assets/${projectId ?? ''}/${src.replace(/^assets\//, '')}`,
+      });
+      box.appendChild(mount.element);
+      mountRef.current = mount;
+      setFailed(false);
+    } catch {
+      setFailed(true);
+    }
+
+    // Ownership is ours. A still no longer holds a clock timer or a live
+    // `<video>` — both were cost this phase removed — but it still holds masks,
+    // a GSAP timeline and any poster capture in flight, and a panel that
+    // re-renders per keystroke would leak one set per render.
+    return () => {
+      mountRef.current = null;
+      mount?.destroy();
+    };
+  }, [composition, project, projectId, size]);
+
+  /*
+   * Hover intent, not hover.
+   *
+   * A preview that opens the instant the pointer touches a row strobes as the
+   * mouse crosses the panel on its way somewhere else. The delay is the whole
+   * difference between a preview and a flicker.
+   */
+  const openLater = (): void => {
+    if (!mountRef.current) return;
+    window.clearTimeout(hoverTimer.current);
+    hoverTimer.current = window.setTimeout(() => {
+      const anchor = host.current?.getBoundingClientRect();
+      const mount = mountRef.current;
+      if (!anchor || !mount) return;
+
+      const element = mount.preview(PREVIEW_MAX_PX);
+      const box = {
+        width: Number.parseFloat(element.style.width),
+        height: Number.parseFloat(element.style.height),
+      };
+      pending.current = element;
+      setPreview(
+        placePreview(
+          { x: anchor.left, y: anchor.top, width: anchor.width, height: anchor.height },
+          box,
+          { width: window.innerWidth, height: window.innerHeight },
+        ),
+      );
+    }, HOVER_INTENT_MS);
+  };
+
+  const close = (): void => {
+    window.clearTimeout(hoverTimer.current);
+    pending.current = null;
+    setPreview(null);
+  };
+
+  // Timer cleared on unmount too: a row removed while its preview was pending
+  // would otherwise open one for a thumbnail that no longer exists.
+  useEffect(() => close, []);
+
+  const drawable = composition && !failed;
+
+  if (!drawable) return <span className="layer-thumb glyph">{glyph}</span>;
+
+  return (
+    <>
+      <span
+        className="layer-thumb comp-thumb-host"
+        ref={host}
+        onPointerEnter={openLater}
+        onPointerLeave={close}
+      />
+      {preview &&
+        createPortal(
+          /*
+           * Portalled to `body` and `position: fixed`, because `.layer-list` is
+           * `overflow: auto` — a preview rendered inside the row is clipped by
+           * the panel it is trying to escape.
+           *
+           * `pointer-events: none` so the preview cannot sit under the cursor
+           * and fight its own hover boundary, which is the classic way a
+           * tooltip flickers forever.
+           */
+          <div
+            className="comp-preview-layer"
+            /*
+             * `placePreview` works in client space from
+             * `getBoundingClientRect`, which is physical whatever the document
+             * direction, and it already chooses a side by measuring the real
+             * anchor. A logical property here would mirror a number that has
+             * been mirrored once already, putting the preview on the wrong
+             * side under RTL.
+             */
+            // dir-ok — a computed viewport coordinate, not chrome
+            style={{ left: preview.x, top: preview.y }}
+            ref={(node) => {
+              if (node && pending.current) node.appendChild(pending.current);
+            }}
+          />,
+          document.body,
+        )}
+    </>
+  );
+}
+
+/**
  * One frame from a video, drawn once.
  *
- * Seeks a hair past zero rather than to zero: several encoders put a black or
- * near-black frame first, and a poster of black is indistinguishable from a
- * failed load — the one thing a thumbnail exists to rule out.
+ * The draw itself lives in `@breeze/runtime`'s `capturePoster`, not here. It
+ * started in this file and moved when a still runtime needed exactly the same
+ * thing: a video layer inside a composition thumbnail used to build a real
+ * `<video>` with `preload="auto"`, so a panel of twenty comps with stingers in
+ * them held twenty decoders that would never play a frame. The runtime is the
+ * only place that can decide a layer renders as a poster, so the helper went to
+ * the runtime and this component calls in — one implementation, and the seek
+ * rule that keeps a thumbnail off a black first frame is stated once.
+ *
+ * The glyph is the fallback for every failure: a missing asset, a codec the
+ * browser will not open, a cross-origin file that taints the canvas.
  */
 function VideoThumb({ src, size }: { src: string; size: number }): JSX.Element {
   const [poster, setPoster] = useState<string | null>(null);
-  const cancelled = useRef(false);
 
   useEffect(() => {
-    cancelled.current = false;
-    const video = document.createElement('video');
-    video.crossOrigin = 'anonymous';
-    video.muted = true;
-    video.preload = 'metadata';
-    video.src = src;
+    setPoster(null);
+    let live = true;
+    // Device pixels, so the bitmap survives a 2× display.
+    const capture = capturePoster({ doc: document, src, maxSize: size * 2 });
 
-    const draw = (): void => {
-      if (cancelled.current) return;
-      const canvas = document.createElement('canvas');
-      canvas.width = size * 2;
-      canvas.height = size * 2;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      const scale = Math.min(canvas.width / video.videoWidth, canvas.height / video.videoHeight);
-      const w = video.videoWidth * scale;
-      const h = video.videoHeight * scale;
-      try {
-        ctx.drawImage(video, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
-        setPoster(canvas.toDataURL('image/png'));
-      } catch {
-        // A cross-origin asset taints the canvas. The glyph fallback is fine —
-        // this is a convenience, not a feature worth an error for.
-      }
-    };
-
-    const onLoaded = (): void => {
-      video.currentTime = Math.min(0.1, (video.duration || 1) / 10);
-    };
-    video.addEventListener('loadeddata', onLoaded, { once: true });
-    video.addEventListener('seeked', draw, { once: true });
+    void capture.frame.then((url) => {
+      if (live && url) setPoster(url);
+    });
 
     return () => {
-      cancelled.current = true;
-      video.removeAttribute('src');
-      video.load();
+      live = false;
+      capture.cancel();
     };
   }, [src, size]);
 
@@ -117,6 +279,9 @@ function render(
 
     case 'video':
       return <VideoThumb src={resolve(thumb.src, assetBase)} size={size} />;
+
+    case 'composition':
+      return <CompositionThumb refId={thumb.ref} glyph={thumb.glyph} size={size} />;
 
     /*
      * Frame 0 of the sheet, by the same percentage rule the runtime uses.

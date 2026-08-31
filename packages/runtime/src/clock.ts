@@ -253,6 +253,15 @@ export interface ClockTarget {
  * so firing it every second regardless would be the expensive part of an
  * otherwise free feature. `12:59` → `1:00` genuinely does change width, which
  * is why the refit cannot simply be skipped.
+ *
+ * **`once` writes the time and never starts a timer.** A still is one paused
+ * frame, and a frame does not need a clock — but it does need the *right* time
+ * on it. That distinction is why this is a mode rather than "skip clocks in a
+ * still": freezing the layer outright would leave the authored placeholder on
+ * screen, and `PLACEHOLDER` in a thumbnail is worse than a time a few minutes
+ * stale. `add()` already writes immediately, so the only thing `once` removes
+ * is the interval. Twenty clock thumbnails were twenty timers, each capable of
+ * forcing a layout in a panel that is not even animating.
  */
 export class ClockTicker {
   private targets = new Map<string, ClockTarget>();
@@ -264,6 +273,14 @@ export class ClockTicker {
     private readonly onChange: () => void,
     /** Injected for tests; defaults to the real clock. */
     private readonly now: () => Date = () => new Date(),
+    /**
+     * Write on `add()` and on an explicit `tick()`, but never on a timer.
+     *
+     * `tick()` stays callable deliberately: a cached thumbnail that is being
+     * refreshed wants a new time without also wanting a subscription to every
+     * second between now and whenever the panel unmounts.
+     */
+    private readonly once = false,
   ) {}
 
   add(id: string, target: ClockTarget): void {
@@ -307,6 +324,11 @@ export class ClockTicker {
    * exists to avoid.
    */
   private restart(): void {
+    // A tick-once ticker has no period to compute and nothing to restart. Kept
+    // here rather than at every `add`/`remove` call site so there is exactly one
+    // place a timer can be created, and one guard in front of it.
+    if (this.once) return;
+
     const wanted = this.targets.size
       ? Math.min(...[...this.targets.values()].map((t) => tickIntervalFor(t.clock)))
       : 0;

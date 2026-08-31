@@ -58,6 +58,7 @@ import {
 } from './table.js';
 import { resolveTextAnim, type ResolvedTextAnim } from './textanim.js';
 import { SpriteSync } from './sprite.js';
+import { PosterSync } from './poster.js';
 import { VideoSync } from './video.js';
 
 /*
@@ -226,6 +227,15 @@ export class BreezeRuntime {
   private masks = new Map<string, MaskHandle>();
   private fitResults = new Map<string, FitResult>();
   private videos = new VideoSync();
+  /**
+   * Video layers in a still, which are `<img>` elements rather than media.
+   *
+   * Always empty on a playing runtime and `videos` is always empty on a still,
+   * so the two never both have work to do — but both are asked, because the
+   * alternative is a `this.still` branch at every one of the five places a
+   * playhead moves.
+   */
+  private posters = new PosterSync();
   private sprites = new SpriteSync();
   private crawls = new Map<string, CrawlLoop>();
   private tables = new Map<string, TableHandle>();
@@ -298,7 +308,7 @@ export class BreezeRuntime {
     this.stage.className = 'bz-stage';
     this.root.appendChild(this.stage);
 
-    const ctx: BuildContext = { doc: this.doc, resolveAsset: this.resolveAsset };
+    const ctx: BuildContext = { doc: this.doc, resolveAsset: this.resolveAsset, still: this.still };
 
     /**
      * Instances arrive parent-before-child from the expander, so appending to
@@ -328,6 +338,23 @@ export class BreezeRuntime {
 
       if (nodes.video && instance.layer.type === 'video') {
         this.videos.add({ el: nodes.video, layer: instance.layer, offset: instance.offset });
+      }
+
+      /*
+       * The still counterpart. `buildLayerElement` sets exactly one of `video`
+       * and `poster`, so these two branches cannot both run for a layer.
+       *
+       * Registered even with no `src`, matching the live path where an empty
+       * `<video>` still joins `VideoSync` and can be given a source later by a
+       * binding. `PosterSync` skips a sourceless entry until it has one.
+       */
+      if (nodes.poster && instance.layer.type === 'video') {
+        this.posters.add(instance.id, {
+          img: nodes.poster,
+          layer: instance.layer,
+          offset: instance.offset,
+          src: instance.layer.src ? this.resolveAsset(instance.layer.src) : '',
+        });
       }
 
       if (nodes.sprite && instance.layer.type === 'sprite') {
@@ -368,7 +395,13 @@ export class BreezeRuntime {
      * `add()` writes immediately, so a graphic cued and held for ten minutes
      * before air shows the real time the moment it is built — not the authored
      * placeholder until the next interval fires. The placeholder exists for the
-     * editor canvas and for a still export, and should never reach a renderer.
+     * editor canvas, and should never reach a renderer.
+     *
+     * A still takes this write and nothing after it: `clockTicker()` builds a
+     * tick-once ticker, so the loop below costs one `formatClock` per clock
+     * layer and no timer. That is why the still case is a mode on the ticker
+     * rather than a `continue` here — a thumbnail wants the time, just not a
+     * subscription to it.
      */
     for (const [id, node] of this.nodes) {
       const layer = node.layer;
@@ -459,6 +492,7 @@ export class BreezeRuntime {
     this.renderAt(0);
     this.applyVisibilityWindows(0);
     this.videos.syncTo(0);
+    this.posters.syncTo(0);
     this.sprites.syncTo(0);
 
     /**
@@ -1193,6 +1227,7 @@ export class BreezeRuntime {
     this.renderAt(0);
     this.stopCrawls();
     this.videos.syncTo(0);
+    this.posters.syncTo(0);
     this.sprites.syncTo(0);
     this.applyVisibilityWindows(0);
     this.emit('stop');
@@ -1204,6 +1239,7 @@ export class BreezeRuntime {
     this.renderAt(time);
     this.applyVisibilityWindows(this.tl.time());
     this.videos.syncTo(this.tl.time());
+    this.posters.syncTo(this.tl.time());
     this.sprites.syncTo(this.tl.time());
     this.emit('timeupdate');
   }
@@ -1257,13 +1293,26 @@ export class BreezeRuntime {
    * into `this.data`, and must not emit `update` to listeners: the editor
    * treats that as a document change and would mark the project dirty once a
    * second forever.
+   *
+   * **A still gets a tick-once ticker.** `add()` still writes the real time
+   * before the first paint — a thumbnail showing `PLACEHOLDER` would be worse
+   * than one a few minutes stale — but no interval is started, so twenty clock
+   * thumbnails are twenty writes rather than twenty timers. `onChange` is then
+   * unreachable, which is fine: the write happens before `build()`'s `refit()`,
+   * so the one time a still shows is fitted like any other text.
    */
   private clockTicker(): ClockTicker {
     if (!this.clocks) {
-      this.clocks = new ClockTicker(() => {
-        if (this.destroyed) return;
-        this.refitAfterTextChange();
-      });
+      this.clocks = new ClockTicker(
+        () => {
+          if (this.destroyed) return;
+          this.refitAfterTextChange();
+        },
+        // `undefined` takes the real clock; the third argument is the one being
+        // set, and TypeScript has no way to skip the middle one.
+        undefined,
+        this.still,
+      );
     }
     return this.clocks;
   }
@@ -1291,9 +1340,21 @@ export class BreezeRuntime {
       }
       case 'image':
       case 'video':
-        if (node.media && typeof value === 'string' && value) {
-          node.media.src = this.resolveAsset(value);
+        if (typeof value !== 'string' || !value) break;
+        /*
+         * In a still the element is an `<img>` holding a captured frame, so the
+         * URL cannot simply be assigned — an `<img src="clip.mp4">` is the
+         * browser's broken-image icon. `PosterSync` re-captures instead.
+         *
+         * `node.media` is deliberately unset for a still video, so this is not
+         * a guard that can be forgotten: the assignment below has nothing to
+         * write to on that path.
+         */
+        if (node.poster) {
+          this.posters.setSrc(node.instance.id, this.resolveAsset(value));
+          break;
         }
+        if (node.media) node.media.src = this.resolveAsset(value);
         break;
       case 'crawl': {
         // Queued, not applied: the loop swaps it in at the seam so the ticker
@@ -1607,6 +1668,11 @@ export class BreezeRuntime {
     this.clocks?.destroy();
     this.clocks = null;
     this.videos.destroy();
+    // A capture in flight holds a `<video>` of its own. Cancelling drops its
+    // source now rather than whenever the decode happens to finish, which for a
+    // panel that rebuilds per keystroke is the difference between one element
+    // alive and one per render.
+    this.posters.destroy();
     this.sprites.destroy();
     for (const mask of this.masks.values()) mask.destroy();
     this.masks.clear();

@@ -29,10 +29,10 @@ function comp(layers: Composition['layers']): Composition {
   return createComposition({ id: 'bug', name: 'Bug', duration: 1, layers });
 }
 
-function mount(composition: Composition) {
+function mount(composition: Composition, still = false) {
   const container = document.createElement('div');
   document.body.appendChild(container);
-  const runtime = new BreezeRuntime({ container, composition, injectStyles: false });
+  const runtime = new BreezeRuntime({ container, composition, injectStyles: false, still });
   return { runtime, container };
 }
 
@@ -166,5 +166,60 @@ describe('clock layers', () => {
     cleanup.push(() => runtime.destroy());
 
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  /**
+   * A still is one paused frame, and a frame does not need a subscription to
+   * the second — but it does need the right time printed on it.
+   *
+   * The cost this closes: thumbnails are the only consumer of still mode, and a
+   * composition picker showing twenty graphics with a clock in them was twenty
+   * intervals, each capable of forcing a layout in a panel that is not even
+   * animating.
+   */
+  describe('in a still', () => {
+    const clockComp = (): Composition =>
+      comp([
+        createTextLayer({
+          id: 'time',
+          text: 'PLACEHOLDER',
+          clock: { format: 'h:mm:ss A', timezone: PHX },
+        }),
+      ]);
+
+    it('writes the real time and starts no timer', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(T0);
+
+      const { runtime } = mount(clockComp(), true);
+      cleanup.push(() => runtime.destroy());
+
+      // Both halves matter. Freezing the layer instead would satisfy the second
+      // assertion and leave `PLACEHOLDER` on screen, which is the reason this
+      // was a deferred item rather than a one-line skip.
+      expect(textOf(runtime, 'time')).toBe('6:42:07 PM');
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('stays on that time while a normal runtime advances', () => {
+      /*
+       * The same composition, one flag apart, under one clock advance. Without
+       * the second runtime a timer count of zero could just mean the fake
+       * timers never saw anything at all.
+       */
+      vi.useFakeTimers();
+      vi.setSystemTime(T0);
+
+      const { runtime: still } = mount(clockComp(), true);
+      const { runtime: live } = mount(clockComp(), false);
+      cleanup.push(() => still.destroy());
+      cleanup.push(() => live.destroy());
+
+      expect(vi.getTimerCount()).toBe(1);
+      vi.advanceTimersByTime(30_000);
+
+      expect(textOf(live, 'time')).toBe('6:42:37 PM');
+      expect(textOf(still, 'time')).toBe('6:42:07 PM');
+    });
   });
 });

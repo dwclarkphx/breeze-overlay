@@ -711,6 +711,22 @@ export interface Composition {
   stage: Stage;
   markers?: Marker[];
   layers: Layer[];
+  /**
+   * Time this graphic is posed at for a thumbnail, in seconds.
+   *
+   * Resolved as `posterTime ?? first stop marker ?? 0` — see `posterTimeOf`.
+   * The default is right often enough that most compositions will never set
+   * this; the field exists for the author of a multi-state graphic, who knows
+   * which of three stop markers actually reads as the thing.
+   *
+   * **t=0 is the one time a graphic is guaranteed to look like nothing**: it is
+   * off-stage, mid-animate-in, or fully transparent, which is why a thumbnail
+   * cannot simply use the first frame.
+   *
+   * Never read by playout. A poster time is an authoring convenience and must
+   * not change what goes to air.
+   */
+  posterTime?: number;
   /** Free-form authoring metadata; never read by the runtime. */
   meta?: Record<string, unknown>;
 }

@@ -409,7 +409,8 @@
             ]
           }
         }
-      ]
+      ],
+      "posterTime": 0.4
     },
     {
       "id": "ticker",

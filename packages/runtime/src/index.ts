@@ -17,6 +17,7 @@ export * from './textanim.js';
 export * from './mask.js';
 export * from './sprite.js';
 export * from './video.js';
+export * from './poster.js';
 export * from './styles.js';
 export * from './runtime.js';
 export * from './globals.js';
