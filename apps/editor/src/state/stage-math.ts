@@ -152,6 +152,116 @@ export function zoomAtPoint(
   };
 }
 
+/**
+ * Fraction of the canvas left as breathing room by "zoom to selection".
+ *
+ * A layer framed edge to edge is one whose handles sit on the canvas boundary,
+ * where they are awkward to grab and where a drag immediately leaves the
+ * viewport. The margin is the difference between framing a layer and trapping
+ * it.
+ */
+export const FRAME_MARGIN = 0.15;
+
+/** A box in client coordinates. `DOMRect` satisfies it as-is. */
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Pan that brings a rectangle to the middle of the canvas, zoom unchanged.
+ *
+ * Derived the same way as `zoomAtPoint` and from the same model: a stage point
+ * `v` away from the stage centre sits at `centre + pan + zoom·v`, so putting it
+ * at the canvas centre means `pan′ = pan + (centre − rectCentre)`. Both
+ * arguments are client coordinates, which is what a `getBoundingClientRect`
+ * gives and therefore what the caller already has.
+ */
+export function panToCentre(pan: Point, rectCentre: Point, centre: Point): Point {
+  return {
+    x: pan.x + (centre.x - rectCentre.x),
+    y: pan.y + (centre.y - rectCentre.y),
+  };
+}
+
+/**
+ * Zoom and pan that frame one rectangle in the canvas.
+ *
+ * `rect` is in *client* pixels at the current zoom, because it comes from the
+ * live element — which is the only thing that knows where a layer is at the
+ * current playhead, once keyframes have moved it. Its size in stage units is
+ * therefore `rect / zoom`, and that is what the new zoom is solved against.
+ *
+ * Clamped by `clampZoom`, so a one-pixel layer does not demand 400× and a
+ * full-bleed background does not collapse the stage. When the clamp bites, the
+ * pan still centres the rectangle: a layer too big to frame is one you want
+ * centred and cropped rather than off to one side.
+ */
+export function frameRect(
+  pan: Point,
+  zoom: number,
+  /*
+   * `x`/`y`, not `left`/`top`. These are geometry rather than CSS — a
+   * `DOMRect` offers both spellings — and the physical-direction lint rightly
+   * has no way to tell the difference from the name alone. Using the neutral
+   * pair keeps the rule meaningful for the properties it is actually about.
+   */
+  rect: Rect,
+  canvas: { width: number; height: number },
+  centre: Point,
+  margin = FRAME_MARGIN,
+  limits = ZOOM_LIMITS,
+): { zoom: number; pan: Point } {
+  const rectCentre = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+
+  // A zero-sized rect — a layer with no size, or one measured before layout —
+  // has no scale to solve for. Centring it is still the right answer.
+  if (zoom <= 0 || rect.width <= 0 || rect.height <= 0 || canvas.width <= 0 || canvas.height <= 0) {
+    return { zoom, pan: panToCentre(pan, rectCentre, centre) };
+  }
+
+  const stageWidth = rect.width / zoom;
+  const stageHeight = rect.height / zoom;
+  const usable = 1 - margin;
+
+  const next = clampZoom(
+    Math.min((canvas.width * usable) / stageWidth, (canvas.height * usable) / stageHeight),
+    limits,
+  );
+
+  /*
+   * Centre first at the *current* zoom, then let `zoomAtPoint` hold that centre
+   * while the zoom changes.
+   *
+   * Composing the two existing transforms rather than deriving a third: the one
+   * that centres and the one that anchors are each already tested, and a
+   * bespoke combined formula would be a third place for the sign of `pan` to be
+   * wrong.
+   */
+  const centred = panToCentre(pan, rectCentre, centre);
+  return { zoom: next, pan: zoomAtPoint(centred, zoom, next, centre, centre) };
+}
+
+/**
+ * Is this rectangle outside the canvas, or so close to the edge it may as well
+ * be?
+ *
+ * Used to decide whether selecting a layer should pan it into view. The test is
+ * deliberately "not comfortably inside" rather than "entirely outside": a layer
+ * with two pixels showing at the edge is one the operator cannot work with, and
+ * revealing it is what they wanted by selecting it.
+ */
+export function needsReveal(rect: Rect, canvas: Rect, slack = 8): boolean {
+  return (
+    rect.x + rect.width - slack < canvas.x ||
+    rect.y + rect.height - slack < canvas.y ||
+    rect.x + slack > canvas.x + canvas.width ||
+    rect.y + slack > canvas.y + canvas.height
+  );
+}
+
 /** Euclidean distance — the pinch gesture's only measurement. */
 export function distance(a: Point, b: Point): number {
   return Math.hypot(b.x - a.x, b.y - a.y);

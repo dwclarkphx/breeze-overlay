@@ -579,6 +579,8 @@
   "editor.stage.empty": "No composition loaded",
   "editor.stage.fit": "Fit",
   "editor.stage.fitTitle": "Fit the stage to the viewport",
+  "editor.stage.frameSelection": "Frame",
+  "editor.stage.frameSelectionTitle": "Zoom to the selected layer at the current time",
   "editor.stage.guides": "Guides",
   "editor.stage.guidesHint": "Safe-area guides and center lines",
   "editor.stage.guidesHintElement": "Safe-area guides and center lines. Off by default here: this stage is an element rather than a full frame, so its safe areas are fractions of the element, not of the raster it will sit on.",

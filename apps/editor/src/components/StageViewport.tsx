@@ -29,7 +29,10 @@ import {
   clampZoom,
   distance,
   fitZoom,
+  frameRect,
   midpoint,
+  needsReveal,
+  panToCentre,
   stageWantsGuides,
   zoomAtPoint,
   MIN_GUIDE_CANVAS_WIDTH,
@@ -195,12 +198,62 @@ export function StageViewport(): JSX.Element {
     return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
   };
 
-  /** Change zoom while holding `pointer` (client coords) over the same stage point. */
+  /** Centre of the selected layer in client coords, or null when nothing is selected. */
+  const selectionCentre = (): Point | null => {
+    if (!target) return null;
+    const rect = target.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) return null;
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  };
+
+  /**
+   * Change zoom while holding `pointer` (client coords) over the same stage point.
+   *
+   * **An anchorless zoom falls back to the selection.** The wheel and the pinch
+   * name the point they want held; the +/− buttons name nothing, and used to
+   * leave `pan` alone — so the stage scaled about its own centre and a layer
+   * near an edge walked off screen exactly when the operator was zooming in to
+   * work on it.
+   *
+   * Deliberately *not* applied to the pointer gestures. Re-centring on the
+   * selection during a wheel zoom fights the operator: zooming toward a corner
+   * to check a safe-area edge would yank the view back to whatever happened to
+   * be selected. The anchor is only chosen for us when the gesture did not
+   * choose one.
+   *
+   * With nothing selected there is still no anchor, and the old behaviour
+   * stands — `pan` untouched, stage scales about its centre.
+   */
   const zoomTo = (next: number, pointer?: Point) => {
     const clamped = clampZoom(next);
     if (clamped === zoom) return;
-    if (pointer) setPan((p) => zoomAtPoint(p, zoom, clamped, pointer, canvasCentre()));
+    const anchor = pointer ?? selectionCentre();
+    if (anchor) setPan((p) => zoomAtPoint(p, zoom, clamped, anchor, canvasCentre()));
     setUserZoom(clamped);
+  };
+
+  /**
+   * Frame the selected layer — the operation "zoom in and edit this" actually
+   * means, rather than one inferred from a zoom gesture.
+   *
+   * Reads the live element, so it frames where the layer *is* at the current
+   * playhead. A layer animating in from off-stage frames where it currently
+   * sits, not where its authored transform says it lives.
+   */
+  const frameSelection = () => {
+    if (!target || !canvasEl) return;
+    const rect = target.getBoundingClientRect();
+    const canvas = canvasEl.getBoundingClientRect();
+    // `DOMRect` already satisfies `Rect`, so it is passed straight through.
+    const framed = frameRect(
+      pan,
+      zoom,
+      rect,
+      { width: canvas.width, height: canvas.height },
+      canvasCentre(),
+    );
+    setPan(framed.pan);
+    setUserZoom(framed.zoom);
   };
 
   const resetView = () => {
@@ -393,6 +446,37 @@ export function StageViewport(): JSX.Element {
         null,
     );
   }, [selectedId, selectedIsCell, runtimeVersion, playhead]);
+
+  /**
+   * Pan a newly selected layer into view when it is off screen.
+   *
+   * Keyed on `selectedId` alone, and that is the whole design. Selecting a
+   * layer is the one moment the operator's intent is unambiguous — they asked
+   * for *that* layer — so moving the view to it is helpful. Running on
+   * `playhead` or `pan` instead would chase a layer as it animates, or fight
+   * the operator the instant they panned away from it deliberately.
+   *
+   * Zoom is untouched: this reveals, it does not frame. Framing is an explicit
+   * command, because changing someone's zoom without being asked is how a
+   * viewport stops feeling like theirs.
+   */
+  useEffect(() => {
+    if (!target || !canvasEl) return;
+    const rect = target.getBoundingClientRect();
+    const canvas = canvasEl.getBoundingClientRect();
+    if (!needsReveal(rect, canvas)) return;
+
+    setPan((p) =>
+      panToCentre(
+        p,
+        { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
+        canvasCentre(),
+      ),
+    );
+    // `target` is intentionally absent: it is re-set on every playhead tick, and
+    // depending on it would re-run this on every frame of a moving layer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
 
   const selectedLayer: Layer | null =
     composition && selectedId ? findLayer(composition.layers, selectedId) ?? null : null;
@@ -686,6 +770,15 @@ export function StageViewport(): JSX.Element {
             resizes and rotations until the operator zooms again. */}
         <button onClick={resetView} title={t('editor.stage.fitTitle')}>
           {t('editor.stage.fit')}
+        </button>
+        {/* Disabled rather than hidden: a control that appears and vanishes with
+            the selection is one the operator has to hunt for. */}
+        <button
+          onClick={frameSelection}
+          disabled={!target}
+          title={t('editor.stage.frameSelectionTitle')}
+        >
+          {t('editor.stage.frameSelection')}
         </button>
         <label className="toggle" data-auto-off={guidesFit ? undefined : '1'}>
           <input

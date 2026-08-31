@@ -9,7 +9,7 @@
     {
       "formatVersion": 1,
       "id": "l3rd-name",
-      "name": "Lower Third \u2014 Name",
+      "name": "Lower Third — Name",
       "duration": 2.4,
       "stage": {
         "width": 1920,
@@ -476,7 +476,7 @@
           "binding": "headlines",
           "speed": 140,
           "direction": "left",
-          "separator": "     \u2022     ",
+          "separator": "     •     ",
           "items": [
             "Breeze Overlay reaches Phase 1",
             "Runtime, schema and server online",
@@ -526,7 +526,7 @@
     {
       "id": "news-ticker",
       "formatVersion": 1,
-      "name": "News Ticker \u2014 Feed",
+      "name": "News Ticker — Feed",
       "duration": 1.2,
       "stage": {
         "width": 1920,
@@ -588,9 +588,9 @@
           "binding": "headlines",
           "speed": 140,
           "direction": "left",
-          "separator": "     \u2022     ",
+          "separator": "     •     ",
           "items": [
-            "Waiting for the headline feed\u2026"
+            "Waiting for the headline feed…"
           ],
           "style": {
             "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
@@ -649,7 +649,7 @@
     {
       "id": "l3rd-reveal",
       "formatVersion": 1,
-      "name": "Lower Third \u2014 Reveal",
+      "name": "Lower Third — Reveal",
       "duration": 3,
       "stage": {
         "width": 1920,
@@ -821,7 +821,7 @@
     {
       "formatVersion": 1,
       "id": "standings",
-      "name": "Standings \u2014 Table",
+      "name": "Standings — Table",
       "duration": 3,
       "stage": {
         "width": 1920,
@@ -1243,7 +1243,7 @@
     {
       "formatVersion": 1,
       "id": "screen-bug",
-      "name": "Screen Bug \u2014 Logo, Time & Temp",
+      "name": "Screen Bug — Logo, Time & Temp",
       "duration": 2.4,
       "stage": {
         "width": 1920,
@@ -1881,7 +1881,7 @@
                     "id": "temp-unit",
                     "name": "Unit",
                     "type": "text",
-                    "text": "\u00b0F",
+                    "text": "°F",
                     "style": {
                       "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
                       "fontSize": 24,
@@ -1949,6 +1949,55 @@
           ]
         }
       ]
+    },
+    {
+      "formatVersion": 1,
+      "id": "l3rdbug",
+      "name": "Lower Third + Bug",
+      "stage": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 60,
+        "background": "transparent"
+      },
+      "markers": [
+        {
+          "type": "stop",
+          "time": 1.5,
+          "name": "Hold on air"
+        }
+      ],
+      "layers": [
+        {
+          "id": "nest-l3rd",
+          "type": "composition",
+          "name": "Lower third",
+          "ref": "l3rd-name",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "scaleX": 1,
+            "scaleY": 1
+          },
+          "opacity": 1,
+          "independent": true
+        },
+        {
+          "id": "nest-bug",
+          "type": "composition",
+          "name": "Screen bug",
+          "ref": "screen-bug",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "scaleX": 1,
+            "scaleY": 1
+          },
+          "opacity": 1,
+          "independent": true
+        }
+      ],
+      "duration": 2.4
     }
   ]
 }

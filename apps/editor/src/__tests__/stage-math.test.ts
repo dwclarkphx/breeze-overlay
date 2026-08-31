@@ -17,6 +17,9 @@ import {
   fitZoom,
   midpoint,
   stageWantsGuides,
+  frameRect,
+  needsReveal,
+  panToCentre,
   zoomAtPoint,
 } from '../state/stage-math.js';
 
@@ -217,5 +220,120 @@ describe('stageWantsGuides', () => {
 
   it('honours an explicit threshold', () => {
     expect(stageWantsGuides({ width: 800, height: 600 }, { width: 1920, height: 1080 })).toBe(false);
+  });
+});
+
+/* ------------------------------------------------------- framing and reveal */
+
+describe('panToCentre', () => {
+  const centre = { x: 500, y: 300 };
+
+  it('is a no-op for a rect already in the middle', () => {
+    expect(panToCentre({ x: 0, y: 0 }, centre, centre)).toEqual({ x: 0, y: 0 });
+  });
+
+  it('moves the pan by the offset, not to it', () => {
+    // A rect 100px right of centre needs the stage pulled 100px left, and any
+    // existing pan has to survive that — the pan is cumulative, not absolute.
+    expect(panToCentre({ x: 30, y: -10 }, { x: 600, y: 300 }, centre)).toEqual({ x: -70, y: -10 });
+  });
+});
+
+describe('frameRect', () => {
+  const centre = { x: 500, y: 300 };
+  const canvas = { width: 1000, height: 600 };
+
+  it('zooms so the layer fills the canvas less the margin', () => {
+    // A 100×100 client rect at zoom 1 is 100×100 in stage units. Height binds:
+    // 600 × 0.85 / 100 = 5.1, clamped to the 4× ceiling.
+    const out = frameRect({ x: 0, y: 0 }, 1, { x: 450, y: 250, width: 100, height: 100 }, canvas, centre);
+    expect(out.zoom).toBe(ZOOM_LIMITS.max);
+  });
+
+  it('reaches the same zoom whatever zoom it started from', () => {
+    /*
+     * The invariant, and the reason the rect is divided by the current zoom.
+     *
+     * The rect is client pixels, so *the same layer* measures 400×200 at 1× and
+     * 800×400 at 2×. Framing it must land on the same answer either way —
+     * otherwise pressing Frame twice keeps zooming in on something already
+     * framed, which is the bug this division exists to prevent.
+     *
+     * Written the other way round first, asserting the doubled case returned
+     * double. That was confusing "the measurement is twice as big" with "the
+     * answer should be twice as big"; the answer is precisely what must not
+     * move.
+     */
+    const atOne = frameRect({ x: 0, y: 0 }, 1, { x: 0, y: 0, width: 400, height: 200 }, canvas, centre);
+    const atTwo = frameRect({ x: 0, y: 0 }, 2, { x: 0, y: 0, width: 800, height: 400 }, canvas, centre);
+    expect(atTwo.zoom).toBeCloseTo(atOne.zoom, 6);
+  });
+
+  it('is idempotent — framing an already-framed layer does not move it', () => {
+    // The same property from the operator's side: a second press is a no-op.
+    const rect = { x: 300, y: 200, width: 400, height: 200 };
+    const once = frameRect({ x: 0, y: 0 }, 1, rect, canvas, centre);
+
+    // After framing, the layer is centred and scaled by `once.zoom`.
+    const framedRect = {
+      x: centre.x - (rect.width * once.zoom) / 2,
+      y: centre.y - (rect.height * once.zoom) / 2,
+      width: rect.width * once.zoom,
+      height: rect.height * once.zoom,
+    };
+    const twice = frameRect(once.pan, once.zoom, framedRect, canvas, centre);
+    expect(twice.zoom).toBeCloseTo(once.zoom, 6);
+  });
+
+  it('leaves the framed rect centred', () => {
+    // The property that matters: whatever the zoom works out to, the layer ends
+    // up in the middle. Asserted by re-deriving where its centre lands.
+    const rect = { x: 700, y: 100, width: 100, height: 50 };
+    const out = frameRect({ x: 0, y: 0 }, 1, rect, canvas, centre);
+
+    const before = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+    const v = { x: (before.x - centre.x - 0) / 1, y: (before.y - centre.y - 0) / 1 };
+    const after = {
+      x: centre.x + out.pan.x + out.zoom * v.x,
+      y: centre.y + out.pan.y + out.zoom * v.y,
+    };
+    expect(after.x).toBeCloseTo(centre.x, 6);
+    expect(after.y).toBeCloseTo(centre.y, 6);
+  });
+
+  it('still centres a layer too large to frame', () => {
+    // The clamp bites, but a background you cannot fit is one you want centred
+    // and cropped rather than parked off to one side.
+    const out = frameRect({ x: 0, y: 0 }, 1, { x: -2000, y: -1000, width: 6000, height: 3000 }, canvas, centre);
+    expect(out.zoom).toBeGreaterThanOrEqual(ZOOM_LIMITS.min);
+    expect(Number.isFinite(out.pan.x)).toBe(true);
+  });
+
+  it('centres rather than dividing by zero on a zero-sized layer', () => {
+    const out = frameRect({ x: 0, y: 0 }, 1, { x: 600, y: 300, width: 0, height: 0 }, canvas, centre);
+    expect(out.zoom).toBe(1);
+    expect(out.pan).toEqual({ x: -100, y: 0 });
+  });
+});
+
+describe('needsReveal', () => {
+  const canvas = { x: 0, y: 0, width: 1000, height: 600 };
+
+  it('leaves a comfortably visible layer alone', () => {
+    expect(needsReveal({ x: 400, y: 250, width: 100, height: 100 }, canvas)).toBe(false);
+  });
+
+  it('reveals a layer entirely off to the left', () => {
+    expect(needsReveal({ x: -300, y: 250, width: 100, height: 100 }, canvas)).toBe(true);
+  });
+
+  it('reveals a layer entirely below', () => {
+    expect(needsReveal({ x: 400, y: 900, width: 100, height: 100 }, canvas)).toBe(true);
+  });
+
+  it('reveals a layer clinging to the edge by a few pixels', () => {
+    // "Not comfortably inside", not "entirely outside" — two visible pixels is
+    // not something an operator can work with.
+    expect(needsReveal({ x: -96, y: 250, width: 100, height: 100 }, canvas)).toBe(true);
   });
 });
