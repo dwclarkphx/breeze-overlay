@@ -1,6 +1,6 @@
 {
   "name": "@breeze/server",
-  "version": "0.72.0",
+  "version": "0.72.1",
   "private": true,
   "license": "MPL-2.0",
   "type": "module",

@@ -390,7 +390,10 @@ export class BreezeRuntime {
     }
 
     this.container.appendChild(this.root);
-    if (this.scaleMode === 'contain') this.fitToContainer();
+    if (this.scaleMode === 'contain') {
+      this.fitToContainer();
+      this.watchContainerSize();
+    }
 
     /*
      * Seed values pinned by an enclosing composition layer's overrides.
@@ -1671,6 +1674,40 @@ export class BreezeRuntime {
 
   /* --------------------------------------------------------- view / info */
 
+  /**
+   * Re-fit whenever the container changes size.
+   *
+   * `scaleMode: 'contain'` promises the graphic fits its container, and until
+   * 0.72.1 it kept that promise exactly once — at build. Resize the window and
+   * the stage held the scale it was given, so a graphic went on showing at the
+   * old size inside a new box: cropped, or adrift in the corner, until the page
+   * was reloaded. That is the whole of "the preview needs a refresh after a
+   * resize".
+   *
+   * Only installed for `contain`, which is `/play?scale=contain` and nothing
+   * else. A browser source in vMix or OBS runs 1:1 and never asks for this, and
+   * the editor's thumbnails scale from the outside with `scaleMode: 'none'` —
+   * an observer each would be a cost the thumbnail phase spent real effort
+   * removing.
+   *
+   * No feedback loop: the fit writes a `transform` on the root, and a transform
+   * does not change layout, so re-fitting cannot resize the box being observed.
+   */
+  private watchContainerSize(): void {
+    const view = this.doc.defaultView as (Window & typeof globalThis) | null;
+    // Absent in a headless DOM, and a graphic must build there regardless — the
+    // still renderer and every unit test run without one.
+    if (!view?.ResizeObserver) return;
+
+    this.fitObserver = new view.ResizeObserver(() => {
+      if (this.destroyed) return;
+      this.fitToContainer();
+    });
+    this.fitObserver.observe(this.container);
+  }
+
+  private fitObserver: ResizeObserver | null = null;
+
   /** Scale the stage to fit its container (editor preview). */
   fitToContainer(): number {
     const cw = this.container.clientWidth;
@@ -1789,6 +1826,8 @@ export class BreezeRuntime {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.fitObserver?.disconnect();
+    this.fitObserver = null;
     this.stopCrawls();
     // Before the tree goes: an interval holding a closure over a removed
     // element is the editor's rebuild-per-keystroke leak, one timer at a time.

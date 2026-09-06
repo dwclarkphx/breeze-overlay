@@ -412,8 +412,17 @@ ${htmlOpen()}
   .preview{margin:0 0 12px}
   .preview-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
   .preview-head .sub{margin-inline-start:auto;font:12px/1 ui-monospace,Consolas,monospace;color:var(--muted)}
-  /* 16:9 box; the output page scales itself into it with ?scale=contain. */
-  .preview-frame{position:relative;width:100%;aspect-ratio:16/9;background:#000;
+  /*
+   * A 16:9 box the output page scales itself into with ?scale=contain.
+   *
+   * The ratio is held by capping the *width*, never the height: at width 100%
+   * a max-height would simply squash the box out of 16:9 the moment the
+   * viewport got short. Capping width against the viewport height keeps the
+   * shape exact at every window size and stops a wide panel growing a preview
+   * taller than the screen it is on.
+   * (No backticks in here: this comment lives inside a template literal.)
+   */
+  .preview-frame{position:relative;width:100%;max-width:calc(45vh * 16 / 9);margin-inline:auto;aspect-ratio:16/9;background:#000;
     background-image:linear-gradient(45deg,#1a1a1a 25%,transparent 25%),linear-gradient(-45deg,#1a1a1a 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#1a1a1a 75%),linear-gradient(-45deg,transparent 75%,#1a1a1a 75%);
     background-size:16px 16px;background-position:0 0,0 8px,8px -8px,-8px 0;
     border:1px solid var(--line);border-radius:6px;overflow:hidden}
@@ -424,6 +433,9 @@ ${htmlOpen()}
     .panel-grid{flex-direction:row-reverse;align-items:flex-start}
     .panel-controls{flex:1 1 380px}
     .preview{flex:1 1 480px;position:sticky;top:12px;margin:0}
+    /* Beside the controls it may take most of the height; stacked above them it
+       may not, or the fields it exists to serve are pushed off the screen. */
+    .preview-frame{max-width:calc(80vh * 16 / 9)}
   }
 </style>
 </head>
