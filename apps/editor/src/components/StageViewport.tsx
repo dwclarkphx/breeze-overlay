@@ -353,6 +353,13 @@ export function StageViewport(): JSX.Element {
         // rendered box, so only the built runtime can answer it.
         overflowingTables: runtime.overflowingTables,
         tablePages: runtime.tablePages,
+        /*
+         * And the expander's own complaints, which are not measurements but
+         * belong to the same publication: an unresolved ref, a cycle or a
+         * depth cut-off is known only once a plan has been built, and until
+         * now the only place it was reported was `console.warn` (MASKS.md §4).
+         */
+        expandWarnings: runtime.plan.warnings,
       });
       setRuntimeVersion((v) => v + 1);
     }, REBUILD_DEBOUNCE_MS);

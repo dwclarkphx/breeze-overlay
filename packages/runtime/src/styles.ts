@@ -30,6 +30,12 @@ export const RUNTIME_CSS = `
   inset: 0;
   transform-origin: 0 0;
 }
+/* The zero offset is load-bearing beyond layout: a layer's box origin is its
+   own coordinate space, which is the space path data is authored in for a path
+   shape and the space a userSpaceOnUse mask resolves in. The editor's pen tool
+   maps screen coordinates back through it on that assumption (MASKS.md 5.1),
+   and would misplace every handle if a layer ever gained an offset here.
+   (No backticks in here: this comment lives inside a template literal.) */
 .bz-layer {
   position: absolute;
   left: 0;

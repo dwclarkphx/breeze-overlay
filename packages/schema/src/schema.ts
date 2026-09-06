@@ -335,7 +335,7 @@ const layerBaseProps = {
     type: 'object',
     required: ['type', 'x', 'y', 'width', 'height'],
     properties: {
-      type: { enum: ['rect', 'ellipse', 'image'] },
+      type: { enum: ['rect', 'ellipse', 'image', 'path'] },
       x: { type: 'number' },
       y: { type: 'number' },
       width: { type: 'number', minimum: 0 },
@@ -343,6 +343,7 @@ const layerBaseProps = {
       feather: { type: 'number', minimum: 0 },
       invert: { type: 'boolean' },
       src: { type: 'string' },
+      path: { type: 'string' },
     },
     additionalProperties: false,
   },
@@ -357,10 +358,14 @@ const layerSchema = {
       properties: {
         ...layerBaseProps,
         type: { const: 'shape' },
-        shape: { enum: ['rect', 'ellipse'] },
+        shape: { enum: ['rect', 'ellipse', 'path'] },
         fill: { $ref: '#/$defs/fill' },
         stroke: { $ref: '#/$defs/stroke' },
         cornerRadius: { type: 'number', minimum: 0 },
+        // Shape only, not length- or syntax-checked here: "is this valid SVG
+        // path data" is not a thing JSON Schema can say, and the semantic
+        // validator gives a message an author can act on instead.
+        path: { type: 'string' },
       },
       required: ['shape'],
       additionalProperties: false,

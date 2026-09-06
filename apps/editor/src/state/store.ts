@@ -32,6 +32,7 @@ import {
   type LayerType,
   type Project,
 } from '@breeze/schema';
+import type { ExpandWarning } from '@breeze/runtime';
 
 import {
   api,
@@ -156,6 +157,24 @@ export interface EditorState {
    */
   overflowingTables: string[];
   tablePages: Record<string, { page: number; pageCount: number; rows: number }>;
+
+  /**
+   * Nesting problems the expander found while building the preview —
+   * unresolved refs, cycles, depth cut-offs.
+   *
+   * Published from the same place and for the same reason as the measurements
+   * above, but these are not measurements: `expandComposition` has produced
+   * them since Phase 6.5 and `TimelinePlan.warnings` has carried them the whole
+   * time under a comment reading "surfaced by the editor". Nothing surfaced
+   * them; they went to the browser console, where an author building a graphic
+   * never looks. A nested comp pointing at a composition that was renamed
+   * simply renders nothing, silently — which is the same failure mode
+   * `compositionReferrers` refuses a delete to prevent.
+   *
+   * Keyed by *instance* id, so a warning about a comp two levels down reads
+   * `outer/inner`; the panel matches on the trailing segment.
+   */
+  expandWarnings: ExpandWarning[];
 
   /**
    * The project's data sources, so the table properties panel can offer real
@@ -535,6 +554,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   overflowingText: [],
   overflowingTables: [],
   tablePages: {},
+  expandWarnings: [],
   dataSources: [],
   datasets: {},
   datasetRevision: 0,

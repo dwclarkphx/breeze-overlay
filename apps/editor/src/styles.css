@@ -383,6 +383,34 @@ img.layer-thumb {
 }
 .mask-preset-btn:hover { border-color: var(--accent); color: var(--accent); }
 
+/* Path authoring (Wave D). Two coordinates and two small buttons share the row
+   a single field usually holds, so the numbers take what is left rather than
+   each claiming a full column. */
+.path-data { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+.path-coord { flex: 1 1 0; min-width: 0; }
+.path-btn {
+  flex: none; border: none; background: none; color: var(--muted);
+  padding: 0 3px; font-size: 11px; cursor: pointer;
+}
+.path-btn:hover:not(:disabled) { color: var(--accent); }
+.path-btn.on { color: var(--key); }
+.path-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Nested composition: the still, its name, and the override rows (Wave C). */
+.comp-ref-preview { display: flex; align-items: center; gap: 8px; margin: 2px 0 8px; }
+.comp-ref-name { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prop-subhead {
+  margin: 10px 0 4px;
+  font-size: 11px; text-transform: var(--ui-caps); letter-spacing: calc(0.6px * var(--ui-tracking));
+  color: var(--muted);
+}
+/* The checkbox owns whether the key exists; the field beside it owns the
+   value, empty string included — so it must not stretch like one. */
+.override-toggle { flex: none !important; }
+.prop-input input:disabled, .prop-input textarea:disabled, .prop-input select:disabled {
+  opacity: 0.55; cursor: not-allowed;
+}
+
 /* Authoring warnings: things that will look like a fault on air but are a
    timing or sizing mistake here, where they can still be fixed. Amber rather
    than red — the document is valid and will save; it just will not look right. */

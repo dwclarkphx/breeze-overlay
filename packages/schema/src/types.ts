@@ -202,12 +202,21 @@ export interface LayerEffects {
 
 export interface LayerMask {
   /**
-   * All three have been rendered by `packages/runtime/src/mask.ts` since
-   * Phase 1 — `rect`/`ellipse` as SVG primitives, `image` as a luminance mask
-   * — but had no authoring surface until Phase 8 Wave A gave this field a
-   * panel (MASKS.md §2).
+   * `rect`/`ellipse`/`image` have been rendered by
+   * `packages/runtime/src/mask.ts` since Phase 1 — the first two as SVG
+   * primitives, the third as a luminance mask — but had no authoring surface
+   * until Phase 8 Wave A gave this field a panel (MASKS.md §2). `path` joined
+   * them in Wave D alongside the pen tool, which is what finally makes the
+   * phase's first bullet read literally.
    */
-  type: 'rect' | 'ellipse' | 'image';
+  type: 'rect' | 'ellipse' | 'image' | 'path';
+  /**
+   * Mask geometry in the layer's own pixel space.
+   *
+   * For `rect`, `ellipse` and `image` these are the shape. For `path` the
+   * geometry lives in `path` and only `x`/`y` are read, as a translation —
+   * `width`/`height` mean nothing there and the panel does not offer them.
+   */
   x: number;
   y: number;
   width: number;
@@ -216,15 +225,45 @@ export interface LayerMask {
   invert?: boolean;
   /** Asset path when `type: 'image'`. */
   src?: string;
+  /**
+   * SVG path data when `type: 'path'` — the same `d` a path `ShapeLayer`
+   * carries, deliberately, so one editor serves both.
+   */
+  path?: string;
 }
 
+/**
+ * A drawn shape.
+ *
+ * **`path` is a variant here rather than a `LayerType` of its own** (MASKS.md
+ * §5), which is the opposite call from `sprite` and for the opposite reason.
+ * Sprite earned a type because it needed its own frame model, its own
+ * relationship to the clock and its own cache key. A path needs none of that:
+ * it wants fills, strokes, masks, effects and keyframes, all of which a shape
+ * layer already has. A new type would have meant a new branch in
+ * `assetReferences`, `expand`, the thumbnail walk, the table-cell walk, the PSD
+ * importer and the factory — for a layer that differs from a rect in one
+ * attribute.
+ */
 export interface ShapeLayer extends LayerBase {
   type: 'shape';
-  shape: 'rect' | 'ellipse';
+  shape: 'rect' | 'ellipse' | 'path';
   fill?: Fill;
   stroke?: Stroke;
-  /** Corner radius in px; ignored for ellipse. */
+  /** Corner radius in px; ignored for ellipse and path. */
   cornerRadius?: number;
+  /**
+   * SVG path data, in the layer's own pixel space — required by
+   * `shape: 'path'` and ignored by every other shape.
+   *
+   * The same string a `LayerMask` of type `path` carries, which is what lets
+   * one on-stage bezier editor serve both.
+   *
+   * A path is drawn by the renderer rather than by CSS, so unlike a rect it
+   * has no fill unless one is authored: an open path is a line, and defaulting
+   * it to a filled blob would make every freshly drawn stroke look wrong.
+   */
+  path?: string;
 }
 
 export interface TextStyle {

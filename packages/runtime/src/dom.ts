@@ -130,7 +130,9 @@ function vAlignToFlex(v: TextStyle['verticalAlign']): string {
 
 /* ------------------------------------------------------------ layer types */
 
-function buildShape(layer: ShapeLayer, ctx: BuildContext): HTMLElement {
+function buildShape(layer: ShapeLayer, ctx: BuildContext): Element {
+  if (layer.shape === 'path') return buildPathShape(layer, ctx);
+
   const el = ctx.doc.createElement('div');
   el.className = 'bz-shape';
   el.style.background = fillToCss(layer.fill, '#ffffff');
@@ -143,6 +145,117 @@ function buildShape(layer: ShapeLayer, ctx: BuildContext): HTMLElement {
     el.style.border = `${layer.stroke.width}px solid ${layer.stroke.color}`;
   }
   return el;
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** Unique enough for one document; SVG ids are document-global. */
+let gradientCounter = 0;
+
+/**
+ * A path shape — the one shape CSS cannot draw (MASKS.md §5).
+ *
+ * Rendered as a real `<svg>` rather than as a `clip-path: path()` on the
+ * existing div, which was the cheaper-looking option and is wrong: a clipped
+ * div can carry a fill but its border is still a rectangle, so a stroked path
+ * — a drawn line, an underline, a pointer — would have had no outline at all.
+ * A line is most of what a pen tool is for.
+ *
+ * **No `viewBox`, and `overflow: visible`.** One user unit is one layer pixel
+ * that way, so `d` is authored in exactly the coordinates the panel shows and
+ * the pen tool drags. And geometry outside the layer's own box still paints,
+ * which is the same rule Wave A settled for masks: the box only has to exist,
+ * the geometry lives in the shape.
+ */
+function buildPathShape(layer: ShapeLayer, ctx: BuildContext): SVGSVGElement {
+  const svg = ctx.doc.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', 'bz-shape bz-path');
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('height', '100%');
+  svg.style.overflow = 'visible';
+
+  const path = ctx.doc.createElementNS(SVG_NS, 'path');
+  path.setAttribute('d', layer.path ?? '');
+
+  /*
+   * Unlike a rect, a path with no authored fill is left unfilled rather than
+   * defaulted to white: an open path is a line, and SVG would otherwise close
+   * it implicitly and paint the area under it.
+   */
+  if (layer.fill === undefined) {
+    path.setAttribute('fill', 'none');
+  } else if (typeof layer.fill === 'string') {
+    path.setAttribute('fill', layer.fill);
+  } else {
+    path.setAttribute('fill', svgGradient(layer.fill, svg, ctx));
+  }
+
+  if (layer.stroke && layer.stroke.width > 0) {
+    path.setAttribute('stroke', layer.stroke.color);
+    path.setAttribute('stroke-width', String(layer.stroke.width));
+    // Round joins and caps because a drawn path is usually organic; a mitre
+    // spike on a tight corner reads as a rendering fault rather than a choice.
+    path.setAttribute('stroke-linejoin', 'round');
+    path.setAttribute('stroke-linecap', 'round');
+  }
+
+  svg.appendChild(path);
+  return svg;
+}
+
+/**
+ * An SVG gradient def for a path's fill, returned as a `url(#…)` reference.
+ *
+ * A path cannot take `fillToCss`'s output — `linear-gradient()` is a CSS image
+ * and SVG's `fill` wants a paint — so the same `Gradient` is re-expressed as a
+ * def inside the layer's own `<svg>`, where it is destroyed with the layer and
+ * needs no separate bookkeeping.
+ *
+ * **The angle is converted through the bounding box, not through CSS's
+ * corner-projection rule.** CSS sizes a gradient line so its ends project onto
+ * the corners; this maps the angle onto a line across the box instead. The two
+ * agree exactly at 0/90/180/270° — which is every gradient anyone authors on a
+ * strap — and differ slightly in where the stops land on the diagonals. Worth
+ * stating because the same fill on a rect and on a path is then very slightly
+ * different at 45°, and that is a real if minor divergence rather than a bug to
+ * go hunting later.
+ */
+function svgGradient(fill: Exclude<Fill, string>, svg: SVGSVGElement, ctx: BuildContext): string {
+  gradientCounter += 1;
+  const id = `bz-grad-${gradientCounter}`;
+
+  const defs = ctx.doc.createElementNS(SVG_NS, 'defs');
+  const stops = [...fill.stops].sort((a, b) => a.pos - b.pos);
+
+  let node: SVGElement;
+  if (fill.type === 'radial') {
+    node = ctx.doc.createElementNS(SVG_NS, 'radialGradient');
+    node.setAttribute('cx', '50%');
+    node.setAttribute('cy', '50%');
+    node.setAttribute('r', '50%');
+  } else {
+    node = ctx.doc.createElementNS(SVG_NS, 'linearGradient');
+    // CSS convention: 0deg points to the top, angles run clockwise.
+    const rad = ((fill.angle ?? 180) * Math.PI) / 180;
+    const dx = Math.sin(rad);
+    const dy = -Math.cos(rad);
+    node.setAttribute('x1', String(0.5 - dx / 2));
+    node.setAttribute('y1', String(0.5 - dy / 2));
+    node.setAttribute('x2', String(0.5 + dx / 2));
+    node.setAttribute('y2', String(0.5 + dy / 2));
+  }
+  node.setAttribute('id', id);
+
+  for (const stop of stops) {
+    const el = ctx.doc.createElementNS(SVG_NS, 'stop');
+    el.setAttribute('offset', `${stop.pos * 100}%`);
+    el.setAttribute('stop-color', stop.color);
+    node.appendChild(el);
+  }
+
+  defs.appendChild(node);
+  svg.appendChild(defs);
+  return `url(#${id})`;
 }
 
 function buildText(layer: TextLayer, ctx: BuildContext): { el: HTMLElement; inner: HTMLElement } {

@@ -27,6 +27,13 @@ export type LayerThumb =
   | { kind: 'sprite'; src: string; cols: number; rows: number }
   | { kind: 'composition'; ref: string; glyph: string }
   | { kind: 'shape'; fill: string; stroke?: { color: string; width: number }; radius: number; ellipse: boolean }
+  /**
+   * A path shape. Carries the layer's own box as a viewBox rather than a
+   * measured bounding box: `d` is authored in layer-local pixels, so the box
+   * *is* the frame the author drew inside, and using it needs no path parser
+   * and no DOM measurement to scale the drawing into a thumbnail.
+   */
+  | { kind: 'path'; d: string; fill: string; stroke?: { color: string; width: number }; width: number; height: number }
   | { kind: 'text'; sample: string; fontFamily: string; color: string; weight: string; italic: boolean }
   | { kind: 'stack'; children: LayerThumb[]; count: number }
   | { kind: 'table'; columns: string[]; rows: number }
@@ -89,6 +96,24 @@ export function layerThumb(layer: Layer): LayerThumb {
         : { kind: 'glyph', glyph: TYPE_GLYPH.sprite };
 
     case 'shape':
+      if (layer.shape === 'path') {
+        // Falls back to the glyph with no data, matching the composition
+        // thumbnail's rule for an unresolved ref: there is nothing to draw, and
+        // an empty box would read as a drawing that failed rather than one that
+        // has not been made yet.
+        return layer.path
+          ? {
+              kind: 'path',
+              d: layer.path,
+              // Unfilled unless authored, the same rule the runtime follows —
+              // otherwise a stroked line shows in the panel as a filled blob.
+              fill: layer.fill === undefined ? 'none' : fillToCss(layer.fill, 'none'),
+              ...(layer.stroke && layer.stroke.width > 0 ? { stroke: layer.stroke } : {}),
+              width: layer.size?.width ?? 100,
+              height: layer.size?.height ?? 100,
+            }
+          : { kind: 'glyph', glyph: TYPE_GLYPH.shape };
+      }
       return {
         kind: 'shape',
         fill: fillToCss(layer.fill, '#1f6feb'),

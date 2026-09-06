@@ -138,6 +138,24 @@ function buildMaskShape(
     return ellipse;
   }
 
+  /*
+   * A path mask — Wave D, and the reason the phase's first bullet ("shape/path
+   * masks") finally reads literally.
+   *
+   * `x`/`y` translate it and nothing reads `width`/`height`: the geometry is
+   * all in `d`, exactly as it is for a path *shape*, which is what lets one
+   * on-stage editor drag both. A translate rather than baking the offset into
+   * the data keeps the authored `d` stable while the mask is nudged, so the
+   * numbers an author typed do not churn every time the mask moves a pixel.
+   */
+  if (mask.type === 'path' && mask.path) {
+    const p = doc.createElementNS(SVG_NS, 'path');
+    p.setAttribute('d', mask.path);
+    p.setAttribute('fill', paint);
+    if (mask.x || mask.y) p.setAttribute('transform', `translate(${mask.x} ${mask.y})`);
+    return p;
+  }
+
   if (mask.type === 'image' && mask.src) {
     const image = doc.createElementNS(SVG_NS, 'image');
     const href = resolveAsset(mask.src);

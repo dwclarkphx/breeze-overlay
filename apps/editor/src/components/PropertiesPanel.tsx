@@ -16,7 +16,7 @@
 
 // React 19's types removed the global `JSX` namespace, so it has to be imported
 // explicitly wherever `JSX.Element` is used as a return type.
-import { Fragment, useEffect, useState, type JSX } from 'react';
+import { Fragment, useEffect, useMemo, useState, type JSX } from 'react';
 import {
   ADVANCE_DEFAULTS,
   ANIMATABLE_PROPS,
@@ -24,11 +24,14 @@ import {
   DEFAULT_CRAWL_SEPARATOR,
   FILTER_OPS,
   NAMED_EASES,
+  collectBindings,
   normalizeKey,
   type AdvanceTransform,
   type AnimatableProp,
   type AssetRef,
+  type BindingDescriptor,
   type Composition,
+  type CompositionLayer,
   type CrawlLayer,
   type DataColumn,
   type DataTransform,
@@ -50,9 +53,22 @@ import {
   resolveTextAnim,
   rowAnimDuration,
   textAnimDuration,
+  type ExpandWarning,
 } from '@breeze/runtime';
 
+import { LayerThumb } from './LayerThumb.js';
 import { useEditor } from '../state/store.js';
+import {
+  addPoint,
+  movePoint,
+  parsePath,
+  removePoint,
+  serializePath,
+  setClosed,
+  smoothPoint,
+  straightenPoint,
+  type EditablePath,
+} from '../state/path-geometry.js';
 import { baselineOf, displayValue, isAnimated as propIsAnimated } from '../state/layer-values.js';
 
 const TRANSFORM_FIELDS: Array<{ prop: AnimatableProp; labelKey: string; step: number }> = [
@@ -79,6 +95,8 @@ export function PropertiesPanel(): JSX.Element {
   const tablePages = useEditor((s) => s.tablePages);
   const dataSources = useEditor((s) => s.dataSources);
   const assets = useEditor((s) => s.assets);
+  const project = useEditor((s) => s.project);
+  const expandWarnings = useEditor((s) => s.expandWarnings);
 
   if (!composition) return <div className="panel-empty">—</div>;
   if (!layer) {
@@ -404,9 +422,28 @@ export function PropertiesPanel(): JSX.Element {
         {layer.type === 'shape' && (
           <Section title={t('editor.properties.sectionShape')}>
             <Field label={t('editor.properties.kind')}>
-              <select value={layer.shape} onChange={(e) => patch({ shape: e.target.value as 'rect' | 'ellipse' } as Partial<Layer>)}>
+              <select
+                value={layer.shape}
+                onChange={(e) => {
+                  const shape = e.target.value as 'rect' | 'ellipse' | 'path';
+                  /*
+                   * Switching to a path seeds geometry if there is none, for
+                   * the reason the factory does: a path shape with no `path`
+                   * is refused by the validator, and offering a control that
+                   * makes the composition unsavable the moment it is touched
+                   * is the fault this phase keeps refusing to ship.
+                   */
+                  patch({
+                    shape,
+                    ...(shape === 'path' && !layer.path
+                      ? { path: seedPathIn(layer.size ?? { width: 400, height: 100 }) }
+                      : {}),
+                  } as Partial<Layer>);
+                }}
+              >
                 <option value="rect">{t('editor.properties.shapeRect')}</option>
                 <option value="ellipse">{t('editor.properties.shapeEllipse')}</option>
+                <option value="path">{t('editor.properties.shapePath')}</option>
               </select>
             </Field>
             <Field label={t('editor.properties.fill')}>
@@ -416,13 +453,68 @@ export function PropertiesPanel(): JSX.Element {
                 onChange={(e) => patch({ fill: e.target.value } as Partial<Layer>)}
               />
             </Field>
-            <Field label={t('editor.properties.radius')}>
-              <input
-                type="number"
-                value={layer.cornerRadius ?? 0}
-                onChange={(e) => patch({ cornerRadius: Number(e.target.value) } as Partial<Layer>)}
+            {/*
+              A path takes its outline from `stroke`, and unlike a rect it can
+              legitimately have no fill at all — so the one control a drawn line
+              cannot do without is offered here rather than left to JSON.
+            */}
+            {layer.shape === 'path' && (
+              <>
+                <Field label={t('editor.properties.strokeColor')}>
+                  <input
+                    type="color"
+                    value={layer.stroke?.color ?? '#ffffff'}
+                    onChange={(e) =>
+                      patch({
+                        stroke: { width: layer.stroke?.width ?? 2, color: e.target.value },
+                      } as Partial<Layer>)
+                    }
+                  />
+                </Field>
+                <Field label={t('editor.properties.strokeWidth')}>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={layer.stroke?.width ?? 0}
+                    onChange={(e) => {
+                      const width = Math.max(0, Number(e.target.value));
+                      patch({
+                        stroke: width
+                          ? { color: layer.stroke?.color ?? '#ffffff', width }
+                          : undefined,
+                      } as Partial<Layer>);
+                    }}
+                  />
+                </Field>
+                <Field label={t('editor.properties.unfilled')}>
+                  <input
+                    type="checkbox"
+                    checked={layer.fill === undefined}
+                    title={t('editor.properties.unfilledTitle')}
+                    onChange={(e) =>
+                      patch({ fill: e.target.checked ? undefined : '#1f6feb' } as Partial<Layer>)
+                    }
+                  />
+                </Field>
+              </>
+            )}
+            {/* Ignored by the renderer for an ellipse and a path, so not shown. */}
+            {layer.shape === 'rect' && (
+              <Field label={t('editor.properties.radius')}>
+                <input
+                  type="number"
+                  value={layer.cornerRadius ?? 0}
+                  onChange={(e) => patch({ cornerRadius: Number(e.target.value) } as Partial<Layer>)}
+                />
+              </Field>
+            )}
+            {layer.shape === 'path' && (
+              <PathEditor
+                data={layer.path}
+                onChange={(path) => patch({ path } as Partial<Layer>)}
               />
-            </Field>
+            )}
           </Section>
         )}
 
@@ -594,59 +686,14 @@ export function PropertiesPanel(): JSX.Element {
         )}
 
         {layer.type === 'composition' && (
-          <Section title={t('editor.properties.composition')}>
-            <Field label={t('editor.properties.reference')}>
-              <input
-                value={layer.ref}
-                placeholder={t('editor.properties.referencePlaceholder')}
-                onChange={(e) => patch({ ref: e.target.value } as Partial<Layer>)}
-              />
-            </Field>
-            {/*
-              Independent turns a nested composition into its own graphic on its
-              own control channel, instead of inlining it into this timeline.
-              A composition holding independent children is what the guide calls
-              a scene — there is no separate scene type to create.
-            */}
-            <Field label={t('editor.properties.independent')}>
-              <input
-                type="checkbox"
-                checked={layer.independent ?? false}
-                title={t('editor.properties.independentTitle')}
-                onChange={(e) => {
-                  const independent = e.target.checked;
-                  /*
-                   * Clearing keyframes and the lifetime window is not tidiness —
-                   * the validator rejects them on an independent layer, so
-                   * leaving them behind would make the composition unsavable the
-                   * moment the box is ticked, with the error pointing at fields
-                   * the author did not just touch.
-                   */
-                  patch(
-                    (independent
-                      ? { independent: true, keyframes: undefined, in: undefined, out: undefined }
-                      : { independent: undefined, channel: undefined }) as Partial<Layer>,
-                  );
-                }}
-              />
-            </Field>
-            {layer.independent && (
-              <Field label={t('editor.properties.channel')}>
-                <input
-                  value={layer.channel ?? ''}
-                  placeholder={layer.ref}
-                  title={t('editor.properties.channelTitle')}
-                  onChange={(e) => {
-                    // Normalized as typed rather than validated on save: the
-                    // rules are the URL's, not this field's, and an operator
-                    // typing "Bug" should get a working channel, not a refusal.
-                    const next = normalizeKey(e.target.value);
-                    patch({ channel: next || undefined } as Partial<Layer>);
-                  }}
-                />
-              </Field>
-            )}
-          </Section>
+          <NestedCompositionSection
+            layer={layer}
+            selfId={composition.id}
+            compositions={project?.compositions ?? []}
+            assets={assets}
+            warnings={expandWarnings}
+            onPatch={(p) => patch(p as Partial<Layer>)}
+          />
         )}
 
         {layer.type === 'table' && (
@@ -1032,6 +1079,515 @@ export function PropertiesPanel(): JSX.Element {
 }
 
 /**
+ * Seed geometry for a path that does not have any yet — a triangle inscribed
+ * in the layer's box.
+ *
+ * Duplicated from the factory's `defaultPathIn` rather than exported from
+ * `@breeze/schema`, and that is the wrong trade at three lines: this one exists
+ * so the *panel* never writes an invalid document, and the factory's exists so
+ * a *created layer* is valid. If a third caller appears, move it.
+ */
+function seedPathIn(size: { width: number; height: number }): string {
+  return `M 0 ${size.height} L ${size.width / 2} 0 L ${size.width} ${size.height} Z`; // i18n-ignore — SVG path data
+}
+
+/**
+ * Path authoring — the numeric half of the pen tool (MASKS.md §5).
+ *
+ * Serves a path `ShapeLayer` and a `LayerMask` of type `path` from one
+ * component, because both carry the same `d` in the same coordinate space.
+ *
+ * **The raw `d` field is always present, and the point list is the assist on
+ * top of it.** Same shape as the asset picker with its path field beneath:
+ * the structured control is what anyone should use, and the text field is what
+ * makes a path from Illustrator, a hand-tuned curve or anything else outside
+ * the editable subset still authorable here rather than only in JSON.
+ *
+ * When `parsePath` returns `null` the point list is withheld and says why. It
+ * must never "fix" what it cannot read: a path this editor rewrote into an
+ * approximation of itself would lose work silently, which is worse than a
+ * text box.
+ */
+function PathEditor({
+  data,
+  onChange,
+}: {
+  data: string | undefined;
+  onChange: (d: string) => void;
+}): JSX.Element {
+  const t = useT();
+
+  /*
+   * Held as text while it is being typed, so a half-finished command is not
+   * parsed, re-serialised and handed back mid-keystroke — the same reason the
+   * crawl separator keeps its own draft state.
+   */
+  const [draft, setDraft] = useState<string | null>(null);
+  useEffect(() => setDraft(null), [data]);
+
+  const parsed = useMemo(() => parsePath(data), [data]);
+  const write = (path: EditablePath) => onChange(serializePath(path));
+
+  return (
+    <>
+      <Field label={t('editor.properties.pathData')}>
+        <textarea
+          rows={2}
+          className="path-data"
+          value={draft ?? data ?? ''}
+          placeholder={t('editor.properties.pathDataPlaceholder')}
+          spellCheck={false}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => {
+            if (draft !== null && draft !== data) onChange(draft);
+            setDraft(null);
+          }}
+        />
+      </Field>
+
+      {!parsed ? (
+        <p className="hint">{t('editor.properties.pathNotEditable')}</p>
+      ) : (
+        <>
+          <Field label={t('editor.properties.pathClosed')}>
+            <input
+              type="checkbox"
+              checked={parsed.closed}
+              title={t('editor.properties.pathClosedTitle')}
+              onChange={(e) => write(setClosed(parsed, e.target.checked))}
+            />
+          </Field>
+
+          <h4 className="prop-subhead">
+            {t('editor.properties.pathPoints', { count: parsed.points.length })}
+          </h4>
+
+          {parsed.points.map((point, i) => (
+            <Field key={i} label={t('editor.properties.pathPoint', { index: i + 1 })}>
+              <input
+                type="number"
+                className="path-coord"
+                value={round(point.x)}
+                onChange={(e) => write(movePoint(parsed, i, { x: Number(e.target.value), y: point.y }))}
+              />
+              <input
+                type="number"
+                className="path-coord"
+                value={round(point.y)}
+                onChange={(e) => write(movePoint(parsed, i, { x: point.x, y: Number(e.target.value) }))}
+              />
+              {/*
+                Curve/corner is a toggle rather than four handle fields. The
+                handles are worth dragging and not worth typing: nobody knows
+                what control point (317.4, 88.2) does until they see it, which
+                is exactly the argument for the on-stage surface and against
+                putting the same numbers in a panel.
+              */}
+              <button
+                className={`path-btn${point.in || point.out ? ' on' : ''}`}
+                title={t(
+                  point.in || point.out
+                    ? 'editor.properties.pathCornerTitle'
+                    : 'editor.properties.pathSmoothTitle',
+                )}
+                onClick={() =>
+                  write(point.in || point.out ? straightenPoint(parsed, i) : smoothPoint(parsed, i))
+                }
+              >
+                {point.in || point.out ? '⌒' : '⌐'}
+              </button>
+              <button
+                className="path-btn"
+                title={t('editor.properties.pathRemovePoint')}
+                // Below three points there is no path left to remove one from,
+                // and a disabled button says so better than a no-op.
+                disabled={parsed.points.length <= 2}
+                onClick={() => write(removePoint(parsed, i))}
+              >
+                ✕
+              </button>
+            </Field>
+          ))}
+
+          <button
+            className="mask-preset-btn"
+            title={t('editor.properties.pathAddPointTitle')}
+            onClick={() => {
+              /*
+               * Appended at the last point rather than at the origin, so a new
+               * anchor lands somewhere visible and near what the author was
+               * just working on instead of at the layer's corner.
+               */
+              const last = parsed.points[parsed.points.length - 1];
+              write(addPoint(parsed, { x: (last?.x ?? 0) + 40, y: (last?.y ?? 0) + 40 }));
+            }}
+          >
+            {t('editor.properties.pathAddPoint')}
+          </button>
+        </>
+      )}
+    </>
+  );
+}
+
+/**
+ * The nested-composition panel — MASKS.md Wave C.
+ *
+ * Nesting itself was finished in Phase 6.5: `expand.ts` flattens, guards cycles
+ * and caps depth, and thumbnails, bundles and the usage index all understand a
+ * `composition` layer. One field was never authorable — `overrides` — and it is
+ * the field the whole phase's accept criterion turns on. A reusable badge comp
+ * is only reusable if two mounts of it can show different badges.
+ */
+function NestedCompositionSection({
+  layer,
+  selfId,
+  compositions,
+  assets,
+  warnings,
+  onPatch,
+}: {
+  layer: CompositionLayer;
+  /** The composition being edited, so it cannot be offered as its own child. */
+  selfId: string;
+  compositions: Composition[];
+  assets: AssetRef[];
+  warnings: ExpandWarning[];
+  onPatch: (patch: Partial<CompositionLayer>) => void;
+}): JSX.Element {
+  const t = useT();
+
+  const child = compositions.find((c) => c.id === layer.ref);
+
+  /*
+   * `collectBindings` already answers "what can an operator type into this
+   * composition", which is exactly the list of things a mount of it can pin.
+   * Deriving the panel from it rather than from a second walk is what keeps
+   * the override editor and the operator's own control panel offering the
+   * same fields.
+   */
+  const allBindings = useMemo(() => (child ? collectBindings(child) : []), [child]);
+
+  /*
+   * Table data is excluded, deliberately, and the exclusion is written down in
+   * MASKS.md rather than left to be rediscovered.
+   *
+   * A `dataset` binding's value is a whole `{ columns, rows }` document. Ticking
+   * an override for one would pin it — meaningful in principle — but this panel
+   * has nowhere to *show* what it pinned, and a control that writes a value the
+   * author cannot see or edit is the exact shape of the fields this phase exists
+   * to stop shipping. Tables are driven by a data source or by the operator
+   * panel's grid, both of which already exist and both of which show the rows.
+   */
+  const bindings = allBindings.filter((b) => b.kind !== 'dataset');
+  const datasetBindings = allBindings.filter((b) => b.kind === 'dataset');
+
+  /*
+   * Warnings are keyed by *instance* id, so a comp inside a group reads
+   * `group/badge` and one two levels down reads `outer/inner` — matched on the
+   * trailing segment rather than by equality, or a grouped layer would never
+   * match its own warning.
+   *
+   * Not exact, and knowingly so: a nested comp that happens to share an id with
+   * this one would match too. The cost is showing a real warning about the same
+   * graphic beside the wrong layer; the alternative is walking `plan.instances`
+   * to prove which side of a composition boundary each id came from, which is a
+   * lot of machinery for an amber hint.
+   */
+  const own = warnings.filter(
+    (w) => w.layerId === layer.id || w.layerId.endsWith(`/${layer.id}`),
+  );
+
+  const overrides = layer.overrides ?? {};
+  const isOverridden = (name: string): boolean => name in overrides;
+
+  const setOverride = (name: string, value: unknown): void => {
+    onPatch({ overrides: { ...overrides, [name]: value } });
+  };
+
+  const clearOverride = (name: string): void => {
+    const next = { ...overrides };
+    delete next[name];
+    /*
+     * An empty map is written as an absent field, the same rule the mask panel
+     * follows: one representation of "nothing set", not two for every reader
+     * downstream to handle.
+     */
+    onPatch({ overrides: Object.keys(next).length ? next : undefined });
+  };
+
+  return (
+    <Section title={t('editor.properties.composition')}>
+      {/*
+        The picker, with the free-text id kept below it — the same shape the
+        asset section uses, for the same reason: the picker is what anyone
+        should use, and the text field is the escape hatch for a composition
+        that is not in this project yet.
+      */}
+      <Field label={t('editor.properties.reference')}>
+        <select
+          value={compositions.some((c) => c.id === layer.ref) ? layer.ref : ''}
+          onChange={(e) => {
+            if (e.target.value) onPatch({ ref: e.target.value });
+          }}
+        >
+          <option value="">
+            {compositions.length > 1
+              ? t('editor.properties.pickAComposition')
+              : t('editor.properties.noOtherCompositions')}
+          </option>
+          {compositions
+            // A composition cannot mount itself; the validator refuses it, so
+            // it is not offered.
+            .filter((c) => c.id !== selfId)
+            .map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+        </select>
+      </Field>
+      <Field label={t('editor.properties.referenceId')}>
+        <input
+          value={layer.ref}
+          placeholder={t('editor.properties.referencePlaceholder')}
+          onChange={(e) => onPatch({ ref: e.target.value })}
+        />
+      </Field>
+
+      {/*
+        The expander's own complaints about this layer — an unresolved ref, a
+        cycle, a depth cut-off. `TimelinePlan.warnings` has carried these since
+        Phase 6.5 under a comment saying the editor surfaced them; until Wave C
+        the only place they went was the browser console. Every one of them
+        renders on air as a graphic that is simply missing, with nothing
+        anywhere saying why.
+      */}
+      {own.map((w, i) => (
+        <p className="prop-warning" key={i}>{w.message}</p>
+      ))}
+
+      {child && (
+        <div className="comp-ref-preview">
+          {/*
+            The same still the layers panel draws, at panel size — including
+            its hover preview. Built in 0.68.4 and, until now, visible in
+            exactly one place.
+          */}
+          <LayerThumb layer={layer} size={64} />
+          <span className="comp-ref-name">{child.name}</span>
+        </div>
+      )}
+
+      {/*
+        Independent turns a nested composition into its own graphic on its own
+        control channel, instead of inlining it into this timeline. A
+        composition holding independent children is what the guide calls a
+        scene — there is no separate scene type to create.
+      */}
+      <Field label={t('editor.properties.independent')}>
+        <input
+          type="checkbox"
+          checked={layer.independent ?? false}
+          title={t('editor.properties.independentTitle')}
+          onChange={(e) => {
+            const independent = e.target.checked;
+            /*
+             * Clearing keyframes, the lifetime window and now `overrides` is
+             * not tidiness — the validator rejects all three on an independent
+             * layer, so leaving them behind would make the composition
+             * unsavable the moment the box is ticked, with the error pointing
+             * at fields the author did not just touch.
+             */
+            onPatch(
+              independent
+                ? {
+                    independent: true,
+                    keyframes: undefined,
+                    in: undefined,
+                    out: undefined,
+                    overrides: undefined,
+                  }
+                : { independent: undefined, channel: undefined },
+            );
+          }}
+        />
+      </Field>
+      {layer.independent && (
+        <Field label={t('editor.properties.channel')}>
+          <input
+            value={layer.channel ?? ''}
+            placeholder={layer.ref}
+            title={t('editor.properties.channelTitle')}
+            onChange={(e) => {
+              // Normalized as typed rather than validated on save: the rules
+              // are the URL's, not this field's, and an operator typing "Bug"
+              // should get a working channel, not a refusal.
+              const next = normalizeKey(e.target.value);
+              onPatch({ channel: next || undefined });
+            }}
+          />
+        </Field>
+      )}
+
+      {/* ------------------------------------------------------ overrides */}
+
+      {layer.independent ? (
+        /*
+         * Withheld rather than shown and refused on save, the same call the
+         * sprite binding field gets: expansion stops at an independent layer
+         * and `sceneElements` carries no values, so an override here would be
+         * read by nothing at all. A field that can only ever produce an
+         * invalid document should not be offered.
+         */
+        <p className="hint">{t('editor.properties.overridesIndependent')}</p>
+      ) : !child ? null : bindings.length === 0 ? (
+        <p className="hint">
+          {datasetBindings.length
+            ? t('editor.properties.overrideDataset')
+            : t('editor.properties.overridesNone', { name: child.name })}
+        </p>
+      ) : (
+        <>
+          <h4 className="prop-subhead">{t('editor.properties.overrides')}</h4>
+          {/*
+            The distinction this whole editor exists to preserve: an absent
+            override means "whatever the child was authored with", and an
+            override set to `''` is a deliberate blank on air. Storing both as
+            an empty string would make the badge with no subtitle
+            indistinguishable from the badge nobody has configured yet — so
+            the checkbox owns the key's existence and the field owns its value,
+            including the empty one.
+          */}
+          {bindings.map((b) => (
+            <Fragment key={b.name}>
+              <Field label={b.label}>
+                <input
+                  type="checkbox"
+                  className="override-toggle"
+                  checked={isOverridden(b.name)}
+                  title={t(
+                    isOverridden(b.name)
+                      ? 'editor.properties.overrideInheritTitle'
+                      : 'editor.properties.overrideSetTitle',
+                  )}
+                  onChange={(e) =>
+                    e.target.checked
+                      // Seeded from the child's own authored value, so ticking
+                      // the box pins what is already on screen rather than
+                      // blanking it. Pinning alone is meaningful: a pinned
+                      // field stops answering the parent's `update()`.
+                      ? setOverride(b.name, b.defaultValue)
+                      : clearOverride(b.name)
+                  }
+                />
+                <OverrideValue
+                  binding={b}
+                  value={overrides[b.name]}
+                  enabled={isOverridden(b.name)}
+                  assets={assets}
+                  onChange={(v) => setOverride(b.name, v)}
+                />
+              </Field>
+            </Fragment>
+          ))}
+          {datasetBindings.length > 0 && (
+            <p className="hint">{t('editor.properties.overrideDataset')}</p>
+          )}
+        </>
+      )}
+    </Section>
+  );
+}
+
+/**
+ * One override's value field, by binding kind.
+ *
+ * Disabled until the field is actually overridden, showing the child's
+ * authored value as its placeholder — so "inherit" reads as the value that
+ * will be used rather than as an empty box.
+ */
+function OverrideValue({
+  binding,
+  value,
+  enabled,
+  assets,
+  onChange,
+}: {
+  binding: BindingDescriptor;
+  value: unknown;
+  enabled: boolean;
+  assets: AssetRef[];
+  onChange: (value: unknown) => void;
+}): JSX.Element {
+  const t = useT();
+  const placeholder = enabled ? '' : describeDefault(binding.defaultValue);
+
+  if (binding.kind === 'dataset') {
+    /*
+     * Unreachable while the section filters dataset bindings out of the rows,
+     * and kept anyway as the guard for that filter: if the exclusion is ever
+     * lifted, this says so rather than rendering `[object Object]` into a text
+     * box and writing it back on the next keystroke.
+     */
+    return <span className="hint">{t('editor.properties.overrideDataset')}</span>;
+  }
+
+  if (binding.kind === 'stringList') {
+    const lines = Array.isArray(value) ? value.map((v) => String(v)).join('\n') : '';
+    return (
+      <textarea
+        rows={2}
+        disabled={!enabled}
+        value={enabled ? lines : ''}
+        placeholder={placeholder}
+        title={t('editor.properties.itemsTitle')}
+        // Split on write, so an empty line in the middle survives editing and
+        // the value stays the `string[]` the crawl expects.
+        onChange={(e) => onChange(e.target.value.split('\n'))}
+      />
+    );
+  }
+
+  if (binding.kind === 'image' || binding.kind === 'video') {
+    const kind = binding.kind === 'image' ? 'image' : 'video';
+    const usable = assets.filter((a) => a.kind === kind || a.kind === 'other');
+    const current = typeof value === 'string' ? value : '';
+    return (
+      <select
+        disabled={!enabled}
+        value={usable.some((a) => a.path === current) ? current : ''}
+        onChange={(e) => { if (e.target.value) onChange(e.target.value); }}
+      >
+        <option value="">
+          {usable.length
+            ? t('editor.properties.pickAnAsset')
+            : t('editor.properties.noAssetsOfKind', { kind })}
+        </option>
+        {usable.map((a) => (
+          <option key={a.id} value={a.path}>{a.originalName ?? a.path}</option>
+        ))}
+      </select>
+    );
+  }
+
+  return (
+    <input
+      disabled={!enabled}
+      value={enabled ? String(value ?? '') : ''}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+}
+
+/** The child's authored value, shortened for a placeholder. */
+function describeDefault(value: unknown): string {
+  if (value === undefined || value === null) return '';
+  if (Array.isArray(value)) return value.map((v) => String(v)).join(' · ').slice(0, 60);
+  if (typeof value === 'object') return '';
+  return String(value).slice(0, 60);
+}
+
+/**
  * Mask authoring — MASKS.md Wave A.
  *
  * `packages/runtime/src/mask.ts` has rendered `rect`/`ellipse`/`image` masks,
@@ -1074,7 +1630,7 @@ function MaskSection({
         <select
           value={mask?.type ?? 'none'}
           onChange={(e) => {
-            const type = e.target.value as 'none' | 'rect' | 'ellipse' | 'image';
+            const type = e.target.value as 'none' | 'rect' | 'ellipse' | 'image' | 'path';
             if (type === 'none') {
               // The schema's own representation of "no mask" is the field
               // being absent — writing a `{ type: 'none' }` sentinel would
@@ -1082,16 +1638,21 @@ function MaskSection({
               onPatch({ mask: undefined });
               return;
             }
+            const size = { width: layer.size?.width ?? 200, height: layer.size?.height ?? 200 };
             onPatch({
               mask: {
                 type,
                 x: mask?.x ?? 0,
                 y: mask?.y ?? 0,
-                width: mask?.width ?? layer.size?.width ?? 200,
-                height: mask?.height ?? layer.size?.height ?? 200,
+                width: mask?.width ?? size.width,
+                height: mask?.height ?? size.height,
                 ...(mask?.feather !== undefined ? { feather: mask.feather } : {}),
                 ...(mask?.invert !== undefined ? { invert: mask.invert } : {}),
                 ...(type === 'image' && mask?.src !== undefined ? { src: mask.src } : {}),
+                // Seeded for the same reason the shape picker seeds one: a path
+                // mask with no data is refused by the validator, and the box it
+                // starts from should at least be the layer.
+                ...(type === 'path' ? { path: mask?.path ?? seedPathIn(size) } : {}),
               },
             });
           }}
@@ -1100,6 +1661,7 @@ function MaskSection({
           <option value="rect">{t('editor.properties.maskRect')}</option>
           <option value="ellipse">{t('editor.properties.maskEllipse')}</option>
           <option value="image">{t('editor.properties.maskImage')}</option>
+          <option value="path">{t('editor.properties.maskPath')}</option>
         </select>
       </Field>
 
@@ -1119,22 +1681,32 @@ function MaskSection({
               onChange={(e) => setMask({ y: Number(e.target.value) })}
             />
           </Field>
-          <Field label={t('editor.properties.width')}>
-            <input
-              type="number"
-              min={0}
-              value={mask.width}
-              onChange={(e) => setMask({ width: Math.max(0, Number(e.target.value)) })}
-            />
-          </Field>
-          <Field label={t('editor.properties.height')}>
-            <input
-              type="number"
-              min={0}
-              value={mask.height}
-              onChange={(e) => setMask({ height: Math.max(0, Number(e.target.value)) })}
-            />
-          </Field>
+          {/*
+            Withheld for a path, where the renderer reads neither: the geometry
+            is all in `d` and `x`/`y` above merely translate it. Leaving two
+            live number fields that move nothing would be the same "field that
+            does nothing" this phase has now found three times.
+          */}
+          {mask.type !== 'path' && (
+            <>
+              <Field label={t('editor.properties.width')}>
+                <input
+                  type="number"
+                  min={0}
+                  value={mask.width}
+                  onChange={(e) => setMask({ width: Math.max(0, Number(e.target.value)) })}
+                />
+              </Field>
+              <Field label={t('editor.properties.height')}>
+                <input
+                  type="number"
+                  min={0}
+                  value={mask.height}
+                  onChange={(e) => setMask({ height: Math.max(0, Number(e.target.value)) })}
+                />
+              </Field>
+            </>
+          )}
           <Field label={t('editor.properties.maskFeather')}>
             <input
               type="number"
@@ -1195,6 +1767,15 @@ function MaskSection({
             />
           </Field>
 
+          {/*
+            The same editor the path *shape* gets, on the same `d` in the same
+            coordinate space — which is the entire reason `LayerMask.type:
+            'path'` reuses the shape's string rather than inventing a mask
+            geometry of its own (MASKS.md §5).
+          */}
+          {mask.type === 'path' && (
+            <PathEditor data={mask.path} onChange={(path) => setMask({ path })} />
+          )}
         </>
       )}
 

@@ -383,7 +383,31 @@ export class BreezeRuntime {
       }
     }
 
-    // Seed values pinned by an enclosing composition layer's overrides.
+    if (this.plan.warnings.length) {
+      for (const warning of this.plan.warnings) {
+        console.warn(`[breeze] ${warning.layerId}: ${warning.message}`);
+      }
+    }
+
+    this.container.appendChild(this.root);
+    if (this.scaleMode === 'contain') this.fitToContainer();
+
+    /*
+     * Seed values pinned by an enclosing composition layer's overrides.
+     *
+     * **After the tree is in the document, deliberately.** This ran before the
+     * append until 0.71.0, and for a crawl that was the
+     * measures-zero-while-detached trap all over again: `applyBinding` reaches a
+     * ticker through `crawlFor`, which *constructs* the loop on first call, and
+     * a loop built against a detached element measures a viewport of 0 and
+     * correctly refuses to animate — so overriding a nested ticker's items
+     * froze it. The dedicated crawl pass below sits after the append for exactly
+     * this reason and says so; this one was front-running it.
+     *
+     * Still before `refit()`, which is what a text override needs: Fit Width has
+     * to measure the copy that will actually be on screen, not the copy this
+     * mount is replacing.
+     */
     for (const instance of this.plan.instances) {
       if (!Object.keys(instance.overrides).length) continue;
       const nodes = this.nodes.get(instance.id);
@@ -393,15 +417,6 @@ export class BreezeRuntime {
       if (!(layer.binding in instance.overrides)) continue;
       this.applyBinding(nodes, instance.overrides[layer.binding]);
     }
-
-    if (this.plan.warnings.length) {
-      for (const warning of this.plan.warnings) {
-        console.warn(`[breeze] ${warning.layerId}: ${warning.message}`);
-      }
-    }
-
-    this.container.appendChild(this.root);
-    if (this.scaleMode === 'contain') this.fitToContainer();
 
     // Build crawl loops now the tree is in the document and can be measured, so
     // a ticker shows its headlines before anything is played — an editor
@@ -1556,15 +1571,41 @@ export class BreezeRuntime {
     });
 
     /*
-     * A source-bound crawl starts from the DataSet if one has already arrived —
-     * which, on a /play page, it has: the server inlines current datasets into
-     * the boot payload precisely so a graphic is never briefly wrong on load.
-     * Falling back to `items` covers the authoring case and the feed that has
-     * not answered yet.
+     * What this ticker starts rotating, in precedence order.
+     *
+     * 1. An enclosing composition layer's `overrides`, because that is authored
+     *    configuration for *this mount* — the HOME/AWAY case, and the same
+     *    reason `pinnedBindings` makes it deaf to a parent `update()`.
+     * 2. A source-bound DataSet if one has already arrived — which, on a /play
+     *    page, it has: the server inlines current datasets into the boot payload
+     *    precisely so a graphic is never briefly wrong on load.
+     * 3. The authored `items`, covering the authoring case and the feed that has
+     *    not answered yet.
+     *
+     * **The override has to be chosen here rather than applied afterwards**, and
+     * that is the whole point of this arm. `setItems` treats every call after
+     * the first as a live operator edit and *queues* it for the next loop seam,
+     * so seeding the authored copy and then pushing the override left a nested
+     * ticker showing the copy it was overriding — for a full rotation if the
+     * loop was running, and forever if it was not, because a queue with no seam
+     * coming never drains. The override is not an edit arriving mid-show; it is
+     * what this ticker was built to say.
      */
     const layer = node.layer;
+    const overrides = node.instance.overrides;
+    const overridden =
+      layer.binding !== undefined && layer.binding in overrides
+        ? overrides[layer.binding]
+        : undefined;
     const seeded = layer.source && layer.column ? this.datasets.get(layer.source) : undefined;
-    loop.setItems(seeded ? crawlItemsFrom(seeded, layer) : layer.items);
+
+    loop.setItems(
+      overridden !== undefined
+        ? (Array.isArray(overridden) ? overridden.map(stringify) : [stringify(overridden)])
+        : seeded
+          ? crawlItemsFrom(seeded, layer)
+          : layer.items,
+    );
 
     this.crawls.set(layerId, loop);
     return loop;

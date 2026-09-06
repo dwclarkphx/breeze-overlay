@@ -17,6 +17,7 @@ import {
   type LayerType,
   type Project,
   type ShapeLayer,
+  type Size,
   type Stage,
   type TableLayer,
   type TextLayer,
@@ -145,7 +146,25 @@ export function createShapeLayer(init: Partial<ShapeLayer> = {}): ShapeLayer {
     ...baseOptionals(init),
     ...(init.stroke ? { stroke: init.stroke } : {}),
     ...(init.cornerRadius !== undefined ? { cornerRadius: init.cornerRadius } : {}),
+    /*
+     * Seeded for a path so a freshly created one is a valid document rather
+     * than a shape the validator immediately refuses — the same courtesy a new
+     * sprite gets from its 1×1 grid. A triangle inside the default box, because
+     * it is unmistakably a path (nothing else in the palette makes one) and
+     * every point of it is somewhere the pen tool can grab.
+     */
+    ...(init.path !== undefined
+      ? { path: init.path }
+      : init.shape === 'path'
+        ? { path: defaultPathIn(init.size ?? { width: 400, height: 100 }) }
+        : {}),
   };
+}
+
+/** A triangle inscribed in `size` — the seed geometry for a new path shape. */
+function defaultPathIn(size: Size): string {
+  const { width: w, height: h } = size;
+  return `M 0 ${h} L ${w / 2} 0 L ${w} ${h} Z`;
 }
 
 export function createTextLayer(init: Partial<TextLayer> = {}): TextLayer {

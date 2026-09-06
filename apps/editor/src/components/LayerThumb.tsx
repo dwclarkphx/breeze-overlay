@@ -308,6 +308,40 @@ function render(
         />
       );
 
+    /*
+     * The drawing itself, scaled into the thumb by its own layer box.
+     *
+     * `preserveAspectRatio` defaults to `xMidYMid meet`, which is exactly the
+     * fit wanted here — the same "letterbox it and centre it" the composition
+     * thumbnail computes by hand, except SVG does it for free because this one
+     * has a viewBox to do it with.
+     */
+    case 'path':
+      return (
+        <svg
+          className="layer-thumb"
+          width={size}
+          height={size}
+          viewBox={`0 0 ${thumb.width} ${thumb.height}`} // i18n-ignore — SVG viewBox
+          aria-hidden="true"
+        >
+          <path
+            d={thumb.d}
+            fill={thumb.fill}
+            {...(thumb.stroke
+              ? {
+                  stroke: thumb.stroke.color,
+                  // Scaled with the drawing, or a 2px stroke on a 1920-wide
+                  // layer vanishes entirely at thumbnail size.
+                  strokeWidth: thumb.stroke.width,
+                  strokeLinejoin: 'round' as const,
+                  strokeLinecap: 'round' as const,
+                }
+              : {})}
+          />
+        </svg>
+      );
+
     case 'shape':
       return (
         <span

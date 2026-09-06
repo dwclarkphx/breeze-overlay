@@ -30,7 +30,19 @@ async function open(page: Page, url = PLAY) {
 const seek = (page: Page, time: number) =>
   page.evaluate((t) => (window as any).breeze.runtime.seek(t), time);
 
-/** Every visible row's team and its y, top to bottom by geometry. */
+/**
+ * Every visible row's team and its y, top to bottom by geometry.
+ *
+ * **Sorted on the exact top, reported on the rounded one.** Sorting on the
+ * rounded value looks equivalent and is not: two rows a third of a pixel apart
+ * round to the same integer, `Array.prototype.sort` is stable, and the tie then
+ * falls back to DOM order — which is creation order, so a row that just entered
+ * sorts *last* however high up the screen it actually is. That is not
+ * hypothetical; it is what made this file's re-sort test fail once in the
+ * 0.71.0 run, mid-animation, with Peoria 0.306px above Mesa and both rounding
+ * to 7. `y` stays rounded because the assertions about row pitch want a whole
+ * number.
+ */
 async function rows(page: Page): Promise<Array<{ team: string; y: number; key: string }>> {
   return page.evaluate((sel) => {
     const host = document.querySelector(sel)!;
@@ -38,9 +50,15 @@ async function rows(page: Page): Promise<Array<{ team: string; y: number; key: s
       .map((el) => {
         const box = el.getBoundingClientRect();
         const team = el.querySelector('[data-layer-id$="/team"] .bz-text-inner')?.textContent ?? '';
-        return { team, y: Math.round(box.top), key: (el as HTMLElement).dataset['rowKey'] ?? '' };
+        return {
+          team,
+          y: Math.round(box.top),
+          exactY: box.top,
+          key: (el as HTMLElement).dataset['rowKey'] ?? '',
+        };
       })
-      .sort((a, b) => a.y - b.y);
+      .sort((a, b) => a.exactY - b.exactY)
+      .map(({ team, y, key }) => ({ team, y, key }));
   }, TABLE);
 }
 
@@ -139,25 +157,40 @@ test('an update re-sorts the table without rebuilding its rows', async ({ page }
     { team: 'Peoria Pioneers', w: 20, l: 1, pct: '.952' },
   ]);
 
-  await page.waitForFunction(
-    (sel) => {
-      const host = document.querySelector(sel)!;
-      const first = [...host.querySelectorAll('.bz-table-row')]
-        .map((el) => ({ el, top: el.getBoundingClientRect().top }))
-        .sort((a, b) => a.top - b.top)[0];
-      const team = first?.el.querySelector('[data-layer-id$="/team"] .bz-text-inner');
-      return team?.textContent?.includes('Peoria') ?? false;
-    },
-    TABLE,
-    { timeout: 10_000 },
-  );
+  /*
+   * Polled through `rows()` until the table has *settled*, rather than waiting
+   * on a bespoke predicate and then sampling once.
+   *
+   * The wait this replaces asked "is the top row Peoria" by raw client rect,
+   * and the assertion then re-read by rounded y a round trip later. Both were
+   * satisfied by the instant the two rows cross, which is the one moment they
+   * are a fraction of a pixel apart: the 0.71.0 run caught Peoria 0.306px above
+   * Mesa (6.665 vs 6.971), the wait passed on the exact values, and the read
+   * 8ms later rounded both to 7 and broke the tie by DOM order — where a
+   * just-entered row sorts last. Nothing was wrong with the table; the data was
+   * already correct, Peoria already rank 1 on 20 wins.
+   *
+   * Polling the whole settled order fixes it at the root: the crossover is no
+   * longer a state any assertion can stop on, because the expected order is
+   * only reachable once the FLIP and the row's entrance have both finished. It
+   * also asserts more than the old version did — Scottsdale dropping to page 2
+   * and everyone else shifting down one are part of the same expectation now,
+   * rather than a separate `not.toContain`.
+   */
+  await expect
+    .poll(async () => (await rows(page)).map((r) => r.team), { timeout: 10_000 })
+    .toEqual([
+      'Peoria Pioneers',
+      'Mesa Marlins',
+      'Chandler Chargers',
+      'Tempe Thunderbirds',
+      'Gilbert Grizzlies',
+    ]);
 
   const after = await rows(page);
-  expect(after[0]!.team).toBe('Peoria Pioneers');
   // Same element, moved — not a new one.
   expect(after[0]!.key).toBe(peoriaKey);
   expect(before.some((r) => r.key === peoriaKey)).toBe(false); // it was on page 2 before
-  expect(after.map((r) => r.team)).not.toContain('Scottsdale Scorpions');
 });
 
 test('a re-sort animates rather than snapping', async ({ page }) => {

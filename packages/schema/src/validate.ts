@@ -111,6 +111,43 @@ export interface SemanticContext {
 }
 
 /**
+ * Whether a `d` string can draw anything, checked at the one level that is
+ * both cheap and worth having.
+ *
+ * Not a path parser. The rule is the SVG spec's own: path data must begin with
+ * a moveto, and a path that does not is in error and renders *nothing* — the
+ * silent failure this phase keeps finding, and the exact result of a
+ * hand-edited `d` that lost its leading `M`. Everything past that first
+ * command is left to the renderer, which is the only thing that can really
+ * judge it and which degrades gracefully when it cannot.
+ */
+function pathDataIssues(
+  data: string | undefined,
+  at: string,
+  what: 'mask' | 'shape',
+): ValidationIssue[] {
+  const subject = what === 'mask' ? 'a path mask' : 'a path shape';
+
+  if (!data || !data.trim()) {
+    return [{
+      path: at,
+      message: `${subject} needs \`path\` data — without it it renders as nothing at all, silently`,
+    }];
+  }
+
+  if (!/^[Mm]/.test(data.trim())) {
+    return [{
+      path: at,
+      message:
+        `${subject}'s \`path\` must start with a moveto (\`M\` or \`m\`) — SVG draws nothing at ` +
+        'all from data that does not, however valid the rest of it looks',
+    }];
+  }
+
+  return [];
+}
+
+/**
  * Rules the JSON Schema cannot express: unique ids, monotonic keyframe times,
  * markers inside the composition, sane in/out windows.
  */
@@ -188,6 +225,28 @@ export function validateCompositionSemantics(
           });
         }
 
+        /*
+         * `overrides` is the third field in this family, found while Wave C was
+         * building its editor (MASKS.md §4).
+         *
+         * It reaches a nested composition through `expandComposition`, which
+         * stops at an independent layer and never walks the child — and the
+         * player mounts independent elements from `sceneElements`, whose
+         * `SceneElement` carries `layerId`, `name`, `ref` and `channel` and no
+         * values at all. So an override here is authored, saved, and read by
+         * nothing, which is precisely why `channel`-without-`independent` above
+         * is refused rather than ignored. An element's values come from its own
+         * control channel; bake them into the referenced composition instead.
+         */
+        if (layer.overrides && Object.keys(layer.overrides).length > 0) {
+          issues.push({
+            path: `${path}/overrides`,
+            message:
+              'an independent composition layer cannot carry `overrides` — nothing reads them; ' +
+              'push values to its own control channel, or author them in the referenced composition',
+          });
+        }
+
         const channel = layer.channel ?? layer.ref;
         const claimedBy = claimedChannels.get(channel);
         if (claimedBy !== undefined) {
@@ -235,6 +294,12 @@ export function validateCompositionSemantics(
           path: `${path}/clock/timezone`,
           message: `unknown IANA time zone "${zone}"`,
         });
+      }
+    }
+
+    if (layer.type === 'shape' && layer.shape === 'path') {
+      for (const issue of pathDataIssues(layer.path, `${path}/path`, 'shape')) {
+        issues.push(issue);
       }
     }
 
@@ -390,6 +455,12 @@ export function validateCompositionSemantics(
         });
       }
 
+      if (m.type === 'path') {
+        for (const issue of pathDataIssues(m.path, `${path}/mask/path`, 'mask')) {
+          issues.push(issue);
+        }
+      }
+
       if (m.type === 'image' && m.src && assets && !assets.some((a) => a.path === m.src)) {
         issues.push({
           path: `${path}/mask/src`,
@@ -397,9 +468,21 @@ export function validateCompositionSemantics(
         });
       }
 
+      /*
+       * The two size warnings below are scoped to the mask types that actually
+       * read `width`/`height`.
+       *
+       * A path mask's geometry is all in `d` — the fields are inert there by
+       * design (§5), and a path mask authored the obvious way carries zeros in
+       * them. Left ungated, every correct path mask would report that it "masks
+       * everything away", which is how a warning that is usually wrong teaches
+       * an author to ignore the ones that are right.
+       */
+      const readsSize = m.type !== 'path';
+
       // Legal — a typo'd unit, almost always, and the shape blurs away to
       // nothing rather than failing loudly, so a warning is what fits.
-      if (m.feather !== undefined && m.feather > Math.min(m.width, m.height)) {
+      if (readsSize && m.feather !== undefined && m.feather > Math.min(m.width, m.height)) {
         issues.push({
           path: `${path}/mask/feather`,
           severity: 'warning',
@@ -411,7 +494,7 @@ export function validateCompositionSemantics(
 
       // Also legal, on the same grounds the JSON schema's own `minimum: 0`
       // allows it: the natural start value of a mask being animated open.
-      if (m.width === 0 || m.height === 0) {
+      if (readsSize && (m.width === 0 || m.height === 0)) {
         issues.push({
           path: `${path}/mask/${m.width === 0 ? 'width' : 'height'}`,
           severity: 'warning',
