@@ -137,14 +137,39 @@ describe('compositions', () => {
     });
     const body = res.json() as {
       bindings: Array<{ name: string }>;
+      overrides: Array<{ address: string; defaultValue: unknown; mountId: string }>;
       stepCount: number;
       schema: { properties: Record<string, unknown> };
     };
+    /*
+     * `bindings` is this composition's own fields and stays that way. A mounted
+     * composition's fields are the child's business — walking into every mount
+     * would put every field of every mounted graphic on one panel.
+     */
     expect(body.bindings.map((b) => b.name).sort()).toEqual(['name', 'title']);
     // One STOP marker → one step. An inflated count would tell the control
     // panel the graphic has a hold it does not have.
     expect(body.stepCount).toBe(1);
-    expect(Object.keys(body.schema.properties).sort()).toEqual(['name', 'title']);
+
+    /*
+     * `overrides` is the narrower list: fields an author deliberately set on a
+     * *mount*, addressable one mount at a time. This lower third mounts the
+     * badge composition and overrides its text, so an operator can change that
+     * badge live without touching any other mount of the same comp.
+     */
+    expect(body.overrides.map((o) => o.address)).toEqual(['badge.badgeText']);
+    expect(body.overrides[0]).toMatchObject({ mountId: 'badge', defaultValue: 'LIVE' });
+
+    /*
+     * The schema carries both, because it is what an external caller discovers
+     * fields through — a Companion button or a vMix script sends
+     * `badge.badgeText` exactly as it sends `name`.
+     */
+    expect(Object.keys(body.schema.properties).sort()).toEqual([
+      'badge.badgeText',
+      'name',
+      'title',
+    ]);
   });
 
   it('validates without saving', async () => {

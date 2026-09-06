@@ -20,10 +20,11 @@ import { controlPage, isFedSource, type ControlPanelBinding } from '../pages.js'
 import { channelKey, parseClientMessage, type ControlHub, type ControlVerb } from '../hub.js';
 import type { DataRegistry } from '../data/registry.js';
 import { readDataSources } from '../data/sources.js';
-import { getChannel, getComposition } from '../store.js';
+import { getChannel, getComposition, readProject } from '../store.js';
 import {
   bindingsJsonSchema,
   collectBindings,
+  collectOverrideBindings,
   collectSources,
   sceneElements,
   stepCount,
@@ -296,7 +297,29 @@ export async function registerControlRoutes(
           return def ? { ...b, sourceName: def.name, sourceType: def.type } : b;
         });
 
-      const bindings = [...feds, ...editable];
+      /*
+       * Per-mount override fields, addressed `<mount>.<binding>`.
+       *
+       * An override is an author saying "this mount's copy is something
+       * somebody sets", which makes it exactly the field an operator gets
+       * asked for at two minutes to air — and until it had an address, the pin
+       * that keeps two mounts of one badge apart also kept the operator out.
+       * `name` carries the address because the panel keys its inputs by it, so
+       * what the operator types is sent already addressed.
+       */
+      const project = await readProject(req.params.id);
+      const byCompId = new Map(project.compositions.map((c) => [c.id, c]));
+      const overrides: ControlPanelBinding[] = collectOverrideBindings(
+        composition,
+        (id) => byCompId.get(id),
+      ).map((b) => ({
+        name: b.address,
+        kind: b.kind,
+        label: b.mountLabel,
+        defaultValue: b.defaultValue,
+      }));
+
+      const bindings = [...feds, ...editable, ...overrides];
 
       reply.type('text/html; charset=utf-8');
       reply.header('cache-control', 'no-store');
@@ -304,7 +327,7 @@ export async function registerControlRoutes(
         projectId: req.params.id,
         composition,
         bindings,
-        schema: bindingsJsonSchema(composition),
+        schema: bindingsJsonSchema(composition, (id) => byCompId.get(id)),
         stepCount: stepCount(composition),
         datasets: data?.datasets(req.params.id) ?? {},
       });

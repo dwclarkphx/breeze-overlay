@@ -34,7 +34,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-export type ClientRole = 'renderer' | 'controller';
+/**
+ * `preview` is a renderer that does not count as one.
+ *
+ * The operator panel can embed the output page so the person driving a graphic
+ * can see it, and that embed has to receive commands or it would not follow the
+ * PLAY they just pressed. It must equally never be *counted*: the panel turns
+ * its status light green on `renderers > 0` and says "outputs connected", and a
+ * preview counted there would tell an operator their graphic was reaching air
+ * when it was reaching nothing but their own browser. A green light that can be
+ * wrong is worse than no light.
+ */
+export type ClientRole = 'renderer' | 'controller' | 'preview';
 
 export type ControlVerb = 'play' | 'stop' | 'next' | 'clear' | 'seek' | 'update';
 
@@ -203,9 +214,12 @@ export class ControlHub {
 
     let delivered = 0;
     for (const client of this.clients.values()) {
-      if (client.channel !== channelName || client.role !== 'renderer') continue;
+      if (client.channel !== channelName) continue;
+      if (client.role !== 'renderer' && client.role !== 'preview') continue;
       client.send({ type: 'command', command });
-      delivered += 1;
+      // A preview is sent the command and left out of the count, which is what
+      // `delivered` means to the caller: how many outputs took this to air.
+      if (client.role === 'renderer') delivered += 1;
     }
 
     this.broadcastState(channelName);
@@ -218,6 +232,8 @@ export class ControlHub {
     let controllers = 0;
     for (const client of this.clients.values()) {
       if (client.channel !== channelName) continue;
+      // A preview is deliberately in neither total — see `ClientRole`.
+      if (client.role === 'preview') continue;
       if (client.role === 'renderer') renderers += 1;
       else controllers += 1;
     }

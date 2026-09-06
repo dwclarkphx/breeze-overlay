@@ -399,6 +399,32 @@ ${htmlOpen()}
   .element-key{color:var(--muted);font:12px/1 ui-monospace,Consolas,monospace}
   .element-state{margin-inline-start:auto;font-size:13px}
   .element .hint a{color:var(--accent)}
+
+  /*
+   * The panel becomes two columns once there is room for the preview beside the
+   * controls, and stacks below that width. Driven by the viewport rather than a
+   * toggle: an operator on a phone in a gallery should not have to discover a
+   * layout switch, and the same panel is opened on a desktop and a tablet by the
+   * same person on the same night.
+   */
+  .panel-grid{display:flex;flex-direction:column;gap:12px}
+  .panel-controls{min-width:0}
+  .preview{margin:0 0 12px}
+  .preview-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .preview-head .sub{margin-inline-start:auto;font:12px/1 ui-monospace,Consolas,monospace;color:var(--muted)}
+  /* 16:9 box; the output page scales itself into it with ?scale=contain. */
+  .preview-frame{position:relative;width:100%;aspect-ratio:16/9;background:#000;
+    background-image:linear-gradient(45deg,#1a1a1a 25%,transparent 25%),linear-gradient(-45deg,#1a1a1a 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#1a1a1a 75%),linear-gradient(-45deg,transparent 75%,#1a1a1a 75%);
+    background-size:16px 16px;background-position:0 0,0 8px,8px -8px,-8px 0;
+    border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .preview-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block}
+  .icon-btn{width:auto;min-width:38px;padding:6px 10px;font-size:15px;line-height:1}
+  .icon-btn[aria-pressed="true"]{outline:2px solid var(--accent);outline-offset:-2px}
+  @media (min-width:900px){
+    .panel-grid{flex-direction:row-reverse;align-items:flex-start}
+    .panel-controls{flex:1 1 380px}
+    .preview{flex:1 1 480px;position:sticky;top:12px;margin:0}
+  }
 </style>
 </head>
 <body>
@@ -411,6 +437,19 @@ ${htmlOpen()}
   </span>
 </header>
 
+<div class="panel-grid">
+<section class="preview" id="preview" hidden>
+  <div class="preview-head">
+    <strong>${t('server.pages.previewTitle')}</strong>
+    <button class="icon-btn" id="preview-debug" aria-pressed="false"
+      title="${escapeHtml(t('server.pages.previewDebugTitle'))}">${'\u2699'}</button>
+    <span class="sub">${escapeHtml(`${projectId}/${composition.id}`)}</span>
+  </div>
+  <div class="preview-frame" id="preview-frame"></div>
+  <div class="hint">${t('server.pages.previewHint')}</div>
+</section>
+
+<div class="panel-controls">
 ${sceneElementsBlock(elements)}
 
 <fieldset ${
@@ -457,6 +496,10 @@ ${sceneElementsBlock(elements)}
       : `<div class="hint">${t('server.pages.allFedHint')}</div>`
   }
 </fieldset>
+
+<button id="preview-toggle" style="width:100%" aria-pressed="false">${t('server.pages.previewShow')}</button>
+</div>
+</div>
 
 <script>
 window.__BREEZE_CONTROL__ = {

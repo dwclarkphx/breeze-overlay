@@ -362,6 +362,13 @@ img.layer-thumb {
 }
 .prop-field { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
 .prop-label { width: 78px; color: var(--muted); font-size: 12px; }
+/* The address an operator sends for an overridden field. An identifier, so
+   monospaced and selectable rather than styled like prose. */
+.prop-hint {
+  display: block; font-style: normal; font-size: 10px; opacity: 0.75;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow: hidden; text-overflow: ellipsis;
+}
 .prop-input { flex: 1; display: flex; align-items: center; gap: 4px; }
 .prop-input input, .prop-input select, .prop-input textarea { flex: 1; min-width: 0; }
 .stopwatch {

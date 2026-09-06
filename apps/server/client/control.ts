@@ -460,6 +460,70 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
   const playbackEl = document.getElementById('playback')!;
   const fields = document.getElementById('fields')!;
 
+  /* ------------------------------------------------------------ preview */
+
+  /**
+   * The output page, embedded, so the person driving a graphic can see it.
+   *
+   * A real renderer rather than a mock — the same `/play` URL vMix opens — which
+   * is the only way a preview can be trusted: anything re-implemented here would
+   * drift from what goes to air and be believed anyway. It subscribes as a
+   * `preview`, so it receives every command and is counted as no output at all;
+   * the status light above must mean vMix and OBS, never this frame.
+   *
+   * The iframe is created on show and destroyed on hide rather than kept
+   * hidden. A hidden browser source is still a live socket, a GSAP timeline and
+   * a video decoder, and a panel left open all evening on a gallery machine
+   * should not be paying for a preview nobody is looking at.
+   */
+  const previewSection = document.getElementById('preview')!;
+  const previewFrame = document.getElementById('preview-frame')!;
+  const previewToggle = document.getElementById('preview-toggle') as HTMLButtonElement;
+  const previewDebug = document.getElementById('preview-debug') as HTMLButtonElement;
+  let previewDebugOn = false;
+
+  const previewUrl = (): string => {
+    const params = new URLSearchParams({ scale: 'contain', preview: '1' });
+    // Debug is read at load by the output page, so toggling it reloads the
+    // frame — the honest way to drive a flag the page only reads once.
+    if (previewDebugOn) params.set('debug', '1');
+    if (key) params.set('key', key);
+    return `/play/${boot.projectId}/${boot.compositionId}?${params.toString()}`;
+  };
+
+  const renderPreview = (): void => {
+    previewFrame.textContent = '';
+    const frame = document.createElement('iframe');
+    frame.src = previewUrl();
+    frame.title = t('control.previewTitle');
+    previewFrame.appendChild(frame);
+  };
+
+  /*
+   * Held here rather than read back off `previewSection.hidden`, which is typed
+   * `boolean | string` — the attribute grew a third state (`until-found`) and
+   * the DOM lib followed. Reading it back to invert it means widening a
+   * tri-state into a boolean on every click; owning the flag says what is meant
+   * and cannot drift from the attribute it sets.
+   */
+  let previewOn = false;
+
+  const showPreview = (on: boolean): void => {
+    previewOn = on;
+    previewSection.hidden = !on;
+    previewToggle.setAttribute('aria-pressed', String(on));
+    previewToggle.textContent = t(on ? 'control.previewHide' : 'control.previewShow');
+    if (on) renderPreview();
+    else previewFrame.textContent = '';
+  };
+
+  previewToggle.addEventListener('click', () => showPreview(!previewOn));
+  previewDebug.addEventListener('click', () => {
+    previewDebugOn = !previewDebugOn;
+    previewDebug.setAttribute('aria-pressed', String(previewDebugOn));
+    renderPreview();
+  });
+
   /* ------------------------------------------------------------- fields */
 
   const inputs = new Map<string, HTMLInputElement | HTMLTextAreaElement>();

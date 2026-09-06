@@ -214,6 +214,19 @@ describe('plan integration', () => {
     const plan = buildPlan(outer, { resolve: (id) => (id === 'inner' ? inner : undefined) });
     // A nested comp's markers are ignored, as in an After Effects precomp.
     expect(plan.holds).toEqual([0.5]);
+
+    /*
+     * Ignored, but no longer silently. `inner` was built to hold at 0.2 and
+     * this parent holds at 0.5, so nesting it means its content runs straight
+     * past the point it was built to wait at — true of every graphic authored
+     * as *animate in → STOP → hold on air*, and invisible until it is on air.
+     * The runtime cannot know which timing was intended (the author may have
+     * aligned the parent deliberately), so it reports the mismatch on the mount
+     * and leaves the decision alone.
+     */
+    expect(plan.warnings).toHaveLength(1);
+    expect(plan.warnings[0]!.layerId).toBe('nest');
+    expect(plan.warnings[0]!.message).toMatch(/holds at 0\.2s/);
   });
 
   it('surfaces expansion warnings on the plan', () => {

@@ -13,6 +13,7 @@ import {
   assertKey,
   bindingsJsonSchema,
   collectBindings,
+  collectOverrideBindings,
   createComposition,
   isValidKey,
   stepCount,
@@ -274,9 +275,18 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
     '/api/projects/:id/compositions/:compId/bindings',
     async (req) => {
       const comp = await getComposition(req.params.id, req.params.compId);
+      /*
+       * Nested mounts resolve against the project, which only the server has —
+       * so this endpoint is where per-mount override addresses become
+       * discoverable to an external caller driving the graphic.
+       */
+      const project = await readProject(req.params.id);
+      const byCompId = new Map(project.compositions.map((c) => [c.id, c]));
+      const resolve = (id: string) => byCompId.get(id);
       return {
         bindings: collectBindings(comp),
-        schema: bindingsJsonSchema(comp),
+        overrides: collectOverrideBindings(comp, resolve),
+        schema: bindingsJsonSchema(comp, resolve),
         stepCount: stepCount(comp),
       };
     },

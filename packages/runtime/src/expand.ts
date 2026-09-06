@@ -81,10 +81,26 @@ interface Frame {
   chain: readonly string[];
 }
 
+
+/** Stop-marker times of a composition, sorted. */
+function stopTimes(comp: Composition): number[] {
+  return (comp.markers ?? [])
+    .filter((m) => m.type === 'stop')
+    .map((m) => m.time)
+    .sort((a, b) => a - b);
+}
+
 export function expandComposition(comp: Composition, options: ExpandOptions = {}): ExpandResult {
   const maxDepth = options.maxDepth ?? DEFAULT_MAX_DEPTH;
   const instances: LayerInstance[] = [];
   const warnings: ExpandWarning[] = [];
+
+  /*
+   * Only the root's stop markers become playback steps, so they are the whole
+   * of what a flattened child can hold at — see the warning where a nested
+   * composition is walked.
+   */
+  const rootStops = stopTimes(comp);
 
   const walk = (frame: Frame): void => {
     for (const layer of frame.layers) {
@@ -155,6 +171,39 @@ export function expandComposition(comp: Composition, options: ExpandOptions = {}
           message: `unresolved composition reference "${layer.ref}"`,
         });
         continue;
+      }
+
+      /*
+       * A flattened child's own STOP markers are dropped, and that is worth
+       * saying out loud rather than leaving to be discovered on air.
+       *
+       * Precomp semantics (see the module note) give the root sole authority
+       * over playback steps, so a ticker authored as *animate in → STOP → hold
+       * on air* stops holding the moment it is nested: its content runs
+       * straight past the point it was built to wait at. The graphic is not
+       * broken and the runtime cannot know which timing was intended — the
+       * author may have aligned the parent deliberately — so this reports the
+       * mismatch and leaves the decision where it belongs.
+       *
+       * Compared in root time: the child's marker is offset by the same `in`
+       * that offsets its layers, which is what makes "0.6 inside a mount that
+       * starts at 2s" line up with a root stop at 2.6.
+       */
+      const childOffset = frame.offset + (layer.in ?? 0);
+      const dropped = stopTimes(child)
+        .map((t) => t + childOffset)
+        .filter((t) => !rootStops.some((r) => Math.abs(r - t) < 1e-3));
+
+      if (dropped.length) {
+        const at = dropped.map((t) => `${Math.round(t * 1000) / 1000}s`).join(', ');
+        warnings.push({
+          layerId: id,
+          message:
+            `"${layer.ref}" holds at ${at}, which this composition does not — a nested ` +
+            'composition plays on its parent\'s timeline and its own STOP markers are ' +
+            'ignored. Move a marker so the two line up, or the child will run straight ' +
+            'through the point it was built to hold at.',
+        });
       }
 
       const overrides = layer.overrides ?? {};

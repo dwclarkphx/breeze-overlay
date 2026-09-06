@@ -1353,6 +1353,7 @@ function NestedCompositionSection({
         />
       </Field>
 
+
       {/*
         The expander's own complaints about this layer — an unresolved ref, a
         cycle, a depth cut-off. `TimelinePlan.warnings` has carried these since
@@ -1457,9 +1458,20 @@ function NestedCompositionSection({
             the checkbox owns the key's existence and the field owns its value,
             including the empty one.
           */}
+          {/*
+            The address is shown, not hidden, because it is the half of this
+            feature an author has to hand to somebody else: an overridden field
+            is reachable live at `<mount>.<binding>`, and an operator building a
+            Companion button needs to be told what to type.
+          */}
           {bindings.map((b) => (
             <Fragment key={b.name}>
-              <Field label={b.label}>
+              <Field
+                label={b.label}
+                {...(isOverridden(b.name)
+                  ? { hint: `${layer.id}.${b.name}` }
+                  : {})}
+              >
                 <input
                   type="checkbox"
                   className="override-toggle"
@@ -2922,10 +2934,22 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }): JSX.Element {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  /** Shown under the label, monospaced — for an identifier, not for prose. */
+  hint?: string;
+  children: React.ReactNode;
+}): JSX.Element {
   return (
     <label className="prop-field">
-      <span className="prop-label">{label}</span>
+      <span className="prop-label">
+        {label}
+        {hint && <em className="prop-hint">{hint}</em>}
+      </span>
       <span className="prop-input">{children}</span>
     </label>
   );

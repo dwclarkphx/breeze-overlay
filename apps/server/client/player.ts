@@ -92,7 +92,7 @@ function warnIfWindowSmallerThanStage(composition: Composition, scaled: boolean)
 }
 
 /** Page-level parameters that are never binding values. */
-const RESERVED_PARAMS = new Set(['autoplay', 'debug', 'scale']);
+const RESERVED_PARAMS = new Set(['autoplay', 'debug', 'scale', 'preview']);
 
 /**
  * Split the query string into per-channel field payloads.
@@ -275,7 +275,16 @@ function connectToHub(
 
     socket.addEventListener('open', () => {
       retry = 0;
-      socket!.send(JSON.stringify({ type: 'subscribe', channel, role: 'renderer' }));
+      /*
+       * `?preview=1` subscribes as a preview: it receives every command, so the
+       * embed in an operator panel follows the PLAY that operator just pressed,
+       * and it is counted as no output at all. The panel's "outputs connected"
+       * has to mean vMix and OBS, never the operator's own window.
+       */
+      const role = new URLSearchParams(location.search).get('preview') === '1'
+        ? 'preview'
+        : 'renderer';
+      socket!.send(JSON.stringify({ type: 'subscribe', channel, role }));
     });
 
     socket.addEventListener('message', (event) => {

@@ -1321,6 +1321,34 @@ export class BreezeRuntime {
       }
     }
 
+    /*
+     * Addressed fields — `<mount instance id>.<binding>`, from
+     * `collectOverrideBindings`.
+     *
+     * An overridden field is pinned against the loop below, which is what lets
+     * one badge composition mount twice showing different teams. That same pin
+     * left an operator with no way to change either of them live, so an
+     * override now also publishes an address, and an address reaches exactly
+     * one mount — the HOME badge without touching AWAY.
+     *
+     * Matched against known mount ids rather than by splitting on the first
+     * dot: a binding name is operator data and may itself contain one, and a
+     * field called `home.score` must not be mistaken for an address.
+     */
+    for (const mountId of this.mountIds()) {
+      const prefix = `${mountId}.`;
+      for (const [key, value] of Object.entries(data)) {
+        if (!key.startsWith(prefix)) continue;
+        const binding = key.slice(prefix.length);
+        for (const node of this.nodes.values()) {
+          const layer = node.layer;
+          if (!('binding' in layer) || layer.binding !== binding) continue;
+          if (!node.instance.id.startsWith(`${mountId}/`)) continue;
+          this.applyBinding(node, value);
+        }
+      }
+    }
+
     for (const node of this.nodes.values()) {
       const layer = node.layer;
       if (!('binding' in layer) || !layer.binding) continue;
@@ -1554,6 +1582,24 @@ export class BreezeRuntime {
    * sits — it is not keyframed, and tying it to the timeline would make it stop
    * whenever the graphic holds on air.
    */
+  /**
+   * Instance ids of every composition layer in the expanded tree — the
+   * addressable mounts.
+   *
+   * Computed once: the plan is immutable for the life of a runtime, and
+   * `update()` runs on every operator keystroke and every data push.
+   */
+  private mountIds(): string[] {
+    if (!this.mountIdCache) {
+      this.mountIdCache = this.plan.instances
+        .filter((i) => i.layer.type === 'composition')
+        .map((i) => i.id);
+    }
+    return this.mountIdCache;
+  }
+
+  private mountIdCache: string[] | null = null;
+
   private crawlFor(layerId: string): CrawlLoop | undefined {
     const existing = this.crawls.get(layerId);
     if (existing) return existing;
@@ -1621,6 +1667,7 @@ export class BreezeRuntime {
   private stopCrawls(): void {
     for (const loop of this.crawls.values()) loop.stop();
   }
+
 
   /* --------------------------------------------------------- view / info */
 

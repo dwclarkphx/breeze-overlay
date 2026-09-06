@@ -108,6 +108,98 @@ export function collectBindings(comp: Composition): BindingDescriptor[] {
   return [...byName.values()];
 }
 
+/**
+ * Separator between a mount and the field it carries — `nest118bi.headlines`.
+ *
+ * A frozen identifier (I18N.md §2): it goes into `update()` payloads, into the
+ * `/bindings` descriptor an external caller reads, and therefore into Companion
+ * buttons and vMix scripts. It never changes and it is never localised.
+ */
+export const OVERRIDE_ADDRESS_SEPARATOR = '.';
+
+export interface OverrideBinding extends BindingDescriptor {
+  /**
+   * How an operator addresses this one mount: `<mount layer id>.<binding>`,
+   * with the mount's id namespaced by any groups or mounts above it — the same
+   * id the runtime's expander gives that instance.
+   *
+   * The plain binding name deliberately does **not** reach it: an overridden
+   * field is pinned against ordinary `update()` precisely so two mounts of one
+   * badge can differ, and un-pinning it would make the HOME badge answer a
+   * push meant for AWAY. The address is the way in that keeps them apart.
+   */
+  address: string;
+  /** Instance id of the composition layer carrying the override. */
+  mountId: string;
+  /** What the operator sees — the mount's name, then the field's. */
+  mountLabel: string;
+}
+
+/**
+ * Overridden fields on nested mounts, addressable one mount at a time.
+ *
+ * `collectBindings` above answers "what may an operator type into *this*
+ * composition" and deliberately does not walk into mounted compositions — a
+ * nested comp's fields are the child's business, and exposing them all would
+ * put every field of every mounted graphic on one panel.
+ *
+ * This answers the narrower question the override editor creates: *which
+ * fields has an author deliberately configured per mount*, and what does an
+ * operator send to change one live. Only overridden fields qualify, and that is
+ * the point — the override is the author saying "this mount's copy is a thing
+ * somebody sets", which is exactly the field an operator will be asked for at
+ * two minutes to air.
+ *
+ * Independent mounts are skipped: they own a control channel each, and their
+ * fields are addressed there rather than through the parent (SCENES.md §2).
+ */
+export function collectOverrideBindings(
+  comp: Composition,
+  resolve: (id: string) => Composition | undefined,
+  /** Guards a cyclic project, the same way the runtime's expander does. */
+  seen: readonly string[] = [comp.id],
+  prefix = '',
+): OverrideBinding[] {
+  const out: OverrideBinding[] = [];
+
+  const visit = (layers: Layer[], at: string): void => {
+    for (const layer of layers) {
+      if (layer.type === 'group') {
+        visit(layer.children, `${at}${layer.id}/`);
+        continue;
+      }
+      if (layer.type !== 'composition' || layer.independent) continue;
+
+      const child = resolve(layer.ref);
+      if (!child || seen.includes(layer.ref)) continue;
+
+      const mountId = `${at}${layer.id}`;
+      const overrides = layer.overrides ?? {};
+      const childBindings = collectBindings(child);
+
+      for (const [name, value] of Object.entries(overrides)) {
+        const binding = childBindings.find((b) => b.name === name);
+        // An override naming a field the child does not have is dead config;
+        // it is not offered, and `validateProject` is where saying so belongs.
+        if (!binding) continue;
+        out.push({
+          ...binding,
+          defaultValue: value,
+          address: `${mountId}${OVERRIDE_ADDRESS_SEPARATOR}${name}`,
+          mountId,
+          mountLabel: `${layer.name ?? layer.ref} · ${binding.label}`,
+        });
+      }
+
+      // A mount inside a mount can carry overrides too.
+      out.push(...collectOverrideBindings(child, resolve, [...seen, layer.ref], `${mountId}/`));
+    }
+  };
+
+  visit(comp.layers, prefix);
+  return out;
+}
+
 /** A data source this composition reads, and what reads it. */
 export interface SourceRef {
   /** Data-source id. */
@@ -167,16 +259,38 @@ export function collectSources(comp: Composition): SourceRef[] {
  * JSON Schema for the dynamic-field form — what `/control/:id` renders, and
  * what `GET …/bindings` hands any client driving the graphic.
  */
-export function bindingsJsonSchema(comp: Composition): Record<string, unknown> {
+export function bindingsJsonSchema(
+  comp: Composition,
+  /**
+   * Supplied by a caller that can resolve nested refs — the server can, a
+   * browser holding one composition cannot. With it, per-mount override
+   * addresses join the schema so an external caller can discover them; without
+   * it the schema is exactly what it always was.
+   */
+  resolve?: (id: string) => Composition | undefined,
+): Record<string, unknown> {
   const properties: Record<string, unknown> = {};
 
-  for (const b of collectBindings(comp)) {
+  const overrides = resolve ? collectOverrideBindings(comp, resolve) : [];
+
+  /*
+   * Key and title are decided before the switch rather than inside it. An
+   * override is keyed by its *address*, not its bare name: two mounts of one
+   * badge both bind `badgeText`, and one property called that could only ever
+   * mean one of them.
+   */
+  const fields: Array<{ key: string; title: string; b: BindingDescriptor }> = [
+    ...collectBindings(comp).map((b) => ({ key: b.name, title: b.label, b })),
+    ...overrides.map((o) => ({ key: o.address, title: o.mountLabel, b: o as BindingDescriptor })),
+  ];
+
+  for (const { key, title, b } of fields) {
     switch (b.kind) {
       case 'stringList':
-        properties[b.name] = {
+        properties[key] = {
           type: 'array',
           items: { type: 'string' },
-          title: b.label,
+          title,
           default: b.defaultValue,
         };
         break;
@@ -188,9 +302,9 @@ export function bindingsJsonSchema(comp: Composition): Record<string, unknown> {
          * exactly how a numeric column arrives as text and sorts alphabetically
          * on air.
          */
-        properties[b.name] = {
+        properties[key] = {
           type: 'object',
-          title: b.label,
+          title,
           description: 'tabular data — { columns, rows }',
           properties: {
             columns: {
@@ -212,15 +326,15 @@ export function bindingsJsonSchema(comp: Composition): Record<string, unknown> {
         break;
       case 'image':
       case 'video':
-        properties[b.name] = {
+        properties[key] = {
           type: 'string',
-          title: b.label,
+          title,
           description: `${b.kind} asset path or URL`,
           default: b.defaultValue,
         };
         break;
       default:
-        properties[b.name] = { type: 'string', title: b.label, default: b.defaultValue };
+        properties[key] = { type: 'string', title, default: b.defaultValue };
     }
   }
 
