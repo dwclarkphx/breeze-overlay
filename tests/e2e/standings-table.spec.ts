@@ -19,7 +19,7 @@ import { expect, test, type Page } from '@playwright/test';
  * rebuilt under it.
  */
 
-const PLAY = '/play/demo/standings?autoplay=0';
+const PLAY = '/play/demo-1iixd/standings-72q2s?autoplay=0';
 const TABLE = '[data-layer-id="panel/table"]';
 
 async function open(page: Page, url = PLAY) {
@@ -75,7 +75,7 @@ async function pushRows(
   page: Page,
   data: Array<Record<string, unknown>>,
 ): Promise<void> {
-  const response = await page.request.post('/api/control/demo/standings/update', {
+  const response = await page.request.post('/api/control/demo-1iixd/standings-72q2s/update', {
     data: {
       standings: {
         columns: [
@@ -270,7 +270,7 @@ test('a browser source opening late gets the current rows, not the snapshot', as
 });
 
 test('the data API serves the seeded source with its health', async ({ request }) => {
-  const response = await request.get('/api/projects/demo/datasources');
+  const response = await request.get('/api/projects/demo-1iixd/datasources');
   expect(response.ok()).toBe(true);
 
   const body = (await response.json()) as {
@@ -289,7 +289,7 @@ test('the data API serves the seeded source with its health', async ({ request }
 test('the fetcher refuses a private address', async ({ request }) => {
   // This server sits on the same LAN as the switcher; "fetch any URL" is a
   // request forgery primitive without this guard.
-  const response = await request.post('/api/projects/demo/datasources-preview', {
+  const response = await request.post('/api/projects/demo-1iixd/datasources-preview', {
     data: { def: { id: 'probe', name: 'probe', type: 'http-json', url: 'http://192.168.0.1/' } },
   });
 
@@ -299,7 +299,7 @@ test('the fetcher refuses a private address', async ({ request }) => {
 });
 
 test('the control panel renders a grid for the dataset binding', async ({ page }) => {
-  await page.goto('/control/demo/standings');
+  await page.goto('/control/demo-1iixd/standings-72q2s');
 
   const grid = page.locator('.grid').first();
   await expect(grid).toBeVisible();

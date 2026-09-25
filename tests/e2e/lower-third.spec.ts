@@ -15,7 +15,7 @@ import { expect, test, type Page } from '@playwright/test';
  * runtime state, because that matrix is literally what vMix and OBS capture.
  */
 
-const PLAY_URL = '/play/demo/l3rd-name?autoplay=0';
+const PLAY_URL = '/play/demo-1iixd/l3rd-name-2a94g?autoplay=0';
 
 /** Horizontal translate of a layer, read out of its computed transform. */
 async function translateX(page: Page, layerId: string): Promise<number> {
@@ -50,7 +50,7 @@ test.describe('nothing goes to air on load', () => {
      * Adding a Browser Source in OBS, or opening the URL to check it, must not
      * put a graphic on air. Triggering is the control panel's job.
      */
-    await page.goto('/play/demo/l3rd-name');
+    await page.goto('/play/demo-1iixd/l3rd-name-2a94g');
     await page.waitForFunction(() => Boolean((window as any).breeze));
 
     // Longer than the intro, so an autoplay would certainly have shown itself.
@@ -62,7 +62,7 @@ test.describe('nothing goes to air on load', () => {
 
   test('the ticker bar sits off screen until played', async ({ page }) => {
     // Reported: the ticker bar was visible the moment the page opened.
-    await page.goto('/play/demo/ticker');
+    await page.goto('/play/demo-1iixd/ticker-40hbh');
     await page.waitForFunction(() => Boolean((window as any).breeze));
     await page.waitForTimeout(900);
 
@@ -76,7 +76,7 @@ test.describe('nothing goes to air on load', () => {
   });
 
   test('?autoplay=1 restores cue-on-load for simple workflows', async ({ page }) => {
-    await page.goto('/play/demo/l3rd-name?autoplay=1');
+    await page.goto('/play/demo-1iixd/l3rd-name-2a94g?autoplay=1');
     await page.waitForFunction(
       () => ['playing-in', 'holding'].includes((window as any).breeze.runtime.playbackState),
       undefined,
@@ -109,7 +109,7 @@ test.describe('the ticker plays where the window cannot show it', () => {
 
   test('it holds on air at its authored position in a short window', async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 900 });
-    await page.goto('/play/demo/ticker?autoplay=1');
+    await page.goto('/play/demo-1iixd/ticker-40hbh?autoplay=1');
     await page.waitForFunction(
       () => (window as any).breeze.runtime.playbackState === 'holding',
       undefined,
@@ -135,7 +135,7 @@ test.describe('the ticker plays where the window cannot show it', () => {
     });
 
     await page.setViewportSize({ width: 1920, height: 900 });
-    await page.goto('/play/demo/ticker');
+    await page.goto('/play/demo-1iixd/ticker-40hbh');
     await page.waitForFunction(() => Boolean((window as any).breeze));
 
     expect(warnings.join('\n')).toContain('outside the window');
@@ -149,7 +149,7 @@ test.describe('the ticker plays where the window cannot show it', () => {
 
     // The browser-source case: a viewport matching the composition.
     await page.setViewportSize({ width: 1920, height: 1080 });
-    await page.goto('/play/demo/ticker?autoplay=1');
+    await page.goto('/play/demo-1iixd/ticker-40hbh?autoplay=1');
     await page.waitForFunction(
       () => (window as any).breeze.runtime.playbackState === 'holding',
       undefined,
@@ -411,7 +411,7 @@ test.describe('nested compositions', () => {
 });
 
 test('query-string data seeds the graphic before first paint', async ({ page }) => {
-  await page.goto('/play/demo/l3rd-name?autoplay=0&name=Query%20Seeded&title=From%20URL');
+  await page.goto('/play/demo-1iixd/l3rd-name-2a94g?autoplay=0&name=Query%20Seeded&title=From%20URL');
   await page.waitForFunction(() => Boolean((window as any).breeze));
   await expect(page.locator('[data-layer-id="name"] .bz-text-inner')).toHaveText('Query Seeded');
 });

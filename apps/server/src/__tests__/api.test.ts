@@ -58,9 +58,9 @@ describe('health and shell', () => {
     // minutes before air.
     const res = await app.inject({ method: 'GET', url: '/' });
 
-    for (const comp of ['l3rd-name', 'badge', 'ticker']) {
-      expect(res.body).toContain(`/control/demo/${comp}`);
-      expect(res.body).toContain(`/play/demo/${comp}`);
+    for (const comp of ['l3rd-name-2a94g', 'badge-3j8xr', 'ticker-40hbh']) {
+      expect(res.body).toContain(`/control/demo-1iixd/${comp}`);
+      expect(res.body).toContain(`/play/demo-1iixd/${comp}`);
     }
     expect(res.body).toContain('scale=contain');
   });
@@ -75,7 +75,7 @@ describe('seeding', () => {
   it('installs the demo project on first run', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/projects' });
     const body = res.json() as { projects: Array<{ id: string }> };
-    expect(body.projects.map((p) => p.id)).toContain('demo');
+    expect(body.projects.map((p) => p.id)).toContain('demo-1iixd');
   });
 });
 
@@ -100,8 +100,8 @@ describe('project CRUD', () => {
   });
 
   it('round-trips the demo project unchanged apart from updatedAt', async () => {
-    const before = (await app.inject({ method: 'GET', url: '/api/projects/demo' })).json() as Record<string, unknown>;
-    const put = await app.inject({ method: 'PUT', url: '/api/projects/demo', payload: before });
+    const before = (await app.inject({ method: 'GET', url: '/api/projects/demo-1iixd' })).json() as Record<string, unknown>;
+    const put = await app.inject({ method: 'PUT', url: '/api/projects/demo-1iixd', payload: before });
     expect(put.statusCode).toBe(200);
 
     const after = put.json() as Record<string, unknown>;
@@ -111,8 +111,8 @@ describe('project CRUD', () => {
   it('rejects a project that fails schema validation', async () => {
     const res = await app.inject({
       method: 'PUT',
-      url: '/api/projects/demo',
-      payload: { formatVersion: 1, id: 'demo', name: 'x', compositions: [{ nope: true }] },
+      url: '/api/projects/demo-1iixd',
+      payload: { formatVersion: 1, id: 'demo-1iixd', name: 'x', compositions: [{ nope: true }] },
     });
     expect(res.statusCode).toBe(422);
   });
@@ -125,15 +125,15 @@ describe('project CRUD', () => {
 
 describe('compositions', () => {
   it('returns a single composition', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/projects/demo/compositions/l3rd-name' });
+    const res = await app.inject({ method: 'GET', url: '/api/projects/demo-1iixd/compositions/l3rd-name-2a94g' });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({ id: 'l3rd-name', name: 'Lower Third — Name' });
+    expect(res.json()).toMatchObject({ id: 'l3rd-name-2a94g', name: 'Lower Third — Name' });
   });
 
   it('exposes the dynamic-field schema', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: '/api/projects/demo/compositions/l3rd-name/bindings',
+      url: '/api/projects/demo-1iixd/compositions/l3rd-name-2a94g/bindings',
     });
     const body = res.json() as {
       bindings: Array<{ name: string }>;
@@ -196,7 +196,7 @@ describe('compositions', () => {
 });
 
 describe('control API', () => {
-  const base = '/api/control/demo/l3rd-name';
+  const base = '/api/control/demo-1iixd/l3rd-name-2a94g';
 
   it('accepts every verb over POST', async () => {
     for (const verb of ['play', 'next', 'stop', 'clear']) {
@@ -222,7 +222,7 @@ describe('control API', () => {
   });
 
   it('404s for a composition that does not exist', async () => {
-    const res = await app.inject({ method: 'POST', url: '/api/control/demo/nope/play' });
+    const res = await app.inject({ method: 'POST', url: '/api/control/demo-1iixd/nope/play' });
     expect(res.statusCode).toBe(404);
   });
 
@@ -255,14 +255,14 @@ describe('control API', () => {
 
   it('keeps channels separate', async () => {
     await app.inject({ method: 'POST', url: `${base}/update`, payload: { name: 'Lower third' } });
-    const other = await app.inject({ method: 'GET', url: '/api/control/demo/ticker/state' });
+    const other = await app.inject({ method: 'GET', url: '/api/control/demo-1iixd/ticker-40hbh/state' });
     expect((other.json() as { state: { data: Record<string, unknown> } }).state.data).toEqual({});
   });
 });
 
 describe('operator control page', () => {
   it('renders a field per binding', async () => {
-    const res = await app.inject({ method: 'GET', url: '/control/demo/l3rd-name' });
+    const res = await app.inject({ method: 'GET', url: '/control/demo-1iixd/l3rd-name-2a94g' });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('text/html');
     expect(res.body).toContain('"name"');
@@ -271,13 +271,13 @@ describe('operator control page', () => {
 
   it('inlines the field list so it paints without a round trip', async () => {
     // Used minutes before air, sometimes over poor wifi on a tablet.
-    const res = await app.inject({ method: 'GET', url: '/control/demo/l3rd-name' });
+    const res = await app.inject({ method: 'GET', url: '/control/demo-1iixd/l3rd-name-2a94g' });
     expect(res.body).toContain('__BREEZE_CONTROL__');
     expect(res.body).toContain('/public/control.js');
   });
 
   it('offers the verbs an operator needs', async () => {
-    const res = await app.inject({ method: 'GET', url: '/control/demo/l3rd-name' });
+    const res = await app.inject({ method: 'GET', url: '/control/demo-1iixd/l3rd-name-2a94g' });
     for (const verb of ['play', 'stop', 'next', 'clear']) {
       expect(res.body).toContain(`data-verb="${verb}"`);
     }
@@ -285,17 +285,17 @@ describe('operator control page', () => {
 
   it('hides NEXT on a single-step graphic', async () => {
     // The demo lower third has one hold, so NEXT would do nothing.
-    const res = await app.inject({ method: 'GET', url: '/control/demo/l3rd-name' });
+    const res = await app.inject({ method: 'GET', url: '/control/demo-1iixd/l3rd-name-2a94g' });
     expect(res.body).toMatch(/data-verb="next" hidden/);
   });
 
   it('is never cached', async () => {
-    const res = await app.inject({ method: 'GET', url: '/control/demo/l3rd-name' });
+    const res = await app.inject({ method: 'GET', url: '/control/demo-1iixd/l3rd-name-2a94g' });
     expect(res.headers['cache-control']).toContain('no-store');
   });
 
   it('404s for an unknown composition', async () => {
-    const res = await app.inject({ method: 'GET', url: '/control/demo/nope' });
+    const res = await app.inject({ method: 'GET', url: '/control/demo-1iixd/nope' });
     expect(res.statusCode).toBe(404);
   });
 });
@@ -317,7 +317,7 @@ describe('control page — source-fed fields', () => {
   };
 
   it('marks a field fed by a fetched source read-only', async () => {
-    const res = await app.inject({ method: 'GET', url: '/control/demo/screen-bug' });
+    const res = await app.inject({ method: 'GET', url: '/control/demo-1iixd/screen-bug-8vctv' });
     expect(res.statusCode).toBe(200);
 
     const fed = bindingsOf(res.body).find((b) => b['source'] === 'wx-current');
@@ -332,7 +332,7 @@ describe('control page — source-fed fields', () => {
      * the panel for it was empty, which reads as a broken page rather than as
      * a graphic with nothing to type into.
      */
-    const res = await app.inject({ method: 'GET', url: '/control/demo/screen-bug' });
+    const res = await app.inject({ method: 'GET', url: '/control/demo-1iixd/screen-bug-8vctv' });
     expect(bindingsOf(res.body)).toHaveLength(1);
     expect(res.body).toContain('Every field here is fed by a data source');
     expect(res.body).not.toContain('UPDATE ON AIR');
@@ -341,7 +341,7 @@ describe('control page — source-fed fields', () => {
   it('leaves a manual source fully editable', async () => {
     // The standings demo is a manual table. Editing it in the panel is the
     // entire point of a manual source and must not be caught by this change.
-    const res = await app.inject({ method: 'GET', url: '/control/demo/standings' });
+    const res = await app.inject({ method: 'GET', url: '/control/demo-1iixd/standings-72q2s' });
     const standings = bindingsOf(res.body).find((b) => b['name'] === 'standings');
 
     expect(standings).toMatchObject({ kind: 'dataset', sourceType: 'manual' });
@@ -350,7 +350,7 @@ describe('control page — source-fed fields', () => {
   });
 
   it('inlines the current DataSets so a fed field paints before the first push', async () => {
-    const res = await app.inject({ method: 'GET', url: '/control/demo/screen-bug' });
+    const res = await app.inject({ method: 'GET', url: '/control/demo-1iixd/screen-bug-8vctv' });
     expect(res.body).toContain('datasets:');
     expect(res.body).toContain('dataKey:');
   });
@@ -397,11 +397,11 @@ describe('editor hosting', () => {
 
 describe('output page', () => {
   it('serves a transparent play page with the composition inlined', async () => {
-    const res = await app.inject({ method: 'GET', url: '/play/demo/l3rd-name' });
+    const res = await app.inject({ method: 'GET', url: '/play/demo-1iixd/l3rd-name-2a94g' });
     expect(res.statusCode).toBe(200);
     expect(res.headers['cache-control']).toContain('no-store');
     expect(res.body).toContain('background:transparent');
-    expect(res.body).toContain('compositionId: "l3rd-name"');
+    expect(res.body).toContain('compositionId: "l3rd-name-2a94g"');
     expect(res.body).toContain('/public/player.js');
     // The composition is inlined, so a browser source paints without a second
     // round trip and survives a server blip after load.
@@ -410,35 +410,35 @@ describe('output page', () => {
 
   it('does not arm autoplay', async () => {
     // A browser source must not put a graphic to air just by existing.
-    const res = await app.inject({ method: 'GET', url: '/play/demo/l3rd-name' });
+    const res = await app.inject({ method: 'GET', url: '/play/demo-1iixd/l3rd-name-2a94g' });
     expect(res.body).toContain('autoPlay: false');
   });
 
   it('redirects a bare project URL to its first composition', async () => {
-    const res = await app.inject({ method: 'GET', url: '/play/demo' });
+    const res = await app.inject({ method: 'GET', url: '/play/demo-1iixd' });
     expect(res.statusCode).toBe(302);
-    expect(res.headers['location']).toBe('/play/demo/l3rd-name');
+    expect(res.headers['location']).toBe('/play/demo-1iixd/l3rd-name-2a94g');
   });
 
   it('inlines nested compositions so a composition layer can resolve', async () => {
-    const res = await app.inject({ method: 'GET', url: '/play/demo/l3rd-name' });
+    const res = await app.inject({ method: 'GET', url: '/play/demo-1iixd/l3rd-name-2a94g' });
     // The lower third nests the badge composition; without it inlined the
     // browser source would render the graphic with a hole in it.
     expect(res.body).toContain('dependencies:');
-    expect(res.body).toContain('"id":"badge"');
+    expect(res.body).toContain('"id":"badge-3j8xr"');
   });
 
   it('does not inline compositions the graphic never references', async () => {
-    const res = await app.inject({ method: 'GET', url: '/play/demo/l3rd-name' });
+    const res = await app.inject({ method: 'GET', url: '/play/demo-1iixd/l3rd-name-2a94g' });
     const deps = /dependencies: (\[.*?\]),\n/s.exec(res.body)?.[1] ?? '[]';
     const ids = (JSON.parse(deps) as Array<{ id: string }>).map((c) => c.id);
 
-    expect(ids).toEqual(['badge']);
-    expect(ids).not.toContain('ticker');
+    expect(ids).toEqual(['badge-3j8xr']);
+    expect(ids).not.toContain('ticker-40hbh');
   });
 
   it('blocks path traversal in asset URLs', async () => {
-    const res = await app.inject({ method: 'GET', url: '/assets/demo/../../../etc/passwd' });
+    const res = await app.inject({ method: 'GET', url: '/assets/demo-1iixd/../../../etc/passwd' });
     expect(res.statusCode).toBeGreaterThanOrEqual(400);
   });
 });

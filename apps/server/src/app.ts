@@ -16,6 +16,7 @@ import { config } from './config.js';
 import { DataRegistry } from './data/registry.js';
 import { portalPage } from './pages.js';
 import { ControlHub } from './hub.js';
+import { ApiClients, isExternalApiCall } from './peers.js';
 import { TranscodeQueue } from './media/transcode.js';
 import { registerAssetRoutes } from './routes/assets.js';
 import { registerBackupRoutes } from './routes/backup.js';
@@ -33,11 +34,26 @@ import { APP_VERSION, FORMAT_VERSION } from './version.js';
 export interface BuildAppOptions {
   /** Install the demo project when the data dir is empty. Default true. */
   seed?: boolean;
+  /**
+   * Where log lines go instead of stdout. The console dashboard owns the
+   * terminal and draws the log itself; anything writing to stdout underneath it
+   * would scribble over the frame.
+   */
+  logStream?: { write(line: string): void };
+}
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    hub: ControlHub;
+    apiClients: ApiClients;
+  }
 }
 
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({
-    logger: { level: config.logLevel },
+    logger: options.logStream
+      ? { level: config.logLevel, stream: options.logStream }
+      : { level: config.logLevel },
     // Compositions with embedded base64 assets get large.
     bodyLimit: 64 * 1024 * 1024,
   });
@@ -122,6 +138,17 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const hub = new ControlHub();
   app.decorate('hub', hub);
 
+  /*
+   * Recently active API callers, for the peers page and the console dashboard.
+   * `onResponse` rather than `onRequest` so the status is known — a Companion
+   * getting 401s on every press is exactly what someone opens that list to find.
+   */
+  const apiClients = new ApiClients();
+  app.decorate('apiClients', apiClients);
+  app.addHook('onResponse', async (req, reply) => {
+    if (isExternalApiCall(req)) apiClients.note(req, reply.statusCode);
+  });
+
   const data = new DataRegistry();
   app.decorate('data', data);
 
@@ -179,7 +206,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await registerPlayRoutes(app, data);
   await registerControlRoutes(app, hub, data);
   await registerDataSourceRoutes(app, data);
-  await registerStatusRoutes(app, hub);
+  await registerStatusRoutes(app, hub, apiClients);
   await registerDocsRoutes(app);
   await registerEditorRoutes(app);
 

@@ -78,7 +78,7 @@ describe('backup', () => {
   });
 
   it('serves a zip with a download filename', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/backup?projects=demo' });
+    const res = await app.inject({ method: 'GET', url: '/api/backup?projects=demo-1iixd' });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('zip');
     expect(String(res.headers['content-disposition'])).toContain('.zip');
@@ -87,7 +87,7 @@ describe('backup', () => {
   it('takes everything with projects=all', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/backup?projects=all' });
     expect(res.statusCode).toBe(200);
-    expect(String(res.headers['x-breeze-projects'])).toContain('demo');
+    expect(String(res.headers['x-breeze-projects'])).toContain('demo-1iixd');
   });
 
   it('404s an unknown project rather than writing an empty bundle', async () => {
@@ -96,7 +96,7 @@ describe('backup', () => {
   });
 
   it('offers a per-project download', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/projects/demo/backup' });
+    const res = await app.inject({ method: 'GET', url: '/api/projects/demo-1iixd/backup' });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('zip');
   });
@@ -136,20 +136,20 @@ describe('the page', () => {
 
 describe('inspect', () => {
   it('reports what a bundle contains and whether it collides', async () => {
-    const body = await bundleOf('demo');
+    const body = await bundleOf('demo-1iixd');
     const res = await inspect(body);
     expect(res.statusCode).toBe(200);
     const out = res.json();
     expect(out.projects).toHaveLength(1);
-    expect(out.projects[0].id).toBe('demo');
-    // `demo` is seeded, so a bundle of it must collide with itself — this is
+    expect(out.projects[0].id).toBe('demo-1iixd');
+    // `demo-1iixd` is seeded, so a bundle of it must collide with itself — this is
     // the signal the page uses to offer overwrite-or-rename at all.
     expect(out.projects[0].collides).toBe(true);
   });
 
   it('writes nothing', async () => {
     const before = await fs.readdir(path.join(tmpDir, 'projects'));
-    await inspect(await bundleOf('demo'));
+    await inspect(await bundleOf('demo-1iixd'));
     expect(await fs.readdir(path.join(tmpDir, 'projects'))).toEqual(before);
   });
 
@@ -177,38 +177,38 @@ describe('restore', () => {
   it('requires an explicit mode', async () => {
     // Both answers are legitimate, so guessing means guessing destructively
     // half the time.
-    const res = await restore(await bundleOf('demo'), 'mode=');
+    const res = await restore(await bundleOf('demo-1iixd'), 'mode=');
     expect(res.statusCode).toBe(400);
   });
 
   it('restores a colliding project under a fresh id', async () => {
-    const res = await restore(await bundleOf('demo'), 'mode=rename');
+    const res = await restore(await bundleOf('demo-1iixd'), 'mode=rename');
     expect(res.statusCode).toBe(201);
     const { restored } = res.json();
-    expect(restored[0].bundledId).toBe('demo');
-    expect(restored[0].id).not.toBe('demo');
+    expect(restored[0].bundledId).toBe('demo-1iixd');
+    expect(restored[0].id).not.toBe('demo-1iixd');
     expect(restored[0].overwrote).toBe(false);
   });
 
   it('does not reuse a suffix it has already taken', async () => {
     // Restoring the same bundle twice must give two projects, not overwrite
     // the first copy with the second — which a fixed suffix would do.
-    const body = await bundleOf('demo');
+    const body = await bundleOf('demo-1iixd');
     const a = (await restore(body)).json().restored[0].id;
     const b = (await restore(body)).json().restored[0].id;
     expect(a).not.toBe(b);
   });
 
   it('leaves the original untouched when renaming', async () => {
-    const before = await app.inject({ method: 'GET', url: '/api/projects/demo' });
-    await restore(await bundleOf('demo'), 'mode=rename');
-    const after = await app.inject({ method: 'GET', url: '/api/projects/demo' });
+    const before = await app.inject({ method: 'GET', url: '/api/projects/demo-1iixd' });
+    await restore(await bundleOf('demo-1iixd'), 'mode=rename');
+    const after = await app.inject({ method: 'GET', url: '/api/projects/demo-1iixd' });
     expect(after.json().compositions.length).toBe(before.json().compositions.length);
   });
 
   it('round-trips the document and its assets onto disk', async () => {
-    const original = (await app.inject({ method: 'GET', url: '/api/projects/demo' })).json();
-    const res = await restore(await bundleOf('demo'), 'mode=rename');
+    const original = (await app.inject({ method: 'GET', url: '/api/projects/demo-1iixd' })).json();
+    const res = await restore(await bundleOf('demo-1iixd'), 'mode=rename');
     const id = res.json().restored[0].id;
 
     const copy = (await app.inject({ method: 'GET', url: `/api/projects/${id}` })).json();
@@ -227,9 +227,9 @@ describe('restore', () => {
   });
 
   it('restores only the projects named by ?only=', async () => {
-    const res = await restore(await bundleOf('all'), 'mode=rename&only=demo');
+    const res = await restore(await bundleOf('all'), 'mode=rename&only=demo-1iixd');
     expect(res.statusCode).toBe(201);
-    expect(res.json().restored.every((r: { bundledId: string }) => r.bundledId === 'demo')).toBe(true);
+    expect(res.json().restored.every((r: { bundledId: string }) => r.bundledId === 'demo-1iixd')).toBe(true);
   });
 
   it('refuses a bundle whose entries escape the project folder', async () => {
@@ -257,10 +257,10 @@ describe('restore', () => {
      * which proved something true but not the thing it claimed to.
      */
     const { unzipSync } = await import('fflate');
-    const real = unzipSync(new Uint8Array(await bundleOf('demo')));
+    const real = unzipSync(new Uint8Array(await bundleOf('demo-1iixd')));
     const withStrays: Record<string, Uint8Array> = { ...real };
     withStrays['notes.txt'] = strToU8('not part of a bundle');
-    withStrays['projects/demo/secrets/keys.json'] = json({ token: 'nope' });
+    withStrays['projects/demo-1iixd/secrets/keys.json'] = json({ token: 'nope' });
 
     const res = await restore(zip(withStrays), 'mode=rename');
     expect(res.statusCode).toBe(201);
@@ -331,7 +331,7 @@ describe('the bundle carries no runtime', () => {
      * archive or an embedded preview player.
      */
     const { unzipSync } = await import('fflate');
-    const names = Object.keys(unzipSync(new Uint8Array(await bundleOf('demo'))));
+    const names = Object.keys(unzipSync(new Uint8Array(await bundleOf('demo-1iixd'))));
     expect(names).toContain('breeze-bundle.json');
     expect(names.some((n) => /\.(js|mjs|cjs|html|exe|sh)$/i.test(n))).toBe(false);
   });

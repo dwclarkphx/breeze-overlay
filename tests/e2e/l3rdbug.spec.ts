@@ -26,15 +26,15 @@ import { expect, test, type Page } from '@playwright/test';
  * versus `finished` are different words for the same pixels — and backed by the
  * *inline* style, which the runtime only writes once it has touched an element.
  *
- * The scene is `demo / l3rdbug`, seeded from `examples/breeze-demo.json`.
+ * The scene is `demo-1iixd / l3rdbug-97rif`, seeded from `examples/breeze-demo.json`.
  * Its two children take no explicit `channel`, so each answers on its own
- * `ref`: `l3rd-name` and `screen-bug`.
+ * `ref`: `l3rd-name-2a94g` and `screen-bug-8vctv`.
  */
 
-const SCENE_URL = '/play/demo/l3rdbug?autoplay=0';
+const SCENE_URL = '/play/demo-1iixd/l3rdbug-97rif?autoplay=0';
 
-const LOWER_THIRD = 'l3rd-name';
-const BUG = 'screen-bug';
+const LOWER_THIRD = 'l3rd-name-2a94g';
+const BUG = 'screen-bug-8vctv';
 
 /** Playback state of one scene element, by channel. */
 async function elementState(page: Page, channel: string): Promise<string> {
@@ -71,7 +71,7 @@ async function elementTime(page: Page, channel: string): Promise<number> {
 
 /** Drive one element through the control API, the way a Stream Deck would. */
 async function control(page: Page, channel: string, verb: string): Promise<void> {
-  const res = await page.request.post(`/api/control/demo/${channel}/${verb}`);
+  const res = await page.request.post(`/api/control/demo-1iixd/${channel}/${verb}`);
   expect(res.ok(), `${verb} on ${channel} should be accepted`).toBe(true);
 }
 
@@ -143,7 +143,7 @@ test.beforeEach(async ({ page }) => {
   // a scene that mounted one runtime would otherwise pass half these tests.
   await page.waitForFunction(() => (window as any).breeze.elements.size === 2);
   // …and be reachable, which is a later moment than being mounted.
-  await waitForHub(page, [`demo/${LOWER_THIRD}`, `demo/${BUG}`, 'demo/l3rdbug']);
+  await waitForHub(page, [`demo-1iixd/${LOWER_THIRD}`, `demo-1iixd/${BUG}`, 'demo-1iixd/l3rdbug-97rif']);
 });
 
 test.describe('the scene mounts', () => {
@@ -168,7 +168,7 @@ test.describe('nothing goes to air on load', () => {
   test('opening the scene URL leaves both elements idle', async ({ page }) => {
     // Adding the Browser Source in OBS, or opening the URL to check it, must
     // not put two graphics on air at once.
-    await page.goto('/play/demo/l3rdbug');
+    await page.goto('/play/demo-1iixd/l3rdbug-97rif');
     await page.waitForFunction(() => (window as any).breeze?.elements?.size === 2);
     await page.waitForTimeout(900); // longer than either intro
 
@@ -237,8 +237,8 @@ test.describe('the elements trigger independently', () => {
     const [a, b] = await page.evaluate(() => {
       const els = (window as any).breeze.elements;
       return [
-        els.get('l3rd-name').runtime.currentTime as number,
-        els.get('screen-bug').runtime.currentTime as number,
+        els.get('l3rd-name-2a94g').runtime.currentTime as number,
+        els.get('screen-bug-8vctv').runtime.currentTime as number,
       ];
     });
 
@@ -298,18 +298,18 @@ test.describe('clear-all', () => {
     await control(page, BUG, 'play');
     await page.waitForFunction(
       () =>
-        ['l3rd-name', 'screen-bug'].every(
+        ['l3rd-name-2a94g', 'screen-bug-8vctv'].every(
           (ch) => (window as any).breeze.elements.get(ch).runtime.playbackState !== 'idle',
         ),
     );
 
     // Addressed to the scene, not to either element — one operator action.
-    const res = await page.request.post('/api/control/demo/l3rdbug/clear-all');
+    const res = await page.request.post('/api/control/demo-1iixd/l3rdbug-97rif/clear-all');
     expect(res.ok()).toBe(true);
 
     await page.waitForFunction(
       () =>
-        ['l3rd-name', 'screen-bug'].every(
+        ['l3rd-name-2a94g', 'screen-bug-8vctv'].every(
           (ch) => (window as any).breeze.elements.get(ch).runtime.playbackState === 'idle',
         ),
       undefined,
@@ -322,23 +322,23 @@ test.describe('clear-all', () => {
 
   test('reports which channels it reached', async ({ page }) => {
     await control(page, LOWER_THIRD, 'play');
-    const res = await page.request.post('/api/control/demo/l3rdbug/clear-all');
+    const res = await page.request.post('/api/control/demo-1iixd/l3rdbug-97rif/clear-all');
     const body = (await res.json()) as { channels: string[] };
 
     /*
-     * Channels are reported fully qualified — `demo/l3rd-name`, not
-     * `l3rd-name`. The key is `${projectId}/${name}` throughout the hub, and
+     * Channels are reported fully qualified — `demo-1iixd/l3rd-name-2a94g`, not
+     * `l3rd-name-2a94g`. The key is `${projectId}/${name}` throughout the hub, and
      * the bare form only ever appears in the *URL path*, where the project is
      * already a separate segment. Worth asserting in the qualified form rather
      * than normalising it away: two projects can hold a `screen-bug`, and the
      * prefix is the thing that keeps one show's clear-all off another's air.
      */
     expect(body.channels).toEqual(
-      expect.arrayContaining([`demo/${LOWER_THIRD}`, `demo/${BUG}`]),
+      expect.arrayContaining([`demo-1iixd/${LOWER_THIRD}`, `demo-1iixd/${BUG}`]),
     );
 
     // The scene's own channel too, since it owns whatever is not independent —
     // a shared plate left up by a clear-all is still a graphic on air.
-    expect(body.channels).toContain('demo/l3rdbug');
+    expect(body.channels).toContain('demo-1iixd/l3rdbug-97rif');
   });
 });

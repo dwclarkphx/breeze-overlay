@@ -23,7 +23,7 @@ const project = JSON.parse(
 
 const byId = new Map(project.compositions.map((c) => [c.id, c]));
 const resolve = (id: string) => byId.get(id);
-const lowerThird = byId.get('l3rd-name') as Composition;
+const lowerThird = byId.get('l3rd-name-2a94g') as Composition;
 
 describe('flat compositions', () => {
   it('returns every layer at depth 0 with no offset', () => {
@@ -110,8 +110,8 @@ describe('nested compositions', () => {
     const comp = createComposition({
       id: 'root',
       layers: [
-        { id: 'home', type: 'composition', ref: 'badge', overrides: { badgeText: 'HOME' } },
-        { id: 'away', type: 'composition', ref: 'badge', overrides: { badgeText: 'AWAY' } },
+        { id: 'home', type: 'composition', ref: 'badge-3j8xr', overrides: { badgeText: 'HOME' } },
+        { id: 'away', type: 'composition', ref: 'badge-3j8xr', overrides: { badgeText: 'AWAY' } },
       ],
     });
     const { instances } = expandComposition(comp, { resolve });

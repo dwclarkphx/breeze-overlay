@@ -1,6 +1,6 @@
 {
   "name": "@breeze/server",
-  "version": "0.72.1",
+  "version": "0.73.0",
   "private": true,
   "license": "MPL-2.0",
   "type": "module",
@@ -8,7 +8,7 @@
   "scripts": {
     "//vendor": "GSAP is staged into public/vendor/gsap/ rather than bundled, so it must run before anything serves a page — the client bundle references window.gsap and the page reads the staged VERSION to build its cache-busting query. Ahead of build-client on every path, including dev, so a dev server can never be the one arrangement that lacks it.",
     "vendor": "node ../../scripts/vendor-gsap.mjs",
-    "build": "pnpm vendor && node scripts/build-client.mjs && tsc -p tsconfig.json",
+    "build": "pnpm vendor && node scripts/build-client.mjs && tsc -p tsconfig.json && node scripts/ensure-env.mjs",
     "build:client": "pnpm vendor && node scripts/build-client.mjs",
     "dev": "pnpm vendor && node scripts/build-client.mjs && tsx watch src/index.ts",
     "start": "node dist/index.js",

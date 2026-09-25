@@ -36,7 +36,7 @@ afterAll(async () => {
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
 
-const PLAY = '/api/control/demo/l3rd-name/play';
+const PLAY = '/api/control/demo-1iixd/l3rd-name-2a94g/play';
 
 describe('control actions require the key', () => {
   it('answers 401, not 500, when the key is missing', async () => {
@@ -76,16 +76,16 @@ describe('control actions require the key', () => {
   });
 
   it('gates update the same way', async () => {
-    const url = '/api/control/demo/l3rd-name/update?name=Nope';
+    const url = '/api/control/demo-1iixd/l3rd-name-2a94g/update?name=Nope';
     expect((await app.inject({ method: 'GET', url })).statusCode).toBe(401);
   });
 
   it('does not treat the key as a dynamic field', async () => {
     await app.inject({
       method: 'GET',
-      url: '/api/control/demo/l3rd-name/update?key=s3cret&name=Dave',
+      url: '/api/control/demo-1iixd/l3rd-name-2a94g/update?key=s3cret&name=Dave',
     });
-    const state = await app.inject({ method: 'GET', url: '/api/control/demo/l3rd-name/state' });
+    const state = await app.inject({ method: 'GET', url: '/api/control/demo-1iixd/l3rd-name-2a94g/state' });
     expect((state.json() as { state: { data: Record<string, unknown> } }).state.data).toEqual({
       name: 'Dave',
     });
@@ -94,36 +94,36 @@ describe('control actions require the key', () => {
 
 describe('reads stay open', () => {
   it('lets an output page fetch its composition without a key', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/projects/demo/compositions/l3rd-name' });
+    const res = await app.inject({ method: 'GET', url: '/api/projects/demo-1iixd/compositions/l3rd-name-2a94g' });
     expect(res.statusCode).toBe(200);
   });
 
   it('lets a panel poll channel state without a key', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/control/demo/l3rd-name/state' });
+    const res = await app.inject({ method: 'GET', url: '/api/control/demo-1iixd/l3rd-name-2a94g/state' });
     expect(res.statusCode).toBe(200);
   });
 
   it('serves the output page without a key', async () => {
-    expect((await app.inject({ method: 'GET', url: '/play/demo/l3rd-name' })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/play/demo-1iixd/l3rd-name-2a94g' })).statusCode).toBe(200);
   });
 
   it('serves the operator panel without a key', async () => {
-    expect((await app.inject({ method: 'GET', url: '/control/demo/l3rd-name' })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/control/demo-1iixd/l3rd-name-2a94g' })).statusCode).toBe(200);
   });
 });
 
 describe('project mutations require the key', () => {
   it('rejects an unauthenticated save with 401', async () => {
-    const project = (await app.inject({ method: 'GET', url: '/api/projects/demo' })).json();
-    const res = await app.inject({ method: 'PUT', url: '/api/projects/demo', payload: project });
+    const project = (await app.inject({ method: 'GET', url: '/api/projects/demo-1iixd' })).json();
+    const res = await app.inject({ method: 'PUT', url: '/api/projects/demo-1iixd', payload: project });
     expect(res.statusCode).toBe(401);
   });
 
   it('accepts it with the key', async () => {
-    const project = (await app.inject({ method: 'GET', url: '/api/projects/demo' })).json();
+    const project = (await app.inject({ method: 'GET', url: '/api/projects/demo-1iixd' })).json();
     const res = await app.inject({
       method: 'PUT',
-      url: '/api/projects/demo',
+      url: '/api/projects/demo-1iixd',
       headers: { 'x-breeze-key': 's3cret' },
       payload: project,
     });

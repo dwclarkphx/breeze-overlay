@@ -60,6 +60,17 @@ export interface Demo {
   file: string;
   /** Its data sources, where the graphics are bound to one. */
   sources?: string;
+  /**
+   * Ids this demo shipped under before, oldest last.
+   *
+   * The ledger is keyed by id, so renaming a demo — as the `-xxxxx` key
+   * convention did, 0.72.2 for the Breeze Demo and 0.73.0 for the World Cup
+   * pair — would otherwise look like a demo this install has never had: an
+   * upgrade would put a second copy beside the one already there, and bring
+   * back one an operator deliberately deleted under its old name. Any former id
+   * in the ledger or on disk counts as this demo.
+   */
+  formerly?: string[];
 }
 
 /**
@@ -70,9 +81,9 @@ export interface Demo {
  * first thing to meet.
  */
 export const DEMOS: Demo[] = [
-  { file: 'world-cup-scene.json', sources: 'world-cup-datasources.json' },
-  { file: 'world-cup-bracket.json', sources: 'world-cup-datasources.json' },
-  { file: 'breeze-demo.json', sources: 'datasources.json' },
+  { file: 'world-cup-scene.json', sources: 'world-cup-datasources.json', formerly: ['wc26-scene-demo'] },
+  { file: 'world-cup-bracket.json', sources: 'world-cup-datasources.json', formerly: ['wc26-demo'] },
+  { file: 'breeze-demo.json', sources: 'datasources.json', formerly: ['demo'] },
 ];
 
 /* Kept for the tests and tooling that reference the original demo by name. */
@@ -140,15 +151,31 @@ export async function seedDemos(): Promise<string[]> {
       continue;
     }
 
-    if (installed.has(project.id)) continue;
+    // This demo under any name it has ever shipped as.
+    const names = [project.id, ...(demo.formerly ?? [])];
+
+    if (names.some((n) => installed.has(n))) {
+      // Recorded under the current id too, so the ledger stays readable once
+      // the old name is long forgotten.
+      installed.add(project.id);
+      continue;
+    }
 
     /*
      * Already on disk, but not in the ledger: an installation that predates the
-     * ledger, or a project an operator happened to name the same thing. Marked
-     * as installed and left completely alone — overwriting would destroy work,
-     * and this is the upgrade path from the old seed rule.
+     * ledger, a demo still under an old id, or a project an operator happened to
+     * name the same thing. Marked as installed and left completely alone —
+     * overwriting would destroy work, and this is the upgrade path from the old
+     * seed rule. An install keeping an old id keeps its old URLs working too.
      */
-    if (await exists(project.id)) {
+    let onDisk = false;
+    for (const n of names) {
+      if (await exists(n)) {
+        onDisk = true;
+        break;
+      }
+    }
+    if (onDisk) {
       installed.add(project.id);
       continue;
     }

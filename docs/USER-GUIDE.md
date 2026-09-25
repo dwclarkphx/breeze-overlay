@@ -95,13 +95,54 @@ The exclusions are deliberate. A browser source that flaps reconnects every few 
 
 The log is written to `data/audit-<year>-<month>.jsonl` — one JSON object per line, one file per month, in the data folder next to your projects. It is plain text and greppable, nothing rotates or deletes it for you, and it is worth including in whatever backs up that folder.
 
+### Connections — who is on the server right now
+
+The **Connections** button on the portal, next to **Activity**, lists what is connected at this moment — the detail behind the status strip's two numbers:
+
+| Table | What is in it |
+|---|---|
+| **Browser sources** | Every output page — vMix and OBS inputs, and any `/play` tab — with the scene it is showing, the address and browser it came from, and how long it has been connected. |
+| **Panels & editors** | Control panels and editor windows, with the scene each is on. Its count is the same number as **Panels open** on the status strip. A panel also opens connections of its own: one small readout per element of a scene, and the output preview if it is showing. Those are counted in a line underneath rather than listed, so one open panel does not become five rows. |
+| **API callers** | Companion, Stream Deck URLs, `curl`, scripts — anything calling `/api/…` directly — with its request count, last call and status. |
+
+The first two tables are exact: those clients hold a live connection, and one that closes drops off straight away. API callers are different. They send a request and hang up, so there is nothing "connected" to show; instead each is listed for 60 seconds after its last request, and the heading says so. A Companion instance that is polling stays on the list; one that stops falls off within a minute. A red status (401, 404…) on that row is the quickest way to spot a button wired with the wrong key or the wrong scene.
+
+Calls made by Breeze's own pages — the editor, the portal, the control panel — are left out of the API table. They are already listed as panels and editors, and their polling would bury everything else.
+
+The page refreshes itself every five seconds. Like Activity it shows addresses and browsers, not people, and like Activity it needs no key to read. The API table never shows a query string, so a key sent as `?key=` does not appear on it. The same data is available as JSON at `/api/peers`.
+
+### The console dashboard
+
+By default the server's terminal is a plain log. Set `BREEZE_CONSOLE=dashboard` and it becomes a status board instead:
+
+```
+ Breeze Overlay 0.73.0   up 2:14:05   CPU 3.1% of 8 cores   RSS 182 MB   heap 60 MB   RAM 32 GB
+ Editor  http://localhost:7331/
+ Output  http://192.168.1.40:7331/play/<project>/<composition>
+── Browser sources (2) ──────────────────────────────────────────────────────
+  192.168.1.51    vMix                demo/lower-third                 1:02:11
+── Panels & editors (1)  +3 element readouts ────────────────────────────────
+  panel    192.168.1.20    Chrome on Windows   demo/scorebug              3:40
+── API callers, last 60s (1) ────────────────────────────────────────────────
+  192.168.1.20    node                  41 req  200     2s ago  POST /api/control/…
+── Log ──────────────────────────────────────────────────────────────────────
+ 18:52:10 INFO  Breeze Overlay 0.73.0
+ Press Ctrl+C to exit   ·   BREEZE_CONSOLE=dashboard   ·   /peers in a browser shows the same list
+```
+
+The tables are the same ones as the portal's **Connections** page. The log pane shows everything the plain log would, except successful HTTP requests: the portal alone polls every couple of seconds, so those would fill the pane. A request that fails still appears, as one line. Nothing is dropped from the log itself. `BREEZE_LOG_LEVEL` still applies.
+
+The dashboard needs an interactive terminal. Where there is not one — output piped to a file, a Windows service, a container started without `-t` — the server prints one line saying so and logs normally, so leaving the variable set somewhere it cannot work does no harm.
+
+**Ctrl+C** stops the server in either mode. Both show the reminder: the plain log as its last startup line, the dashboard on its bottom row. Under the dashboard, the terminal is handed back as it was, and the last twenty log lines are printed so you can still see what the server said last. Press Ctrl+C a second time to exit immediately rather than waiting for connections to close.
+
 ### What the status strip is telling you
 
 The two numbers worth knowing before a show:
 
 **Browser sources** counts output pages that are actually connected — an OBS Browser Source, a vMix Web Browser input, a debug tab you left open. If this reads `0`, nothing is listening, and pressing PLAY on a control panel will do nothing visible. It turns green the moment something connects. Open a project tile and each scene shows its own count, so you can see *which* graphic the source is attached to.
 
-**Panels open** counts control panels and editor windows. An editor registers itself against the scene it currently has open, so on a project tile you can see that someone is already working on a graphic before you open it yourself.
+**Panels open** counts control panels and editor windows — one per window, however many elements the scene has or whether its preview is showing. An editor registers itself against the scene it currently has open, so on a project tile you can see that someone is already working on a graphic before you open it yourself.
 
 **Server CPU** is the Breeze process, expressed as a percentage of **one** core — not of the whole machine. On a multi-core box it can legitimately go above 100% while a video is transcoding. It is there to answer "is the server itself struggling?", which is a different question from "is this computer busy?"
 
@@ -388,7 +429,7 @@ Give the layer a binding name in the Text section — `name`, `title`, `score`, 
 Bindings can also be filled straight from the URL, which is handy for testing and for automation:
 
 ```
-http://<host>:7331/play/demo/l3rd-name?name=Jane%20Doe&title=Reporter
+http://<host>:7331/play/demo-1iixd/l3rd-name-2a94g?name=Jane%20Doe&title=Reporter
 ```
 
 Crawl layers and table layers can carry bindings too, so an operator can replace a whole headline list or a whole table live.
@@ -890,12 +931,13 @@ Companion is the recommended way to drive Breeze from a Stream Deck: it speaks t
 
 #### The Breeze module
 
-There is a Breeze connection module in this repository, at
-`integrations/companion-module-breeze-overlay`. It gives you the verbs as proper actions,
-button colouring from live playback state, and variables — rather than a URL per button.
+There is a Breeze connection module for Companion, maintained at
+[bitfocus/companion-module-breeze-overlay](https://github.com/bitfocus/companion-module-breeze-overlay).
+It gives you the verbs as proper actions, button colouring from live playback state, and
+variables — rather than a URL per button.
 
-To install it, in Companion go to **Modules → Import module package** and choose
-`integrations/dist/breeze-overlay-<version>.tgz`. Then **Connections → Add connection →
+Once it is published in the Bitfocus module directory, install it from Companion's
+**Modules** page by searching for **Breeze Overlay**. Then **Connections → Add connection →
 Breeze Overlay**, and fill in:
 
 | | |
@@ -921,12 +963,8 @@ comes with the on-air and missing-source feedbacks already attached.
 Presets are built when the connection starts, so a scene added in Breeze appears after
 you press **Save** on the connection.
 
-To rebuild it after a change:
-
-```bash
-cd integrations/companion-module-breeze-overlay
-yarn install && yarn build && yarn package
-```
+Name each connection after its project when you drive more than one — the module's
+Help page covers this, along with how to wire buttons for nested compositions.
 
 #### Or the generic HTTP module
 

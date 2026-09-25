@@ -1962,7 +1962,7 @@ test.describe('crawl authoring', () => {
 
 test('the output URL points at the transparent play page', async ({ page }) => {
   const href = await page.locator('.output-link').getAttribute('href');
-  expect(href).toMatch(/^\/play\/demo\//);
+  expect(href).toMatch(/^\/play\/demo-1iixd\//);
 });
 
 test.describe('data sources panel', () => {
@@ -2131,17 +2131,17 @@ test.describe('safe-area guides', () => {
      * badge" only means anything once "checked on the lower third" has been
      * shown in the same viewport.
      */
-    await compositions(page).selectOption('l3rd-name');
+    await compositions(page).selectOption('l3rd-name-2a94g');
     await expect(guides(page)).toBeChecked();
 
-    await compositions(page).selectOption('badge');
+    await compositions(page).selectOption('badge-3j8xr');
     await expect(guides(page)).not.toBeChecked();
   });
 
   test('can still be switched on for an element, and switching back resets', async ({ page }) => {
     // A default, not a lock — the center lines are useful for lining something
     // up inside a small element, so the box stays live.
-    await compositions(page).selectOption('badge');
+    await compositions(page).selectOption('badge-3j8xr');
     await expect(guides(page)).not.toBeChecked();
 
     await guides(page).check();
@@ -2149,8 +2149,8 @@ test.describe('safe-area guides', () => {
 
     // Leaving and returning re-applies the default rather than remembering the
     // override, which is what makes the rule predictable per composition.
-    await compositions(page).selectOption('l3rd-name');
-    await compositions(page).selectOption('badge');
+    await compositions(page).selectOption('l3rd-name-2a94g');
+    await compositions(page).selectOption('badge-3j8xr');
     await expect(guides(page)).not.toBeChecked();
   });
 });
@@ -2256,7 +2256,7 @@ test.describe('asset library', () => {
      * does.** The usage index is computed server-side from the *saved* project,
      * so proving it needs a real save — and the e2e data directory is thrown
      * away once per run rather than per test. Saving into the shared demo left
-     * an extra image layer in `l3rd-name` that `lower-third.spec.ts` then found
+     * an extra image layer in `l3rd-name-2a94g` that `lower-third.spec.ts` then found
      * while asserting the composition's exact top-level layer list. A test that
      * writes has to own what it writes to.
      */

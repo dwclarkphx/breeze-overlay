@@ -71,6 +71,11 @@ export interface ChannelState {
   data: Record<string, unknown>;
   playback: PlaybackReport | null;
   renderers: number;
+  /**
+   * Panels and editors — the things a person has open. Not previews (see
+   * `ClientRole`) and not a scene panel's per-element `monitor` sockets, which
+   * would make one open panel read as five.
+   */
   controllers: number;
   updatedAt: string;
 }
@@ -107,6 +112,40 @@ export interface HubClient {
   role: ClientRole;
   channel: string | null;
   send: (message: ServerMessage) => void;
+  /** From the subscribe message. Absent until then, and for non-controllers. */
+  kind?: ControllerKind;
+  /** Where the socket came from — supplied by the transport, never inferred here. */
+  origin?: PeerOrigin;
+  /** Epoch ms. */
+  connectedAt: number;
+}
+
+/**
+ * The transport's view of who is on the other end.
+ *
+ * Handed in rather than read, because the hub knows nothing of requests — the
+ * same reason auditing lives in `routes/control.ts`. Same shape as the audit
+ * log's actor, so both lists name a machine the same way.
+ */
+export interface PeerOrigin {
+  ip: string;
+  agent: string;
+}
+
+/**
+ * One connected socket, for the peers page and the console dashboard.
+ *
+ * `kind` is collapsed to the thing an operator would call it: a renderer is a
+ * browser source, a preview is the panel's own embed, and a controller is
+ * whichever of panel / editor / monitor it said it was.
+ */
+export interface PeerSnapshot {
+  id: string;
+  kind: 'source' | 'preview' | ControllerKind;
+  channel: string;
+  ip: string;
+  agent: string;
+  connectedAt: number;
 }
 
 export function channelKey(projectId: string, compositionId: string): string {
@@ -123,8 +162,19 @@ export class ControlHub {
   private clients = new Map<string, HubClient>();
   private channels = new Map<string, Channel>();
 
-  addClient(id: string, send: (message: ServerMessage) => void): HubClient {
-    const client: HubClient = { id, role: 'controller', channel: null, send };
+  addClient(
+    id: string,
+    send: (message: ServerMessage) => void,
+    origin?: PeerOrigin,
+  ): HubClient {
+    const client: HubClient = {
+      id,
+      role: 'controller',
+      channel: null,
+      send,
+      connectedAt: Date.now(),
+      ...(origin ? { origin } : {}),
+    };
     this.clients.set(id, client);
     return client;
   }
@@ -149,6 +199,10 @@ export class ControlHub {
       case 'subscribe': {
         client.channel = message.channel;
         client.role = message.role;
+        // Absent means `panel`, as it does for the activity log — see
+        // `ControllerKind`. Meaningless on a renderer, so not kept there.
+        if (message.role === 'controller') client.kind = message.client ?? 'panel';
+        else delete client.kind;
         const state = this.state(message.channel);
         client.send({ type: 'welcome', channel: message.channel, role: message.role, state });
         this.broadcastState(message.channel);
@@ -235,7 +289,9 @@ export class ControlHub {
       // A preview is deliberately in neither total — see `ClientRole`.
       if (client.role === 'preview') continue;
       if (client.role === 'renderer') renderers += 1;
-      else controllers += 1;
+      // A monitor is part of a panel already counted, not a panel of its own.
+      // Counting it made the portal's "Panels open" disagree with /peers.
+      else if (client.kind !== 'monitor') controllers += 1;
     }
     return {
       data: { ...channel.data },
@@ -244,6 +300,31 @@ export class ControlHub {
       controllers,
       updatedAt: channel.updatedAt,
     };
+  }
+
+  /**
+   * Every subscribed socket, oldest first.
+   *
+   * A socket that has connected but not yet subscribed is left out: it has no
+   * channel and no role yet, and it is a few milliseconds from having both.
+   */
+  peers(): PeerSnapshot[] {
+    const out: PeerSnapshot[] = [];
+    for (const client of this.clients.values()) {
+      if (client.channel === null) continue;
+      out.push({
+        id: client.id,
+        kind:
+          client.role === 'renderer' ? 'source'
+          : client.role === 'preview' ? 'preview'
+          : (client.kind ?? 'panel'),
+        channel: client.channel,
+        ip: client.origin?.ip ?? 'unknown',
+        agent: client.origin?.agent ?? 'unknown',
+        connectedAt: client.connectedAt,
+      });
+    }
+    return out.sort((a, b) => a.connectedAt - b.connectedAt);
   }
 
   /** Channels that have ever been used, for a status page. */

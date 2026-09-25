@@ -18,7 +18,7 @@ import { expect, test, type Page } from '@playwright/test';
  * keyframes rather than fighting them.
  */
 
-const REVEAL = '/play/demo/l3rd-reveal';
+const REVEAL = '/play/demo-1iixd/l3rd-reveal-6v1ez';
 
 async function open(page: Page, url = `${REVEAL}?autoplay=0`) {
   await page.goto(url);
@@ -218,7 +218,7 @@ test.describe('a reveal under live update', () => {
 
 test('the ticker still crawls, with its items bound', async ({ page }) => {
   // The other half of the Phase 5 acceptance criterion.
-  await page.goto('/play/demo/ticker?autoplay=1');
+  await page.goto('/play/demo-1iixd/ticker-40hbh?autoplay=1');
   await page.waitForFunction(() => Boolean((window as { breeze?: unknown }).breeze));
   await page.waitForFunction(
     () => (window as any).breeze.runtime.playbackState === 'holding',

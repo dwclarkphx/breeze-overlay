@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 
 import { ControlHub, channelKey, parseClientMessage, type ServerMessage } from '../hub.js';
 
-const CHANNEL = channelKey('demo', 'l3rd-name');
+const CHANNEL = channelKey('demo-1iixd', 'l3rd-name-2a94g');
 
 /** A client that records what it was sent, standing in for a socket. */
 function fakeClient(hub: ControlHub, id: string) {
@@ -57,7 +57,7 @@ describe('routing', () => {
     const hub = new ControlHub();
     const other = fakeClient(hub, 'other');
     fakeClient(hub, 'mine');
-    hub.handle('other', { type: 'subscribe', channel: 'demo/ticker', role: 'renderer' });
+    hub.handle('other', { type: 'subscribe', channel: 'demo-1iixd/ticker-40hbh', role: 'renderer' });
     subscribe(hub, 'mine', 'renderer');
 
     hub.dispatch(CHANNEL, { verb: 'play' });
@@ -223,5 +223,71 @@ describe('parseClientMessage', () => {
     for (const bad of ['', 'not json', '[]', 'null', '{"type":"nope"}', '{"type":"subscribe"}']) {
       expect(parseClientMessage(bad)).toBeNull();
     }
+  });
+});
+
+describe('peers', () => {
+  it('lists subscribed sockets by what an operator would call them', () => {
+    const hub = new ControlHub();
+    hub.addClient('out', () => {}, { ip: '10.0.0.5', agent: 'vMix' });
+    hub.addClient('panel', () => {}, { ip: '10.0.0.9', agent: 'Chrome' });
+    hub.addClient('ed', () => {});
+    hub.addClient('mon', () => {});
+    hub.addClient('pre', () => {});
+    hub.addClient('idle', () => {});
+
+    hub.handle('out', { type: 'subscribe', channel: CHANNEL, role: 'renderer' });
+    // No `client` — an older panel. Recorded as a panel, as the audit log does.
+    hub.handle('panel', { type: 'subscribe', channel: CHANNEL, role: 'controller' });
+    hub.handle('ed', { type: 'subscribe', channel: CHANNEL, role: 'controller', client: 'editor' });
+    hub.handle('mon', { type: 'subscribe', channel: CHANNEL, role: 'controller', client: 'monitor' });
+    hub.handle('pre', { type: 'subscribe', channel: CHANNEL, role: 'preview' });
+
+    const byId = Object.fromEntries(hub.peers().map((p) => [p.id, p]));
+    expect(byId['out']?.kind).toBe('source');
+    expect(byId['panel']?.kind).toBe('panel');
+    expect(byId['ed']?.kind).toBe('editor');
+    expect(byId['mon']?.kind).toBe('monitor');
+    expect(byId['pre']?.kind).toBe('preview');
+    expect(byId['out']).toMatchObject({ ip: '10.0.0.5', agent: 'vMix', channel: CHANNEL });
+    // No origin handed in: said so, not guessed.
+    expect(byId['ed']).toMatchObject({ ip: 'unknown', agent: 'unknown' });
+    // Connected but not yet subscribed has no channel to report.
+    expect(byId['idle']).toBeUndefined();
+  });
+
+  it('drops a socket the moment it disconnects', () => {
+    const hub = new ControlHub();
+    hub.addClient('out', () => {});
+    hub.handle('out', { type: 'subscribe', channel: CHANNEL, role: 'renderer' });
+    expect(hub.peers()).toHaveLength(1);
+    hub.removeClient('out');
+    expect(hub.peers()).toHaveLength(0);
+  });
+
+  it('forgets a controller kind when the socket re-subscribes as a renderer', () => {
+    const hub = new ControlHub();
+    hub.addClient('x', () => {});
+    hub.handle('x', { type: 'subscribe', channel: CHANNEL, role: 'controller', client: 'editor' });
+    hub.handle('x', { type: 'subscribe', channel: CHANNEL, role: 'renderer' });
+    expect(hub.peers()[0]?.kind).toBe('source');
+  });
+});
+
+describe('counting what a person has open', () => {
+  it('counts a panel once, however many readouts and previews it opens', () => {
+    const hub = new ControlHub();
+    for (const id of ['panel', 'm1', 'm2', 'm3', 'pre', 'ed']) hub.addClient(id, () => {});
+    hub.handle('panel', { type: 'subscribe', channel: CHANNEL, role: 'controller', client: 'panel' });
+    for (const id of ['m1', 'm2', 'm3']) {
+      hub.handle(id, { type: 'subscribe', channel: CHANNEL, role: 'controller', client: 'monitor' });
+    }
+    hub.handle('pre', { type: 'subscribe', channel: CHANNEL, role: 'preview' });
+    hub.handle('ed', { type: 'subscribe', channel: CHANNEL, role: 'controller', client: 'editor' });
+
+    expect(hub.state(CHANNEL)).toMatchObject({ renderers: 0, controllers: 2 });
+    // The portal strip and the /peers "Panels & editors" count are one number.
+    const listed = hub.peers().filter((p) => p.kind === 'panel' || p.kind === 'editor');
+    expect(listed).toHaveLength(hub.state(CHANNEL).controllers);
   });
 });

@@ -62,11 +62,19 @@ export async function registerControlRoutes(
   app.get('/ws/control', { websocket: true }, (socket, req) => {
     const id = `c${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
 
-    const client = hub.addClient(id, (message) => {
-      // readyState 1 === OPEN. Sending to a closing socket throws and would
-      // take down the broadcast loop for every other client.
-      if (socket.readyState === 1) socket.send(JSON.stringify(message));
-    });
+    // Read before the hub hears of the socket, so the peers list can name it
+    // from its first appearance. The same actor the activity log records.
+    const actor = actorOf(req);
+
+    const client = hub.addClient(
+      id,
+      (message) => {
+        // readyState 1 === OPEN. Sending to a closing socket throws and would
+        // take down the broadcast loop for every other client.
+        if (socket.readyState === 1) socket.send(JSON.stringify(message));
+      },
+      actor,
+    );
 
     /*
      * Audit is done here rather than in the hub, which is deliberately
@@ -76,9 +84,9 @@ export async function registerControlRoutes(
      * flaps reconnects every few seconds and would bury the entries anyone
      * actually goes looking for; editors are excluded because they now hold a
      * presence subscription of their own and would double the volume with
-     * design-time noise. Both are still visible live on the status strip.
+     * design-time noise. Both are still visible live on the status strip and
+     * the peers page.
      */
-    const actor = actorOf(req);
     let panel: string | null = null;
 
     socket.on('message', (raw: Buffer | string) => {

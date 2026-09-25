@@ -33,6 +33,7 @@ const { DEMOS, seedDemos } = await import('../seed.js');
 const store = await import('../store.js');
 const { readDataSources } = await import('../data/sources.js');
 const { REPO_ROOT } = await import('../config.js');
+const { isValidKey } = await import('@breeze/schema');
 
 /**
  * Where the demo documents live.
@@ -222,5 +223,57 @@ describe('upgrading an existing install', () => {
 
     // And the demos this install had never seen do arrive.
     expect(written.sort()).toEqual(demoIds.filter((d) => d !== id).sort());
+  });
+
+  it('does not install a renamed demo beside the copy an install already has', async () => {
+    /*
+     * The upgrade the `formerly` list exists for: an install from before a demo
+     * was renamed has it on disk under the old id. The new id must not arrive
+     * as a second copy — and the old one, whose URLs are already pasted into a
+     * switcher, must be left as it is.
+     */
+    await fs.rm(path.join(tmpDir, 'seeded.json'), { force: true });
+    for (const p of await store.listProjects()) await store.deleteProject(p.id);
+
+    for (const [i, demo] of DEMOS.entries()) {
+      const oldId = demo.formerly?.[0];
+      if (!oldId) continue;
+      const raw = JSON.parse(await fs.readFile(examplePath(demo.file), 'utf8')) as { id: string };
+      await store.writeProject({ ...raw, id: oldId } as never);
+      expect(await exists(projectDir(demoIds[i]!))).toBe(false);
+    }
+
+    expect(await seedDemos()).toEqual([]);
+    for (const [i, demo] of DEMOS.entries()) {
+      if (!demo.formerly?.length) continue;
+      expect(await exists(projectDir(demo.formerly[0]!))).toBe(true);
+      expect(await exists(projectDir(demoIds[i]!))).toBe(false);
+    }
+  });
+
+  it('keeps a demo deleted under its old id deleted after the rename', async () => {
+    // Deleted before upgrading: only the old id is in the ledger, and nothing
+    // is on disk. The renamed demo must not bring it back.
+    for (const p of await store.listProjects()) await store.deleteProject(p.id);
+    const oldIds = DEMOS.flatMap((d) => d.formerly ?? []);
+    expect(oldIds.length).toBeGreaterThan(0);
+    await fs.writeFile(
+      path.join(tmpDir, 'seeded.json'),
+      JSON.stringify({ formatVersion: 1, installed: oldIds }),
+    );
+
+    expect(await seedDemos()).toEqual([]);
+    expect(await store.listProjects()).toEqual([]);
+  });
+
+  it('gives every demo an id that follows the creation rule', () => {
+    // `<chosen>-<generated>`, chosen part at most 12 — the convention every
+    // project made in the editor follows, and the one the docs show.
+    for (const id of demoIds) {
+      const cut = id.lastIndexOf('-');
+      expect(cut, id).toBeGreaterThan(0);
+      expect(isValidKey(id.slice(0, cut)), id).toBe(true);
+      expect(id.slice(cut + 1), id).toMatch(/^[a-z0-9]{5}$/);
+    }
   });
 });

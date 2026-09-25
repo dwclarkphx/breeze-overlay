@@ -78,6 +78,9 @@ test.beforeAll(async () => {
       BREEZE_LOG_LEVEL: 'warn',
       BREEZE_DATA_DIR: DATA_DIR,
       BREEZE_LOCALE: 'ar-XB',
+      // Pinned like playwright.config.ts's server, for the same reasons.
+      BREEZE_SETTINGS_FILES: 'off',
+      BREEZE_API_KEY: '',
     },
   });
   await waitForServer();
@@ -104,7 +107,7 @@ test.describe('the shell mirrors', () => {
   });
 
   test('the control panel mirrors', async ({ page }) => {
-    await page.goto(`${ORIGIN}/control/demo/l3rd-name`);
+    await page.goto(`${ORIGIN}/control/demo-1iixd/l3rd-name-2a94g`);
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
     expect(await directionOf(page, 'fieldset')).toBe('rtl');
   });
@@ -115,7 +118,7 @@ test.describe('the shell mirrors', () => {
      * coordinates are absolute and the output has to be byte-identical on every
      * install — so `/play` keeps `lang="en"` and never gains a `dir`.
      */
-    await page.goto(`${ORIGIN}/play/demo/l3rd-name?autoplay=0`);
+    await page.goto(`${ORIGIN}/play/demo-1iixd/l3rd-name-2a94g?autoplay=0`);
     const html = page.locator('html');
     await expect(html).toHaveAttribute('lang', 'en');
     expect(await html.getAttribute('dir')).toBeNull();

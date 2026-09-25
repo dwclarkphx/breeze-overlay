@@ -15,6 +15,7 @@ apps/server/public/
 dev/
 releases/
 github_push/
+bitfocus_push/
 
 # Runtime state belongs in the volume, never in the image.
 data/projects/

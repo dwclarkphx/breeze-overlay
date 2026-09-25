@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "id": "wc26-demo",
+  "id": "wc26-demo-1kxnc",
   "name": "World Cup 2026 Bracket Demo",
   "createdAt": "2026-08-04T00:00:00.000Z",
   "updatedAt": "2026-08-04T00:00:00.000Z",
@@ -8,7 +8,7 @@
   "compositions": [
     {
       "formatVersion": 1,
-      "id": "wc26-bracket",
+      "id": "wc26-bracket-2e7br",
       "name": "Bracket — 2026 World Cup Knockout",
       "duration": 3,
       "stage": {

@@ -36,7 +36,7 @@ const project = JSON.parse(
   readFileSync(path.resolve(here, '../../../../examples/breeze-demo.json'), 'utf8'),
 ) as Project;
 const byId = new Map(project.compositions.map((c) => [c.id, c]));
-const lowerThird = byId.get('l3rd-name') as Composition;
+const lowerThird = byId.get('l3rd-name-2a94g') as Composition;
 
 let container: HTMLElement;
 let runtime: BreezeRuntime;

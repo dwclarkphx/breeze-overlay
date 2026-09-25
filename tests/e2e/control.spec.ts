@@ -16,8 +16,8 @@ import { expect, test, type Page } from '@playwright/test';
  * closest thing to the vMix workflow that can be automated.
  */
 
-const PLAY = '/play/demo/l3rd-name?autoplay=0';
-const CONTROL = '/control/demo/l3rd-name';
+const PLAY = '/play/demo-1iixd/l3rd-name-2a94g?autoplay=0';
+const CONTROL = '/control/demo-1iixd/l3rd-name-2a94g';
 
 async function openOutput(page: Page) {
   await page.goto(PLAY);
@@ -196,10 +196,10 @@ test('updating a ticker does not jump the scroll position', async ({ context, pa
    * replace the content under the operator mid-pass.
    */
   const output = await context.newPage();
-  await output.goto('/play/demo/ticker?autoplay=0');
+  await output.goto('/play/demo-1iixd/ticker-40hbh?autoplay=0');
   await output.waitForFunction(() => Boolean((window as any).breeze));
 
-  await page.goto('/control/demo/ticker');
+  await page.goto('/control/demo-1iixd/ticker-40hbh');
   await expect(page.locator('#status')).toContainText('1 output', { timeout: 10_000 });
   await page.getByRole('button', { name: 'PLAY' }).click();
 
@@ -238,7 +238,7 @@ test('the panel shows what the graphic is doing', async ({ context, page }) => {
 test('a REST trigger drives the output, for Stream Deck and Companion', async ({ context, page }) => {
   await openOutput(page);
 
-  const response = await context.request.post('/api/control/demo/l3rd-name/play');
+  const response = await context.request.post('/api/control/demo-1iixd/l3rd-name-2a94g/play');
   expect(response.ok()).toBe(true);
   // At least one: the count reflects however many outputs are open on this
   // channel, which a single test cannot assert exclusively. The value that
@@ -255,7 +255,7 @@ test('a REST trigger drives the output, for Stream Deck and Companion', async ({
 test('a GET trigger with query fields works from a URL alone', async ({ context, page }) => {
   await openOutput(page);
 
-  await context.request.get('/api/control/demo/l3rd-name/update?name=From%20A%20URL');
+  await context.request.get('/api/control/demo-1iixd/l3rd-name-2a94g/update?name=From%20A%20URL');
 
   await expect.poll(() => nameText(page), { timeout: 10_000 }).toBe('From A URL');
 });

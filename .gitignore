@@ -15,6 +15,10 @@ releases/
 # Staging copy pushed to GitHub (built by dev/make-release.mjs; has its own .git)
 github_push/
 
+# Staging copy pushed to the Bitfocus Companion module repo (built by
+# dev/stage-bitfocus-push.ps1; has its own .git). See dev/docs/BITFOCUS-MODULE.md
+bitfocus_push/
+
 .vite/
 *.tsbuildinfo
 .DS_Store
@@ -27,6 +31,9 @@ data/tmp/
 # Which demo projects this install has already been given. Local state: an
 # operator who deleted a demo must not have it reinstated by a checkout.
 data/seeded.json
+# The activity log — addresses and browsers of whoever used this install.
+# Never published, and never overwritten by an upgrade.
+data/audit-*.jsonl
 !data/projects/.gitkeep
 
 # Local env

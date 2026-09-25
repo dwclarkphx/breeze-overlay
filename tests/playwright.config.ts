@@ -66,7 +66,7 @@ export default defineConfig({
    * One worker, deliberately.
    *
    * These are integration tests against a single stateful server: the control
-   * hub retains channel data, and every spec that opens `/play/demo/l3rd-name`
+   * hub retains channel data, and every spec that opens `/play/demo-1iixd/l3rd-name-2a94g`
    * joins the same channel. Running spec files in parallel had one file's
    * output page counted in another's `delivered`, and one file's retained
    * fields overwriting another's. Serializing costs about a minute of wall
@@ -123,11 +123,21 @@ export default defineConfig({
     // serving an older bundle. Always start a fresh one.
     reuseExistingServer: false,
     timeout: 120_000,
+    /*
+     * Everything the suite depends on is pinned, not inherited. Playwright
+     * merges this over the developer's own environment, and the server reads
+     * `.env` from the checkout: an API key from either would 401 every write,
+     * and a test locale (`setx BREEZE_LOCALE en-XA`) would fail every text
+     * assertion — far from the cause, and only on that one machine.
+     */
     env: {
       BREEZE_PORT: PORT,
       BREEZE_HOST: '127.0.0.1',
       BREEZE_LOG_LEVEL: 'warn',
       BREEZE_DATA_DIR: DATA_DIR,
+      BREEZE_SETTINGS_FILES: 'off',
+      BREEZE_API_KEY: '',
+      BREEZE_LOCALE: 'en',
     },
   },
 });

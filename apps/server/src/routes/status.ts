@@ -24,11 +24,16 @@ import type { FastifyInstance } from 'fastify';
 import { describeAgent, recent } from '../audit.js';
 import type { ControlHub } from '../hub.js';
 import { serverI18n } from '../i18n.js';
-import { activityPage } from '../pages.js';
+import { activityPage, peersPage } from '../pages.js';
+import { peersReport, type ApiClients } from '../peers.js';
 import { StatusSampler } from '../status.js';
 import { APP_VERSION } from '../version.js';
 
-export async function registerStatusRoutes(app: FastifyInstance, hub: ControlHub): Promise<void> {
+export async function registerStatusRoutes(
+  app: FastifyInstance,
+  hub: ControlHub,
+  apiClients: ApiClients,
+): Promise<void> {
   const sampler = new StatusSampler();
 
   /**
@@ -50,6 +55,24 @@ export async function registerStatusRoutes(app: FastifyInstance, hub: ControlHub
     // response, and the page only ever asks for a screenful.
     const limit = Math.min(Math.max(Number(req.query?.limit ?? 200) || 200, 1), 1000);
     return { entries: await recent(limit) };
+  });
+
+  /**
+   * Who is connected, as a page and as JSON — the list behind the status
+   * strip's two counts.
+   *
+   * Open without the key, like `/activity`, and exposing the same thing: which
+   * addresses are doing what. The API list never carries a query string, so a
+   * `?key=` a Stream Deck sent is not echoed onto a page anyone can read.
+   */
+  app.get<{ Querystring: { filter?: string } }>('/peers', async (req, reply) => {
+    reply.type('text/html; charset=utf-8').header('cache-control', 'no-store');
+    return peersPage(peersReport(hub, apiClients), describeAgent, req.query?.filter ?? '');
+  });
+
+  app.get('/api/peers', async (_req, reply) => {
+    reply.header('cache-control', 'no-store');
+    return peersReport(hub, apiClients);
   });
 
   app.get('/api/status', async (_req, reply) => {

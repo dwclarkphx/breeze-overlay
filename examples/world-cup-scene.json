@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "id": "wc26-scene-demo",
+  "id": "wc26-tourney-3m64x",
   "name": "World Cup 2026 Tournament Scene",
   "createdAt": "2026-08-04T00:00:00.000Z",
   "updatedAt": "2026-08-04T00:00:00.000Z",
@@ -8,7 +8,7 @@
   "compositions": [
     {
       "formatVersion": 1,
-      "id": "wc26-scene",
+      "id": "wc26-scene-489go",
       "name": "World Cup — Tournament scene",
       "duration": 3,
       "stage": {
@@ -22,7 +22,7 @@
           "id": "el-r32",
           "type": "composition",
           "name": "Round of 32",
-          "ref": "wc26-r32-cards",
+          "ref": "wc26-r32-5whcy",
           "independent": true,
           "channel": "r32",
           "size": {
@@ -38,7 +38,7 @@
           "id": "el-tree",
           "type": "composition",
           "name": "Bracket",
-          "ref": "wc26-tree",
+          "ref": "wc26-tree-6g023",
           "independent": true,
           "channel": "bracket",
           "size": {
@@ -54,7 +54,7 @@
     },
     {
       "formatVersion": 1,
-      "id": "wc26-r32-cards",
+      "id": "wc26-r32-5whcy",
       "name": "World Cup — Round of 32 cards",
       "duration": 3,
       "stage": {
@@ -6123,7 +6123,7 @@
     },
     {
       "formatVersion": 1,
-      "id": "wc26-tree",
+      "id": "wc26-tree-6g023",
       "name": "World Cup — Bracket, round of 16 on",
       "duration": 3,
       "stage": {

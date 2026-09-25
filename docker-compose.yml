@@ -1,19 +1,16 @@
 # Breeze Overlay — single-service deployment.
 #
-#   cp env.breeze .env        # edit BREEZE_PORT and BREEZE_CONTACT
+#   cp -n env.breeze .env     # -n: keeps a .env you already have
+#   # edit .env: at least BREEZE_CONTACT, and BREEZE_API_KEY off an isolated LAN
 #   docker compose up -d --build
 #
-# Or keep the template's name and pass it explicitly:
-#
-#   docker compose --env-file env.breeze up -d --build
-#
-# Note it has to be `--env-file` and not an `env_file:` key below. env_file
-# passes variables into the container, but compose interpolates ${BREEZE_PORT}
-# in the ports mapping before any of that happens — so env_file alone would
-# publish 7331 no matter what the file said.
+# Settings go in .env, never in env.breeze — that one is reference only,
+# tracked by git and published with the source. Compose loads .env by itself and substitutes it into
+# the ports mapping and the environment block below; only settings listed in
+# that block reach the server.
 #
 # Then open http://localhost:${BREEZE_PORT}/ and point vMix or OBS at
-# http://<this-host>:${BREEZE_PORT}/play/demo/l3rd-name
+# http://<this-host>:${BREEZE_PORT}/play/demo-1iixd/l3rd-name-2a94g
 
 services:
   breeze:
@@ -32,6 +29,12 @@ services:
     ports:
       - "${BREEZE_PORT:-7331}:${BREEZE_PORT:-7331}"
 
+    # The console dashboard (BREEZE_CONSOLE=dashboard) needs a terminal. Uncomment
+    # and watch it with `docker attach breeze-overlay` (detach: Ctrl+P Ctrl+Q —
+    # Ctrl+C there stops the server). Without it the server logs normally, and
+    # `docker compose logs` stays readable, which is why it is off by default.
+    # tty: true
+
     environment:
       BREEZE_PORT: "${BREEZE_PORT:-7331}"
       # 0.0.0.0 inside the container is the container's own interface, not the
@@ -39,6 +42,14 @@ services:
       BREEZE_HOST: "0.0.0.0"
       BREEZE_DATA_DIR: "/app/data"
       BREEZE_LOG_LEVEL: "${BREEZE_LOG_LEVEL:-info}"
+
+      # Every setting the server reads must be listed here to reach the
+      # container — a line in .env that is not passed through below is ignored
+      # without a word. BREEZE_LOCALE and BREEZE_CONSOLE were missing until
+      # 0.73.0, so a language set in .env never took effect under Docker.
+      BREEZE_LOCALE: "${BREEZE_LOCALE:-en}"
+      BREEZE_CONSOLE: "${BREEZE_CONSOLE:-log}"
+      BREEZE_TRANSCODE_CONCURRENCY: "${BREEZE_TRANSCODE_CONCURRENCY:-1}"
 
       # Who this server is, for outgoing feed requests. Set it — see the
       # User-Agent section of the README.

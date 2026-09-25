@@ -136,7 +136,7 @@ describe('duration', () => {
 });
 
 describe('bindings', () => {
-  const lowerThird = exampleComp('l3rd-name');
+  const lowerThird = exampleComp('l3rd-name-2a94g');
 
   it('collects every bound layer', () => {
     const names = collectBindings(lowerThird).map((b) => b.name).sort();
@@ -162,7 +162,7 @@ describe('bindings', () => {
   });
 
   it('types a crawl binding as a string list', () => {
-    const ticker = exampleComp('ticker');
+    const ticker = exampleComp('ticker-40hbh');
     const schema = bindingsJsonSchema(ticker) as { properties: Record<string, { type: string }> };
     expect(schema.properties['headlines']!.type).toBe('array');
   });
@@ -262,20 +262,20 @@ describe('source collection', () => {
   it('finds a source on a layer that carries no binding', () => {
     // The screen bug's weather table is exactly this shape, deliberately: no
     // binding means nothing can push a placeholder over the live value.
-    const sources = collectSources(exampleComp('screen-bug'));
+    const sources = collectSources(exampleComp('screen-bug-8vctv'));
     expect(sources).toEqual([
       expect.objectContaining({ id: 'wx-current', kind: 'dataset' }),
     ]);
-    expect(collectBindings(exampleComp('screen-bug'))).toEqual([]);
+    expect(collectBindings(exampleComp('screen-bug-8vctv'))).toEqual([]);
   });
 
   it('reports the column a crawl reads', () => {
-    expect(collectSources(exampleComp('news-ticker'))).toEqual([
+    expect(collectSources(exampleComp('news-ticker-5ung1'))).toEqual([
       expect.objectContaining({ id: 'headlines', kind: 'stringList', column: 'title' }),
     ]);
   });
 
   it('reports nothing for a composition that reads no source', () => {
-    expect(collectSources(exampleComp('l3rd-name'))).toEqual([]);
+    expect(collectSources(exampleComp('l3rd-name-2a94g'))).toEqual([]);
   });
 });

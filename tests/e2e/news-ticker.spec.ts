@@ -25,7 +25,7 @@ import { expect, test, type Page } from '@playwright/test';
  * `data-xml.test.ts` against captured RSS 2.0, RSS 1.0/RDF and Atom payloads.
  */
 
-const PLAY = '/play/demo/news-ticker?autoplay=0';
+const PLAY = '/play/demo-1iixd/news-ticker-5ung1?autoplay=0';
 const CRAWL = '[data-layer-id="feed-text"]';
 
 async function open(page: Page, url = PLAY) {
@@ -83,7 +83,7 @@ test.describe('a ticker fed from a data source', () => {
      */
     await open(page);
 
-    const response = await page.request.post('/api/control/demo/news-ticker/update', {
+    const response = await page.request.post('/api/control/demo-1iixd/news-ticker-5ung1/update', {
       data: {
         $data: {
           headlines: {
@@ -112,7 +112,7 @@ test.describe('a ticker fed from a data source', () => {
   test('the crawl still rotates once played', async ({ page }) => {
     // A source-bound ticker must behave like any other: bound to data is not a
     // different kind of layer, and the loop is the layer's own clock.
-    await open(page, '/play/demo/news-ticker?autoplay=1');
+    await open(page, '/play/demo-1iixd/news-ticker-5ung1?autoplay=1');
 
     const x = () =>
       page.evaluate((sel) => {

@@ -50,7 +50,7 @@ const png = (tint: number): Buffer =>
     Buffer.from([tint, tint, tint, tint]),
   ]);
 
-const upload = (name: string, body: Buffer, project = 'demo') =>
+const upload = (name: string, body: Buffer, project = 'demo-1iixd') =>
   app.inject({
     method: 'POST',
     url: `/api/projects/${project}/assets?name=${encodeURIComponent(name)}`,
@@ -58,7 +58,7 @@ const upload = (name: string, body: Buffer, project = 'demo') =>
     headers: { 'content-type': 'application/octet-stream' },
   });
 
-const promote = (assetId: string, body: Record<string, unknown> = {}, project = 'demo') =>
+const promote = (assetId: string, body: Record<string, unknown> = {}, project = 'demo-1iixd') =>
   app.inject({
     method: 'POST',
     url: `/api/projects/${project}/assets/${assetId}/promote`,
@@ -99,7 +99,7 @@ describe('promote', () => {
     const asset = (await upload('badge.png', png(2))).json().asset;
     await promote(asset.id, { slug: 'badge' });
 
-    const assets = (await app.inject({ method: 'GET', url: '/api/projects/demo/assets' })).json().assets;
+    const assets = (await app.inject({ method: 'GET', url: '/api/projects/demo-1iixd/assets' })).json().assets;
     const row = assets.find((a: { id: string }) => a.id === asset.id);
     expect(row.origin).toMatchObject({ store: 'shared', slug: 'badge' });
   });
@@ -220,18 +220,18 @@ describe('staleness', () => {
 
 describe('composition bundles', () => {
   it('carries only what the composition references', async () => {
-    const project = (await app.inject({ method: 'GET', url: '/api/projects/demo' })).json();
+    const project = (await app.inject({ method: 'GET', url: '/api/projects/demo-1iixd' })).json();
     const comp = project.compositions[0];
 
     const res = await app.inject({
       method: 'GET',
-      url: `/api/projects/demo/compositions/${comp.id}/backup`,
+      url: `/api/projects/demo-1iixd/compositions/${comp.id}/backup`,
     });
     expect(res.statusCode).toBe(200);
 
     const names = Object.keys(unzipSync(new Uint8Array(res.rawPayload)));
     const bundled = JSON.parse(
-      new TextDecoder().decode(unzipSync(new Uint8Array(res.rawPayload))['projects/demo/project.json']!),
+      new TextDecoder().decode(unzipSync(new Uint8Array(res.rawPayload))['projects/demo-1iixd/project.json']!),
     );
 
     // The trimmed document holds this composition and whatever it mounts —
@@ -242,11 +242,11 @@ describe('composition bundles', () => {
   });
 
   it('names its scope in the manifest', async () => {
-    const project = (await app.inject({ method: 'GET', url: '/api/projects/demo' })).json();
+    const project = (await app.inject({ method: 'GET', url: '/api/projects/demo-1iixd' })).json();
     const comp = project.compositions[0];
     const res = await app.inject({
       method: 'GET',
-      url: `/api/projects/demo/compositions/${comp.id}/backup`,
+      url: `/api/projects/demo-1iixd/compositions/${comp.id}/backup`,
     });
     const manifest = JSON.parse(
       new TextDecoder().decode(unzipSync(new Uint8Array(res.rawPayload))['breeze-bundle.json']!),
@@ -256,21 +256,21 @@ describe('composition bundles', () => {
   });
 
   it('404s an unknown composition', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/projects/demo/compositions/nope/backup' });
+    const res = await app.inject({ method: 'GET', url: '/api/projects/demo-1iixd/compositions/nope/backup' });
     expect(res.statusCode).toBe(404);
   });
 
   it('merges into an existing project, renaming colliding composition ids', async () => {
-    const project = (await app.inject({ method: 'GET', url: '/api/projects/demo' })).json();
+    const project = (await app.inject({ method: 'GET', url: '/api/projects/demo-1iixd' })).json();
     const comp = project.compositions[0];
     const bundle = (
-      await app.inject({ method: 'GET', url: `/api/projects/demo/compositions/${comp.id}/backup` })
+      await app.inject({ method: 'GET', url: `/api/projects/demo-1iixd/compositions/${comp.id}/backup` })
     ).rawPayload;
 
     // Merging demo's own composition back into demo forces the collision path.
     const res = await app.inject({
       method: 'POST',
-      url: '/api/restore?mode=merge&into=demo',
+      url: '/api/restore?mode=merge&into=demo-1iixd',
       payload: bundle,
       headers: { 'content-type': 'application/zip' },
     });
@@ -279,12 +279,12 @@ describe('composition bundles', () => {
     expect(merged.renamed.length).toBeGreaterThan(0);
     expect(merged.renamed[0].to).not.toBe(merged.renamed[0].from);
 
-    const after = (await app.inject({ method: 'GET', url: '/api/projects/demo' })).json();
+    const after = (await app.inject({ method: 'GET', url: '/api/projects/demo-1iixd' })).json();
     expect(after.compositions.length).toBeGreaterThan(project.compositions.length);
   });
 
   it('requires ?into= for a merge', async () => {
-    const bundle = (await app.inject({ method: 'GET', url: '/api/backup?projects=demo' })).rawPayload;
+    const bundle = (await app.inject({ method: 'GET', url: '/api/backup?projects=demo-1iixd' })).rawPayload;
     const res = await app.inject({
       method: 'POST',
       url: '/api/restore?mode=merge',

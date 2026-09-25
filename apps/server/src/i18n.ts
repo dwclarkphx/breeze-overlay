@@ -14,7 +14,7 @@
  * only consumer is `/api/status`, which is how the editor — static files with
  * no access to env — finds out what language to render in.
  *
- * A bad value must not stop the server. A typo in `env.breeze` logs one line
+ * A bad value must not stop the server. A typo in `.env` logs one line
  * and falls back to English; taking the panels down over a misspelt language
  * tag would be a worse failure than showing the wrong one.
  */

@@ -25,6 +25,7 @@ import {
 import { makeTranslator, type Translate } from '@breeze/i18n';
 
 import { messagesFor, serverI18n } from './i18n.js';
+import { formatDuration, type PeersReport } from './peers.js';
 import { GSAP_VENDOR_URL, GSAP_VERSION } from './vendor.js';
 
 /**
@@ -718,6 +719,7 @@ ${htmlOpen()}
   <a class="pill primary" href="/editor/" target="_blank" rel="noreferrer">${t('server.pages.openEditor')}</a>
   <a class="pill" href="/docs" target="_blank" rel="noreferrer">${t('server.pages.userGuide')}</a>
   <a class="pill" href="/activity">${t('server.pages.activity')}</a>
+  <a class="pill" href="/peers">${t('server.pages.connections')}</a>
   <a class="pill" href="/backup">${t('server.pages.backup')}</a>
 </div>
 
@@ -995,6 +997,191 @@ ${
   <p>${t('server.pages.activityFooterStorage', {
     path: '<code>data/audit-&lt;year&gt;-&lt;month&gt;.jsonl</code>',
   })}</p>
+</footer>
+</body>
+</html>`;
+}
+
+/**
+ * Connections — who is on this server right now.
+ *
+ * The list behind the status strip's two numbers. Server-rendered like
+ * `/activity`, and kept current with a meta refresh rather than a script: this
+ * is the page opened when something is not showing, which is the worst moment
+ * for it to depend on a bundle loading. It opens no socket of its own, so
+ * looking does not change what it reports.
+ *
+ * Sockets and API callers are separate tables because they answer different
+ * questions — see `peers.ts`. The API table says in its heading how long a
+ * caller stays listed, so nobody reads "Companion" there as "Companion is
+ * connected".
+ */
+export function peersPage(
+  report: PeersReport,
+  /** `describeAgent`, injected so the page stays a pure function of its input. */
+  describe: (agent: string) => string,
+  filter = '',
+): string {
+  const t = pageT();
+  const seconds = report.apiWindowSeconds;
+
+  const filters: Array<[string, string]> = [
+    ['', 'server.pages.filterEverything'],
+    ['sources', 'server.pages.peersSources'],
+    ['panels', 'server.pages.peersPanels'],
+    ['api', 'server.pages.peersApi'],
+  ];
+  const known = filters.some(([value]) => value === filter);
+  const active = known ? filter : '';
+
+  const tabs = filters
+    .map(
+      ([value, labelKey]) =>
+        `<a class="tab${value === active ? ' on' : ''}" href="/peers${
+          value ? `?filter=${encodeURIComponent(value)}` : ''
+        }">${t(labelKey)}</a>`,
+    )
+    .join('');
+
+  const from = (ip: string, agent: string): string =>
+    `<code>${escapeHtml(ip)}</code>
+          <span title="${escapeHtml(agent)}">${escapeHtml(describe(agent))}</span>`;
+  const since = (at: number): string => escapeHtml(formatDuration(report.now - at));
+
+  /* Explicit keys, not built from the kind: i18n:check can only verify a key
+     it can read. */
+  const kindLabel = (kind: string): string =>
+    kind === 'editor' ? t('server.pages.kindEditor') : t('server.pages.kindPanel');
+
+  const sources = report.sockets.filter((p) => p.kind === 'source');
+  /* Exactly what the portal's "Panels open" counts (`ChannelState.controllers`),
+     so the two numbers always agree. */
+  const panels = report.sockets.filter((p) => p.kind === 'panel' || p.kind === 'editor');
+  /* A panel's own sub-connections — one readout per element of a scene panel,
+     and the output preview it can embed. Counted, not listed: a four-element
+     scene would otherwise be five rows for one open panel. */
+  const monitors = report.sockets.filter((p) => p.kind === 'monitor').length;
+  const previews = report.sockets.filter((p) => p.kind === 'preview').length;
+
+  const sourcesSection = `<section>
+  <h2>${t('server.pages.peersSources')} <span class="count">${sources.length}</span></h2>
+  ${
+    sources.length === 0
+      ? `<p class="hint">${t('server.pages.peersNoneSources')}</p>`
+      : `<table>
+  <tr><th>${t('server.pages.colScene')}</th><th>${t('server.pages.colFrom')}</th>
+    <th class="num">${t('server.pages.colConnected')}</th></tr>
+  ${sources
+    .map(
+      (p) => `<tr>
+        <td><code>${escapeHtml(p.channel)}</code></td>
+        <td class="who">${from(p.ip, p.agent)}</td>
+        <td class="num">${since(p.connectedAt)}</td>
+      </tr>`,
+    )
+    .join('')}
+</table>`
+  }
+</section>`;
+
+  const panelsSection = `<section>
+  <h2>${t('server.pages.peersPanels')} <span class="count">${panels.length}</span></h2>
+  ${
+    panels.length === 0
+      ? `<p class="hint">${t('server.pages.peersNonePanels')}</p>`
+      : `<table>
+  <tr><th>${t('server.pages.colKind')}</th><th>${t('server.pages.colScene')}</th>
+    <th>${t('server.pages.colFrom')}</th><th class="num">${t('server.pages.colConnected')}</th></tr>
+  ${panels
+    .map(
+      (p) => `<tr>
+        <td>${kindLabel(p.kind)}</td>
+        <td><code>${escapeHtml(p.channel)}</code></td>
+        <td class="who">${from(p.ip, p.agent)}</td>
+        <td class="num">${since(p.connectedAt)}</td>
+      </tr>`,
+    )
+    .join('')}
+</table>`
+  }
+  ${monitors > 0 ? `<p class="hint">${t('server.pages.peersMonitors', { count: monitors })}</p>` : ''}
+  ${previews > 0 ? `<p class="hint">${t('server.pages.peersPreviews', { count: previews })}</p>` : ''}
+</section>`;
+
+  const apiSection = `<section>
+  <h2>${t('server.pages.peersApiWindow', { seconds })} <span class="count">${report.api.length}</span></h2>
+  ${
+    report.api.length === 0
+      ? `<p class="hint">${t('server.pages.peersNoneApi', { seconds })}</p>`
+      : `<table>
+  <tr><th>${t('server.pages.colFrom')}</th><th class="num">${t('server.pages.colRequests')}</th>
+    <th>${t('server.pages.colLastCall')}</th><th class="num">${t('server.pages.colStatus')}</th>
+    <th class="num">${t('server.pages.colLastSeen')}</th></tr>
+  ${report.api
+    .map(
+      (a) => `<tr>
+        <td class="who">${from(a.ip, a.agent)}</td>
+        <td class="num">${a.requests}</td>
+        <td><code>${escapeHtml(a.last)}</code></td>
+        <td class="num${a.lastStatus >= 400 ? ' bad' : ''}">${a.lastStatus}</td>
+        <td class="num">${t('server.pages.secondsAgo', {
+          count: Math.max(0, Math.round((report.now - a.lastSeen) / 1000)),
+        })}</td>
+      </tr>`,
+    )
+    .join('')}
+</table>`
+  }
+</section>`;
+
+  const sections =
+    active === 'sources' ? sourcesSection
+    : active === 'panels' ? panelsSection
+    : active === 'api' ? apiSection
+    : sourcesSection + panelsSection + apiSection;
+
+  return `<!doctype html>
+${htmlOpen()}
+<head>
+<meta charset="utf-8">
+<title>${escapeHtml(t('server.pages.connectionsTitle'))}</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta http-equiv="refresh" content="5">
+<style>${SHELL_CSS}
+  header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  .tab{padding:6px 13px;border-radius:999px;border:1px solid var(--border);
+       background:var(--panel);text-decoration:none;color:var(--muted);font-size:13px}
+  .tab:hover{border-color:var(--accent)}
+  .tab.on{background:#1f6feb;border-color:#388bfd;color:#fff}
+  h2{font-size:13px;text-transform:var(--ui-caps);letter-spacing:calc(.6px * var(--ui-tracking));
+     color:var(--muted);font-weight:600;margin:26px 0 10px}
+  .count{color:var(--text);font:600 13px ui-monospace,Consolas,monospace;margin-inline-start:6px}
+  table{border-collapse:collapse;width:100%;max-width:1100px}
+  th{text-align:start;color:var(--muted);font-size:11px;text-transform:var(--ui-caps);
+     letter-spacing:calc(.6px * var(--ui-tracking));font-weight:600;padding:0 12px 8px 0;border-bottom:1px solid var(--border)}
+  td{padding:9px 12px 9px 0;border-bottom:1px solid #21262d;vertical-align:top;font-size:13px}
+  .num{text-align:end;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .who{white-space:nowrap}
+  .who span{color:var(--muted);margin-inline-start:6px;font-size:12px;cursor:help}
+  .bad{color:#f85149}
+  footer{margin-top:28px;color:var(--muted);font-size:12px;max-width:820px}
+</style>
+</head>
+<body>
+<header>
+  <a class="pill" href="/">${t('server.pages.portalLink')}</a>
+  <h1>${t('server.pages.connections')}</h1>
+</header>
+
+<div class="tabs">${tabs}</div>
+
+${sections}
+
+<footer>
+  <p>${t('server.pages.peersFooterLive', { seconds })}</p>
+  <p>${t('server.pages.peersFooterRefresh')}</p>
 </footer>
 </body>
 </html>`;

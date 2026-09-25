@@ -133,14 +133,53 @@ this at [About addresses](docs/USER-GUIDE.md#about-addresses).
 | URL | Purpose |
 |---|---|
 | `http://<host>:7331/editor/` | **The editor** — stage, layers, properties, timeline |
-| `http://<host>:7331/control/demo/l3rd-name` | **Operator panel** — play/stop/next and live field edits |
+| `http://<host>:7331/control/demo-1iixd/l3rd-name-2a94g` | **Operator panel** — play/stop/next and live field edits |
 | `http://<host>:7331/` | Project index |
-| `http://<host>:7331/play/demo/l3rd-name` | **Browser-source URL** — transparent, 1:1, waits to be triggered |
-| `…/play/demo/l3rd-name?scale=contain&debug=1` | Preview in a normal browser window, with an FPS/state overlay |
-| `…/play/demo/l3rd-name?name=Jane&title=Reporter` | Seed dynamic fields straight from the query string |
-| `…/play/demo/l3rd-name?autoplay=1` | Roll the graphic as soon as the page loads |
+| `http://<host>:7331/play/demo-1iixd/l3rd-name-2a94g` | **Browser-source URL** — transparent, 1:1, waits to be triggered |
+| `…/play/demo-1iixd/l3rd-name-2a94g?scale=contain&debug=1` | Preview in a normal browser window, with an FPS/state overlay |
+| `…/play/demo-1iixd/l3rd-name-2a94g?name=Jane&title=Reporter` | Seed dynamic fields straight from the query string |
+| `…/play/demo-1iixd/l3rd-name-2a94g?autoplay=1` | Roll the graphic as soon as the page loads |
 
 An output page shows **nothing** until it is told to play. Adding a Browser Source in OBS, or opening the URL to check it, must not put a graphic to air — that is the control panel's job, or a REST trigger's. `?autoplay=1` opts back in for the simple workflow where the source appearing in the switcher *is* the cue.
+
+### Settings
+
+Settings are environment variables, and the easy way to set them is a file.
+
+1. **Build once.** The build creates `.env` in the install folder — instructions only, no values. It is yours to edit. (If it is missing, the server creates it on first start.)
+2. **Add the lines you want to change.** `env.breeze`, beside it, lists every setting with its default and what it does — it is reference only, and the server never reads it. Copy a line across into `.env` and change the value. Most installs want at least these two:
+
+   ```ini
+   BREEZE_CONTACT=yourstation.com, you@yourstation.com
+   BREEZE_API_KEY=a-long-random-string
+   ```
+
+3. **Restart the server.** No rebuild. The startup log confirms what it read:
+
+   ```text
+   Settings file: C:\path\to\breeze-overlay\.env
+   ```
+
+   With no `.env` at all it says `Settings file: none … — using built-in defaults`, and every setting takes the default listed in `env.breeze`.
+
+**`env.breeze` is reference, not settings.** Editing it changes nothing. It is tracked by git and published with the source, so never type a key into it; `.env` is never published — git ignores it, releases leave it out, and upgrades never overwrite it. Every active value in `env.breeze` is the real built-in default (a test keeps it that way), so a full copy of it is a safe starting point for a `.env`. The one default worth a conscious decision is `BREEZE_API_KEY` — empty means the control API answers anything on the network.
+
+**Where a value comes from** — the first match wins:
+
+1. the environment: `$env:BREEZE_PORT = '7400'` for one PowerShell window, `setx` for your Windows user, an `Environment=` line under systemd
+2. `.env`
+3. the built-in default
+
+**Already using system environment variables?** They keep working, and they still win over both files — which is how an edit to `.env` can appear to do nothing. The startup log warns when that happens and names each value the environment overrode. To see what is set, and to retire one in favour of `.env`:
+
+```powershell
+Get-ChildItem Env:BREEZE_*                                              # what this window sees
+[Environment]::SetEnvironmentVariable('BREEZE_CONSOLE', $null, 'User')  # remove one set with setx
+```
+
+Open a new terminal afterwards; one that is already open keeps the environment it started with. On Linux or macOS, `env | grep BREEZE_` shows them; remove the `export` line from your shell profile.
+
+Under Docker, Compose reads `.env` instead — see [Docker](#docker). Every setting is listed in [Environment](#environment).
 
 ### Editor
 
@@ -166,6 +205,8 @@ Timeline: Ctrl+wheel zooms about the cursor, Shift+wheel scrolls. Dragged keyfra
 
 ### Environment
 
+Every setting the server reads. Put the ones you change in `.env` — [Settings](#settings) has the steps — or set them in the environment.
+
 | Variable | Default | Notes |
 |---|---|---|
 | `BREEZE_PORT` | `7331` | |
@@ -173,6 +214,7 @@ Timeline: Ctrl+wheel zooms about the cursor, Shift+wheel scrolls. Dragged keyfra
 | `BREEZE_DATA_DIR` | `<repo>/data` | Projects and uploaded assets |
 | `BREEZE_API_KEY` | *(empty)* | When set, mutating `/api/*` calls need `x-breeze-key` |
 | `BREEZE_LOG_LEVEL` | `info` | |
+| `BREEZE_CONSOLE` | `log` | `dashboard` turns the terminal into a live status board — stats, connected browser sources, panels and editors, recent API callers, and a log tail. Only on an interactive terminal: piped, under a service manager, or in a container without a TTY it logs normally and says why. See the user guide's [console dashboard](docs/USER-GUIDE.md#the-console-dashboard) |
 | `BREEZE_LOCALE` | `en` | UI language for the editor, portal and operator panels, as a BCP-47 tag. An installation setting — not detected, not overridable per request. Does not affect `/play` or the API. See [Language](#language) |
 | `BREEZE_EDITOR_DIR` | `<repo>/apps/editor/dist` | Where the built editor is served from — only needed if serving a differently-located editor build |
 | `BREEZE_DATA_POLLING` | `1` | `0` disables all data-source polling. Off in tests, so no suite touches the network |
@@ -182,6 +224,7 @@ Timeline: Ctrl+wheel zooms about the cursor, Shift+wheel scrolls. Dragged keyfra
 | `BREEZE_DATA_SECRETS_FILE` | *(empty)* | Path to a JSON object of `id → credential`. Use this for anything with newlines in it, notably a Google service-account key; the comma-separated form above cannot represent one. Merged over `BREEZE_DATA_SECRETS` |
 | `BREEZE_FFMPEG_PATH` | `ffmpeg` | Full path to the binary, for when it is installed somewhere that isn't on `PATH` |
 | `BREEZE_FFPROBE_PATH` | `ffprobe` | As above. It normally installs alongside ffmpeg, so setting one usually means setting both |
+| `BREEZE_SETTINGS_FILES` | `on` | `off` neither reads nor creates `.env` — the environment alone. For test harnesses and service managers that supply every value themselves; the e2e suite runs with it off |
 | `BREEZE_TRANSCODE_CONCURRENCY` | `1` | How many transcodes run at once. Raise it only on a machine that is not also playing graphics to air |
 
 ---
@@ -228,14 +271,14 @@ Four things it does **not** change:
 
 **Currently shipped: `en`.** Two pseudo-locales exist for testing rather than for use — `en-XA` renders every translated string bracketed and padded by about 40%, which finds both untranslated strings and layouts that break when text grows; `ar-XB` keeps English words but sets right-to-left direction, so you can check mirroring while still being able to read the screen.
 
-An unrecognised tag logs one line and falls back to English rather than refusing to start — a typo in `env.breeze` should not take the panels down. A tag that is translated but below the 95% ship threshold starts with a warning saying how far along it is.
+An unrecognised tag logs one line and falls back to English rather than refusing to start — a typo in `.env` should not take the panels down. A tag that is translated but below the 95% ship threshold starts with a warning saying how far along it is.
 
 Translations are plain JSON in `packages/i18n/locales/` — copy `en.json`, translate the values, leave the keys alone. **Send one as an [issue](https://github.com/dwclarkphx/breeze-overlay/issues), not a pull request**; this project takes issue reports only, and the maintainer commits the file. `pnpm i18n:check` gives you the same verdict CI will, so you can confirm it is complete and well-formed before you send it.
 
 ## Docker
 
 ```bash
-cp env.breeze .env        # set BREEZE_PORT and BREEZE_CONTACT
+cp -n env.breeze .env     # -n keeps a .env you already have; then edit it
 docker compose up -d --build
 docker compose logs -f
 ```
@@ -243,9 +286,11 @@ docker compose logs -f
 Needs Docker Engine 24+ with the Compose v2 plugin. Nothing else — Node, pnpm
 and the toolchain live in the build stage and never touch the host.
 
-`env.breeze` is a template of placeholders; `.env` is the copy you edit, and the
-one Compose loads automatically. Every setting — and every credential — goes
-there.
+Settings go in `.env` — the one Compose loads automatically, and never
+`env.breeze`, which is tracked by git and ships as the defaults. Every setting,
+and every credential, goes there. After editing it, `docker compose up -d` recreates the container with the
+new values; a plain restart keeps the environment the container was created
+with.
 
 ### Building without Compose
 
@@ -290,7 +335,7 @@ so a remapped port does not leave a healthy server reported unhealthy.
 ### Pointing vMix or OBS at it
 
 1. Note the LAN address the server logs on startup (it binds `0.0.0.0` by default).
-2. **vMix** → Add Input → Web Browser → URL `http://<host>:7331/play/demo/l3rd-name`, size 1920×1080.
+2. **vMix** → Add Input → Web Browser → URL `http://<host>:7331/play/demo-1iixd/l3rd-name-2a94g`, size 1920×1080.
 3. **OBS** → Sources → Browser → same URL, width 1920, height 1080. No custom CSS needed — the page is transparent by default.
 
 In a preview tab: `space` play · `→` next · `esc` stop · `backspace` clear.
@@ -300,9 +345,86 @@ In a preview tab: `space` play · `→` next · `esc` stop · `backspace` clear.
 Same as a bare-metal install, with one wrinkle: the addresses the server logs
 on startup are the *container's* interfaces, not the host's. Use the Docker
 host's LAN address with the published port —
-`http://<docker-host>:7331/play/demo/l3rd-name`.
+`http://<docker-host>:7331/play/demo-1iixd/l3rd-name-2a94g`.
 
 ---
+
+## Upgrading
+
+Your settings (`.env`) and your projects (`data/`) live in the install folder,
+but neither is part of the source: git ignores both, and a release carries
+neither. Upgrading **in place** keeps them. The build never overwrites an
+existing `.env`.
+
+### From a git clone
+
+```bash
+cd /path/to/breeze-overlay
+git pull
+pnpm install
+pnpm -r build
+```
+
+Then restart the server. If you never had a `.env`, the build creates the
+instructions-only one and the server carries on with the same defaults as
+before.
+
+`git clone` refuses to clone into an existing folder, and **cloning into a new
+folder instead of pulling starts a separate install**: no `.env`, so every
+setting is back to its default (including no API key), and an empty `data/`,
+so your projects look gone. They are not — they are still in the old folder.
+If you do move to a fresh folder, copy both across before its first start.
+From inside the **new** folder, run:
+
+```powershell
+Copy-Item <drive>:\path\to\old-install\.env .
+Copy-Item <drive>:\path\to\old-install\data . -Recurse
+```
+
+On macOS or Linux:
+
+```bash
+cp /path/to/old-install/.env .
+cp -R /path/to/old-install/data .
+```
+
+Substitute the folder your previous install lives in. Never delete the old
+folder first: that is the one path that really loses your projects and
+settings.
+
+To make reinstalls a non-event, keep projects outside the install folder with
+`BREEZE_DATA_DIR` in `.env`, as an absolute path. Then only `.env` needs moving.
+
+### From a release download
+
+Unpack the new release over the existing folder, then `pnpm install` and
+`pnpm -r build`. The release carries no `.env` and none of your `data/` —
+projects, assets, the activity log and the record of which demos you already
+have are all left as they are. It does replace `env.breeze`, which is reference
+only.
+
+### With Docker
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+Projects live in a Docker volume, not the folder, so rebuilding does not touch
+them. The volume is named after the folder Compose runs from
+(`<folder>_breeze-data`), though: run Compose from a differently named folder
+and it creates a new, empty volume. The old one still exists —
+`docker volume ls` lists it. To reattach it, put the old folder's name in
+`.env`:
+
+```ini
+COMPOSE_PROJECT_NAME=breeze-overlay
+```
+
+**If you kept your settings in `env.breeze`** — the older
+`docker compose --env-file env.breeze` route — copy them into `.env` before
+upgrading. The upgrade replaces `env.breeze`, and Compose reads `.env` by
+itself, so the flag is no longer needed.
 
 ## Operating a show
 
@@ -607,7 +729,7 @@ Per-layer effects — blur, drop-shadow and the rest of the CSS filter family, k
 
 Breeze Overlay is licensed under the [Mozilla Public License 2.0](LICENSE). Every source file carries the MPL notice; modifications to those files must stay under MPL-2.0, while new files combined with them may be licensed as you choose (MPL §3.3). Source lives at https://github.com/dwclarkphx/breeze-overlay.
 
-**One exception:** [`integrations/companion-module-breeze-overlay`](integrations/companion-module-breeze-overlay/LICENSE) — the Bitfocus Companion connector — is [MIT](integrations/companion-module-breeze-overlay/LICENSE), not MPL-2.0. Companion's own module requirements call for MIT to be eligible for listing and bundling, and a connector talking to Breeze over HTTP has no MPL-covered code to combine with in the first place. Everything else in the repo stays MPL-2.0.
+**One exception:** the Bitfocus Companion connector, which lives in its own repository at [bitfocus/companion-module-breeze-overlay](https://github.com/bitfocus/companion-module-breeze-overlay), is MIT, not MPL-2.0. Companion's own module requirements call for MIT to be eligible for listing and bundling, and a connector talking to Breeze over HTTP has no MPL-covered code to combine with in the first place. Everything in this repo is MPL-2.0.
 
 Breeze **requires** [GSAP](https://gsap.com) (GreenSock Animation Platform), (C) Webflow, but does not bundle it. `gsap.min.js` and `SplitText.min.js` are copied verbatim from the npm package into `apps/server/public/vendor/gsap/` at build time and loaded by a script tag — so no GreenSock code is compiled into any Breeze bundle, and the files can be replaced with a different GSAP release without rebuilding Breeze (see [Upgrading the animation engine](docs/USER-GUIDE.md#17-upgrading-the-animation-engine)).
 

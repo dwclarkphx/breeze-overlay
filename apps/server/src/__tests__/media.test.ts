@@ -91,7 +91,7 @@ describe('transcode routes without ffmpeg', () => {
   const uploadVideo = async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/api/projects/demo/assets?name=stinger.mov',
+      url: '/api/projects/demo-1iixd/assets?name=stinger.mov',
       headers: { 'content-type': 'application/octet-stream' },
       payload: Buffer.from('not-really-a-mov'),
     });
@@ -105,7 +105,7 @@ describe('transcode routes without ffmpeg', () => {
     const asset = await uploadVideo();
     const res = await app.inject({
       method: 'POST',
-      url: `/api/projects/demo/assets/${asset.id}/transcode`,
+      url: `/api/projects/demo-1iixd/assets/${asset.id}/transcode`,
     });
     expect(res.statusCode).toBe(503);
     expect(res.json().error).toContain('ffmpeg');
@@ -115,24 +115,24 @@ describe('transcode routes without ffmpeg', () => {
     const asset = await uploadVideo();
     const res = await app.inject({
       method: 'GET',
-      url: `/api/projects/demo/assets/${asset.id}/probe`,
+      url: `/api/projects/demo-1iixd/assets/${asset.id}/probe`,
     });
     expect(res.statusCode).toBe(503);
   });
 
   it('404s probing an asset that is not there', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/projects/demo/assets/nope/probe' });
+    const res = await app.inject({ method: 'GET', url: '/api/projects/demo-1iixd/assets/nope/probe' });
     expect(res.statusCode).toBe(404);
   });
 
   it('lists an empty job queue rather than failing', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/projects/demo/transcodes' });
+    const res = await app.inject({ method: 'GET', url: '/api/projects/demo-1iixd/transcodes' });
     expect(res.statusCode).toBe(200);
     expect(res.json().jobs).toEqual([]);
   });
 
   it('404s canceling a job that does not exist', async () => {
-    const res = await app.inject({ method: 'DELETE', url: '/api/projects/demo/transcodes/job99' });
+    const res = await app.inject({ method: 'DELETE', url: '/api/projects/demo-1iixd/transcodes/job99' });
     expect(res.statusCode).toBe(404);
   });
 });

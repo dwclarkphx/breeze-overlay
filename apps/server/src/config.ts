@@ -28,6 +28,12 @@ export interface Config {
   apiKey: string;
   logLevel: string;
   /**
+   * `log` (default) or `dashboard`. Raw here — `console.ts` resolves it, and
+   * falls back to `log` with a one-line reason when the output is not an
+   * interactive terminal or the value is not one it knows.
+   */
+  console: string;
+  /**
    * UI language for the editor and the operator pages, as a BCP-47 tag.
    *
    * An installation setting, not a per-browser one, and deliberately not
@@ -173,6 +179,7 @@ export const config: Config = {
   editorDir: path.resolve(env('BREEZE_EDITOR_DIR', path.join(REPO_ROOT, 'apps', 'editor', 'dist'))),
   apiKey: env('BREEZE_API_KEY', ''),
   logLevel: env('BREEZE_LOG_LEVEL', 'info'),
+  console: env('BREEZE_CONSOLE', 'log'),
   locale: env('BREEZE_LOCALE', 'en'),
   dataAllowHosts: envList('BREEZE_DATA_ALLOW_HOSTS'),
   // File last: it is the one that can hold a service-account key, so it should

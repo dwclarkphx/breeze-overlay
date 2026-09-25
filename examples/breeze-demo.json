@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "id": "demo",
+  "id": "demo-1iixd",
   "name": "Breeze Demo",
   "createdAt": "2026-07-26T00:00:00.000Z",
   "updatedAt": "2026-08-03T00:00:00.000Z",
@@ -8,7 +8,7 @@
   "compositions": [
     {
       "formatVersion": 1,
-      "id": "l3rd-name",
+      "id": "l3rd-name-2a94g",
       "name": "Lower Third — Name",
       "duration": 2.4,
       "stage": {
@@ -204,7 +204,7 @@
           "id": "badge",
           "name": "Live badge",
           "type": "composition",
-          "ref": "badge",
+          "ref": "badge-3j8xr",
           "in": 0.3,
           "size": {
             "width": 120,
@@ -310,7 +310,7 @@
       ]
     },
     {
-      "id": "badge",
+      "id": "badge-3j8xr",
       "formatVersion": 1,
       "name": "Badge",
       "duration": 0.4,
@@ -413,7 +413,7 @@
       "posterTime": 0.4
     },
     {
-      "id": "ticker",
+      "id": "ticker-40hbh",
       "formatVersion": 1,
       "name": "News Ticker",
       "duration": 1.2,
@@ -525,7 +525,7 @@
       ]
     },
     {
-      "id": "news-ticker",
+      "id": "news-ticker-5ung1",
       "formatVersion": 1,
       "name": "News Ticker — Feed",
       "duration": 1.2,
@@ -648,7 +648,7 @@
       ]
     },
     {
-      "id": "l3rd-reveal",
+      "id": "l3rd-reveal-6v1ez",
       "formatVersion": 1,
       "name": "Lower Third — Reveal",
       "duration": 3,
@@ -821,7 +821,7 @@
     },
     {
       "formatVersion": 1,
-      "id": "standings",
+      "id": "standings-72q2s",
       "name": "Standings — Table",
       "duration": 3,
       "stage": {
@@ -1243,7 +1243,7 @@
     },
     {
       "formatVersion": 1,
-      "id": "screen-bug",
+      "id": "screen-bug-8vctv",
       "name": "Screen Bug — Logo, Time & Temp",
       "duration": 2.4,
       "stage": {
@@ -1953,7 +1953,7 @@
     },
     {
       "formatVersion": 1,
-      "id": "l3rdbug",
+      "id": "l3rdbug-97rif",
       "name": "Lower Third + Bug",
       "stage": {
         "width": 1920,
@@ -1973,7 +1973,7 @@
           "id": "nest-l3rd",
           "type": "composition",
           "name": "Lower third",
-          "ref": "l3rd-name",
+          "ref": "l3rd-name-2a94g",
           "transform": {
             "x": 0,
             "y": 0,
@@ -1987,7 +1987,7 @@
           "id": "nest-bug",
           "type": "composition",
           "name": "Screen bug",
-          "ref": "screen-bug",
+          "ref": "screen-bug-8vctv",
           "transform": {
             "x": 0,
             "y": 0,
