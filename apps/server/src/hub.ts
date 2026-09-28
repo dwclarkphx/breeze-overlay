@@ -110,10 +110,55 @@ export interface PlaybackReport {
   tables?: TableReport[];
 }
 
+/**
+ * One connected output and what it last said it was showing (0.74.1).
+ *
+ * What a page joining late picks from, and what the control panel's preview
+ * offers under **Sync to**. Outputs only — a preview is somebody's own window,
+ * and one preview following another would be following nothing on air.
+ */
+export interface SourceReport {
+  /** The socket's hub id. */
+  id: string;
+  /**
+   * The output page the socket belongs to. One page opens a socket per graphic
+   * on it — a scene is several — and they all carry the same page id, which is
+   * how a preview following one output follows it on every channel at once.
+   * Absent from renderers older than 0.74.1.
+   */
+  page?: string;
+  /** "OBS on Windows", from the User-Agent — for a person choosing between outputs. */
+  label: string;
+  ip: string;
+  connectedAt: number;
+  playback: PlaybackReport | null;
+  /** Hub clock, epoch ms, when `playback` arrived; null before the first report. */
+  reportedAt: number | null;
+}
+
 export interface ChannelState {
   /** Last dynamic-field values pushed to this channel. */
   data: Record<string, unknown>;
+  /**
+   * What the channel's outputs are showing — an output on air when there is
+   * one (the latest such report), else the latest output's report, else what
+   * a preview reported while no output was connected. See `state`.
+   *
+   * A preview never overwrites an output's report. It used to: a panel's
+   * preview switched on mid-show reported `idle`, and every panel watching
+   * then read IDLE while vMix was holding on air.
+   */
   playback: PlaybackReport | null;
+  /** Hub clock, epoch ms, when `playback` was reported. Null when never. */
+  reportedAt: number | null;
+  /**
+   * The hub's clock when this state was put together, epoch ms. A reader
+   * works out a report's age as `now - reportedAt` — both from this clock, so
+   * the viewer's own clock being wrong does not matter.
+   */
+  now: number;
+  /** Connected outputs, oldest first (0.74.1). */
+  sources: SourceReport[];
   renderers: number;
   /**
    * Panels and editors — the things a person has open. Not previews (see
@@ -160,6 +205,8 @@ export type ClientMessage =
        * Absent means true — every existing client wants the data.
        */
       data?: boolean;
+      /** Output pages: an id shared by every socket the one page opens. See `SourceReport.page`. */
+      page?: string;
     }
   | { type: 'command'; command: ControlCommand }
   | { type: 'state'; playback: PlaybackReport };
@@ -183,6 +230,11 @@ export interface HubClient {
   origin?: PeerOrigin;
   /** Epoch ms. */
   connectedAt: number;
+  /** Output pages: the page this socket belongs to, from its subscribe. */
+  page?: string;
+  /** Outputs and previews: what it last reported, and when (hub clock). */
+  playback?: PlaybackReport;
+  reportedAt?: number;
 }
 
 /**
@@ -195,6 +247,12 @@ export interface HubClient {
 export interface PeerOrigin {
   ip: string;
   agent: string;
+  /**
+   * A short readable name for the agent — "OBS on Windows". Worked out by the
+   * transport (`describeAgent`), since the hub stays free of i18n. Absent
+   * falls back to the raw agent.
+   */
+  label?: string;
 }
 
 /**
@@ -220,8 +278,12 @@ export function channelKey(projectId: string, compositionId: string): string {
 interface Channel {
   data: Record<string, unknown>;
   playback: PlaybackReport | null;
+  reportedAt: number | null;
   updatedAt: string;
 }
+
+/** Longest page id kept. It is an opaque tag from the page, not something to store at any size. */
+const MAX_PAGE_ID = 64;
 
 export class ControlHub {
   private clients = new Map<string, HubClient>();
@@ -275,6 +337,14 @@ export class ControlHub {
          */
         if (message.role === 'controller' && message.data === false) client.omitData = true;
         else delete client.omitData;
+        if (message.role !== 'controller' && typeof message.page === 'string' && message.page !== '') {
+          client.page = message.page.slice(0, MAX_PAGE_ID);
+        } else {
+          delete client.page;
+        }
+        // A socket re-subscribing to another channel starts with no report there.
+        delete client.playback;
+        delete client.reportedAt;
         const state = this.state(message.channel);
         client.send({
           type: 'welcome',
@@ -299,9 +369,20 @@ export class ControlHub {
         // Only an output reports what it is showing. A controller claiming a
         // playback state would put a false one on every panel watching.
         if (!client.channel || (client.role !== 'renderer' && client.role !== 'preview')) return;
+        const at = Date.now();
+        client.playback = message.playback;
+        client.reportedAt = at;
+        /*
+         * An output's report is the channel's. A preview's is only while no
+         * output is connected — a panel used on its own, with the preview as
+         * its only window, still wants its readout — and never over an output.
+         */
         const channel = this.channel(client.channel);
-        channel.playback = message.playback;
-        channel.updatedAt = new Date().toISOString();
+        if (client.role === 'renderer' || !this.hasRenderer(client.channel)) {
+          channel.playback = message.playback;
+          channel.reportedAt = at;
+        }
+        channel.updatedAt = new Date(at).toISOString();
         this.broadcastState(client.channel, { excludeRenderers: true });
         return;
       }
@@ -342,6 +423,14 @@ export class ControlHub {
     }
     if (command.verb === 'clear') {
       channel.playback = null;
+      channel.reportedAt = null;
+      // Every output is about to report idle; until it does, its last report
+      // is about a graphic that is no longer there.
+      for (const client of this.clients.values()) {
+        if (client.channel !== channelName) continue;
+        delete client.playback;
+        delete client.reportedAt;
+      }
     }
     channel.updatedAt = new Date().toISOString();
 
@@ -363,24 +452,70 @@ export class ControlHub {
     const channel = this.channel(channelName);
     let renderers = 0;
     let controllers = 0;
+    const sources: SourceReport[] = [];
     for (const client of this.clients.values()) {
       if (client.channel !== channelName) continue;
       // A preview is deliberately in neither total — see `ClientRole`.
       if (client.role === 'preview') continue;
-      if (client.role === 'renderer') renderers += 1;
+      if (client.role === 'renderer') {
+        renderers += 1;
+        sources.push({
+          id: client.id,
+          ...(client.page ? { page: client.page } : {}),
+          label: client.origin?.label ?? client.origin?.agent ?? 'unknown',
+          ip: client.origin?.ip ?? 'unknown',
+          connectedAt: client.connectedAt,
+          playback: client.playback ?? null,
+          reportedAt: client.reportedAt ?? null,
+        });
+      }
       // A monitor is part of a panel already counted, not a panel of its own.
       // Counting it made the portal's "Panels open" disagree with /peers.
       // Companion is a machine with a socket per watched channel — see
       // `ControllerKind` — and would inflate the count the same way.
       else if (client.kind !== 'monitor' && client.kind !== 'companion') controllers += 1;
     }
+    sources.sort((a, b) => a.connectedAt - b.connectedAt);
+
+    /*
+     * The channel's playback is an output that is on air, when one is.
+     *
+     * "Whichever reported last" let one idle output hide another on air: a
+     * browser source opened with `?sync=off`, or added to OBS mid-show, says
+     * idle, and every panel then read IDLE while vMix held the graphic. The
+     * question a panel is asking is "is this on air?", so an output showing it
+     * wins over one that is not; among equals, the latest report. With no
+     * output reporting at all, the retained report stands — a preview's, see
+     * `handle`, or the last word from outputs that have since gone.
+     */
+    const onAir = (p: PlaybackReport | null) => p?.state === 'holding' || p?.state === 'playing-in' || p?.state === 'playing-out';
+    let chosen: SourceReport | null = null;
+    for (const s of sources) {
+      if (!s.playback || s.reportedAt === null) continue;
+      if (
+        !chosen ||
+        (onAir(s.playback) && !onAir(chosen.playback)) ||
+        (onAir(s.playback) === onAir(chosen.playback) && s.reportedAt > chosen.reportedAt!)
+      ) chosen = s;
+    }
+
     return {
       data: { ...channel.data },
-      playback: channel.playback,
+      playback: chosen ? chosen.playback : channel.playback,
+      reportedAt: chosen ? chosen.reportedAt : channel.reportedAt,
+      now: Date.now(),
+      sources,
       renderers,
       controllers,
       updatedAt: channel.updatedAt,
     };
+  }
+
+  private hasRenderer(channelName: string): boolean {
+    for (const client of this.clients.values()) {
+      if (client.channel === channelName && client.role === 'renderer') return true;
+    }
+    return false;
   }
 
   /**
@@ -416,7 +551,7 @@ export class ControlHub {
   private channel(name: string): Channel {
     let channel = this.channels.get(name);
     if (!channel) {
-      channel = { data: {}, playback: null, updatedAt: new Date().toISOString() };
+      channel = { data: {}, playback: null, reportedAt: null, updatedAt: new Date().toISOString() };
       this.channels.set(name, channel);
     }
     return channel;

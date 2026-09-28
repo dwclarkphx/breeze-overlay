@@ -4,6 +4,18 @@ All notable changes to Breeze Overlay are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow the project rule: a feature bumps the minor version, a fix bumps the patch. Releases before 0.45.0 used two-part numbers (0.01–0.44). 1.0.0 will be the first public release.
 
+## [0.74.1] - 2026-09-28
+
+### Fixed
+
+- An output page opened while its graphic is already on air — a browser source reloaded mid-show, or the control panel's preview switched on mid-hold — now picks up from an output still on air: the same hold, each paged table on the same page with the same time left, without playing the intro again. It used to stay blank until the next PLAY. `?sync=off` keeps the old behaviour for one page.
+- A preview's report no longer overwrites the channel's playback while an output is connected, so a panel no longer reads IDLE mid-show because somebody opened a preview.
+
+### Added
+
+- The control panel's preview has a **Sync to** menu: the newest output, any connected output by name and address, or off.
+- `/state` and the control socket's state list each connected output with its own report (`sources`), and carry `reportedAt` and `now` on the server's clock.
+
 ## [0.74.0] - 2026-09-28
 
 > Cycle, control surfaces and live data (Phase 8.6, Waves 1–8), plus browser sign-in.
@@ -703,6 +715,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Composition schema v1, the single GSAP runtime with STOP-marker lifecycle, and a Fastify server serving transparent `/play` pages.
 
+[0.74.1]: https://github.com/dwclarkphx/breeze-overlay/releases/tag/v0.74.1
 [0.74.0]: https://github.com/dwclarkphx/breeze-overlay/releases/tag/v0.74.0
 [0.73.0]: https://github.com/dwclarkphx/breeze-overlay/releases/tag/v0.73.0
 [0.67.0]: https://github.com/dwclarkphx/breeze-overlay/releases/tag/v0.67.0

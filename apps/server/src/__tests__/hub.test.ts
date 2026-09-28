@@ -365,3 +365,115 @@ describe('table commands', () => {
     expect(last && 'state' in last ? last.state.playback?.tables : null).toEqual(tables);
   });
 });
+
+describe('late join (0.74.1)', () => {
+  const holding = { state: 'holding', time: 1, step: 1, stepCount: 1 };
+  const idle = { state: 'idle', time: 0, step: 0, stepCount: 1 };
+
+  it('does not let a preview overwrite what an output reported', () => {
+    const hub = new ControlHub();
+    fakeClient(hub, 'out');
+    fakeClient(hub, 'pv');
+    subscribe(hub, 'out', 'renderer');
+    hub.handle('pv', { type: 'subscribe', channel: CHANNEL, role: 'preview' });
+
+    hub.handle('out', { type: 'state', playback: holding });
+    hub.handle('pv', { type: 'state', playback: idle });
+
+    expect(hub.state(CHANNEL).playback?.state).toBe('holding');
+  });
+
+  it('takes a preview’s report while no output is connected', () => {
+    const hub = new ControlHub();
+    fakeClient(hub, 'pv');
+    hub.handle('pv', { type: 'subscribe', channel: CHANNEL, role: 'preview' });
+    hub.handle('pv', { type: 'state', playback: holding });
+    expect(hub.state(CHANNEL).playback?.state).toBe('holding');
+  });
+
+  it('lists each output with its own report and when it arrived, and leaves previews out', () => {
+    const hub = new ControlHub();
+    hub.addClient('a', () => {}, { ip: '10.0.0.5', agent: 'Mozilla/5.0 OBS/31', label: 'OBS on Windows' });
+    fakeClient(hub, 'b');
+    fakeClient(hub, 'pv');
+    hub.handle('a', { type: 'subscribe', channel: CHANNEL, role: 'renderer', page: 'p1' });
+    subscribe(hub, 'b', 'renderer');
+    hub.handle('pv', { type: 'subscribe', channel: CHANNEL, role: 'preview', page: 'p9' });
+
+    const before = Date.now();
+    hub.handle('a', { type: 'state', playback: holding });
+
+    const { sources, reportedAt, now } = hub.state(CHANNEL);
+    expect(sources.map((s) => s.id)).toEqual(['a', 'b']);
+    expect(sources[0]).toMatchObject({ page: 'p1', label: 'OBS on Windows', ip: '10.0.0.5', playback: holding });
+    expect(sources[0]!.reportedAt).toBeGreaterThanOrEqual(before);
+    expect(sources[1]).toMatchObject({ playback: null, reportedAt: null });
+    expect(reportedAt).toBe(sources[0]!.reportedAt);
+    expect(now).toBeGreaterThanOrEqual(reportedAt!);
+  });
+
+  it('sends a late subscriber the outputs in its welcome', () => {
+    const hub = new ControlHub();
+    fakeClient(hub, 'out');
+    subscribe(hub, 'out', 'renderer');
+    hub.handle('out', { type: 'state', playback: holding });
+
+    const late = fakeClient(hub, 'late');
+    hub.handle('late', { type: 'subscribe', channel: CHANNEL, role: 'renderer', page: 'p2' });
+    const welcome = late.received.find((m) => m.type === 'welcome');
+    expect(welcome?.type === 'welcome' && welcome.state.sources[0]?.playback).toEqual(holding);
+  });
+
+  it('keeps a page id to a sane length and never on a controller', () => {
+    const hub = new ControlHub();
+    fakeClient(hub, 'out');
+    fakeClient(hub, 'panel');
+    hub.handle('out', { type: 'subscribe', channel: CHANNEL, role: 'renderer', page: 'x'.repeat(500) });
+    hub.handle('panel', { type: 'subscribe', channel: CHANNEL, role: 'controller', page: 'p' });
+    expect(hub.state(CHANNEL).sources[0]!.page).toHaveLength(64);
+  });
+
+  it('forgets the report time with the report on CLEAR', () => {
+    const hub = new ControlHub();
+    fakeClient(hub, 'out');
+    subscribe(hub, 'out', 'renderer');
+    hub.handle('out', { type: 'state', playback: holding });
+    hub.dispatch(CHANNEL, { verb: 'clear' });
+    expect(hub.state(CHANNEL)).toMatchObject({ playback: null, reportedAt: null });
+  });
+});
+
+describe('which output the channel reports (0.74.1)', () => {
+  const holding = { state: 'holding', time: 1, step: 1, stepCount: 1 };
+  const idle = { state: 'idle', time: 0, step: 0, stepCount: 1 };
+
+  it('an idle output does not hide one that is on air, whichever reported last', () => {
+    const hub = new ControlHub();
+    fakeClient(hub, 'vmix');
+    fakeClient(hub, 'fresh');
+    subscribe(hub, 'vmix', 'renderer');
+    subscribe(hub, 'fresh', 'renderer');
+    hub.handle('vmix', { type: 'state', playback: holding });
+    hub.handle('fresh', { type: 'state', playback: idle });
+    expect(hub.state(CHANNEL).playback?.state).toBe('holding');
+  });
+
+  it('reads idle once every output is off air', () => {
+    const hub = new ControlHub();
+    fakeClient(hub, 'a');
+    subscribe(hub, 'a', 'renderer');
+    hub.handle('a', { type: 'state', playback: holding });
+    hub.handle('a', { type: 'state', playback: { ...idle, state: 'finished' } });
+    expect(hub.state(CHANNEL).playback?.state).toBe('finished');
+  });
+
+  it('does not report a cleared graphic from an output that has not answered yet', () => {
+    const hub = new ControlHub();
+    fakeClient(hub, 'a');
+    subscribe(hub, 'a', 'renderer');
+    hub.handle('a', { type: 'state', playback: holding });
+    hub.dispatch(CHANNEL, { verb: 'clear' });
+    expect(hub.state(CHANNEL).playback).toBeNull();
+    expect(hub.state(CHANNEL).sources[0]!.playback).toBeNull();
+  });
+});

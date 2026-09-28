@@ -1098,6 +1098,8 @@ Click **Output URL ↗** in the app bar and copy the address, or open the projec
 
 > **A graphic never appears just because you added the source.** The output page shows nothing until something tells it to play. Adding a browser source in OBS, or opening the URL to check it, will not put a graphic to air. That is deliberate — it is the control panel's job. If you *want* the source appearing in the switcher to be the cue, add `?autoplay=1` to the URL.
 
+> **A source that reloads mid-show comes back on air.** If OBS or vMix reloads a browser source while its graphic is holding — a crash, a scene collection reloaded, someone pressing refresh — the page picks up from another output that is still on air: the same hold, the same page of any table that pages, with the same time left before its next turn, so it turns with the others. It does not play the intro again. With no other output on air there is nothing to pick up from, and it waits for the next PLAY as before. To have a page always wait instead, add `?sync=off` to its URL.
+
 ### The control panel
 
 ![The control panel](images/control-panel.png)
@@ -1114,6 +1116,7 @@ One page per composition, designed to be usable at speed on a laptop or a tablet
 - **Mode** — appears when the project's rules name a mode: a button for each, plus **NORMAL**. The lit one is the mode on air, for the whole project ([rules](#rules--layers-that-react-to-data)).
 - **Data** — every fetched source the graphic reads, including those of graphics mounted in it, and what each is doing: *Live*, *Failing* (last good data still on air), *Expired* or *Frozen* (blank on air), or *On backup*. A source with a [backup](#when-the-data-is-bad) has **AUTO / OWN / BACKUP** buttons.
 - **Dynamic fields** — edit the text and press **UPDATE ON AIR**. Changes apply live; the graphic does not need re-playing.
+- **Show preview** — the real output page, embedded and scaled to fit. It follows what you trigger here and is never counted as a connected output. Switched on with the graphic already on air, it picks up where an output is, as a reloaded browser source does. **Sync to** chooses which one: **Newest output** (the one that reported most recently), any connected output by name and address, or **Off**, which waits for the next command. Changing it reloads the preview. An output shown as *off air* is connected but not showing anything, so a preview following it shows nothing either.
 
 The indicator at the top right says whether an output page is actually connected. If it says *no output connected*, the browser source is not open — pressing PLAY will do nothing visible.
 
@@ -1354,6 +1357,19 @@ http://<host>:7331/api/control/rahb-1k3f9/lower-third/state
   "state": {
     "data": { "name": "Jane Doe" },
     "playback": { "state": "holding", "time": 1.2, "step": 1, "stepCount": 2 },
+    "reportedAt": 1790626119416,
+    "now": 1790626121020,
+    "sources": [
+      {
+        "id": "c4k2…",
+        "page": "1m0b0t1x",
+        "label": "OBS on Windows",
+        "ip": "192.168.1.20",
+        "connectedAt": 1790625000000,
+        "playback": { "state": "holding", "time": 1.2, "step": 1, "stepCount": 2 },
+        "reportedAt": 1790626119416
+      }
+    ],
     "renderers": 1,
     "controllers": 2,
     "updatedAt": "2026-08-08T19:02:11.400Z"
@@ -1361,7 +1377,9 @@ http://<host>:7331/api/control/rahb-1k3f9/lower-third/state
 }
 ```
 
-`renderers` is how many browser sources are attached — `0` is the "nothing is listening" case above. `playback.state` is what the graphic is doing, which is what you would drive a button colour from.
+`renderers` is how many browser sources are attached — `0` is the "nothing is listening" case above. `playback.state` is what the graphic is doing, which is what you would drive a button colour from. It is always an output's report: an operator's preview never changes it while an output is connected.
+
+`sources` lists each connected output and what it last reported, and `reportedAt` and `now` are the server's clock in milliseconds, so `now - reportedAt` is how old a report is. These are what a page joining late picks up from.
 
 ### Finding the addresses
 

@@ -510,6 +510,8 @@ ${FAVICON_LINK}
     border:1px solid var(--line);border-radius:6px;overflow:hidden}
   .preview-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block}
   .icon-btn{width:auto;min-width:38px;padding:6px 10px;font-size:15px;line-height:1}
+  .preview-sync{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+  .preview-sync select{width:auto;max-width:16em;padding:4px 6px;font-size:13px}
   .icon-btn[aria-pressed="true"]{outline:2px solid var(--accent);outline-offset:-2px}
   @media (min-width:900px){
     .panel-grid{flex-direction:row-reverse;align-items:flex-start}
@@ -535,6 +537,10 @@ ${FAVICON_LINK}
 <section class="preview" id="preview" hidden>
   <div class="preview-head">
     <strong>${t('server.pages.previewTitle')}</strong>
+    <label class="preview-sync" title="${escapeHtml(t('server.pages.previewSyncTitle'))}">
+      ${t('server.pages.previewSyncLabel')}
+      <select id="preview-sync"></select>
+    </label>
     <button class="icon-btn" id="preview-debug" aria-pressed="false"
       title="${escapeHtml(t('server.pages.previewDebugTitle'))}">${'\u2699'}</button>
     <span class="sub">${escapeHtml(`${projectId}/${composition.id}`)}</span>

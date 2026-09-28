@@ -15,7 +15,7 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
-import { actorOf, record } from '../audit.js';
+import { actorOf, describeAgent, record } from '../audit.js';
 import { config } from '../config.js';
 import { projectModes, readMode } from '../mode.js';
 import { fail } from '../errors.js';
@@ -141,7 +141,9 @@ export async function registerControlRoutes(
         // take down the broadcast loop for every other client.
         if (socket.readyState === 1) socket.send(JSON.stringify(message));
       },
-      actor,
+      // The label is for a person choosing an output to follow (0.74.1) — the
+      // hub stays free of i18n, so it is worked out here, once, at the upgrade.
+      { ...actor, label: describeAgent(actor.agent) },
     );
 
     /*

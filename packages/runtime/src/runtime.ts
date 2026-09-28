@@ -163,6 +163,34 @@ export interface PageTarget {
   key?: string;
 }
 
+/**
+ * What another output said it was showing — the playback report an output page
+ * sends the hub — for `joinAt` to take up (0.74.1).
+ *
+ * The same shape as the report, so the hub relays it untouched, plus how old it
+ * is. Reports are sent on events (play, hold, page turn), not on a timer, so a
+ * report can be several seconds old when it is read; the cycle is solved from
+ * an anchor, so an age is all it takes to land on the page that output is on
+ * now rather than the page it was on then.
+ */
+export interface JoinReport {
+  state: string;
+  time: number;
+  step: number;
+  tables?: Array<{
+    table: string;
+    page: number;
+    pageCount?: number;
+    held?: boolean;
+    cycling?: boolean;
+    hasCycle?: boolean;
+    secondsLeft?: number | null;
+    follows?: string;
+  }>;
+  /** Milliseconds between the report being made and now. Absent is 0. */
+  ageMs?: number;
+}
+
 /** A split text layer and the reveal built over its pieces. */
 interface TextAnimHandle {
   anim: ResolvedTextAnim;
@@ -1617,6 +1645,136 @@ export class BreezeRuntime {
     this.scheduleCycles();
     if (changed) this.emit('page');
     return changed;
+  }
+
+  /**
+   * Take up where another output is — the late-join (0.74.1).
+   *
+   * An output page opened while its graphic is already on air used to sit
+   * blank until the next PLAY, because commands are events and it had missed
+   * them: a browser source reloaded mid-show, or a panel's preview switched on
+   * mid-hold. The hub keeps what each output last reported, and this puts this
+   * runtime in the same place:
+   *
+   * - **holding** — a cut to that hold, never the intro played again: the
+   *   audience is already looking at the held frame on the other output, and
+   *   this one arriving is not an event they should see. Crawls start, and each
+   *   paged table goes to the reported page with the reported time left, aged
+   *   by how long ago the report was made, so a rejoined output turns its pages
+   *   on the same second as the one it joined.
+   * - **playing-in** — from the reported time on towards its next hold.
+   * - anything else — nothing. An output leaving air, finished or never played
+   *   has nothing on screen to match.
+   *
+   * Only from `idle`, unless `force`: a page that has already been told what to
+   * do by a live command knows better than a report about someone else.
+   * True when it joined.
+   */
+  joinAt(report: JoinReport, opts: { force?: boolean } = {}): boolean {
+    if (this.destroyed) return false;
+    if (this.state !== 'idle' && !opts.force) return false;
+    if (report.state !== 'holding' && report.state !== 'playing-in') return false;
+
+    const ageMs = Math.max(0, report.ageMs ?? 0);
+    const now = Date.now();
+    const duration = this.tl.duration();
+
+    /*
+     * The hold is found by step, not by the reported time. A hold's time is
+     * exact on the output that reported it and exact here — same composition —
+     * so there is nothing to round; the step is simply the sturdier of the two
+     * facts when the time has picked up a float's worth of drift.
+     */
+    const holdAt = report.state === 'holding'
+      ? (report.step > 0 ? this.plan.holds[report.step - 1] : undefined) ?? report.time
+      : report.time + ageMs / 1000;
+    const target = Math.max(0, Math.min(holdAt, duration));
+
+    this.stopCycleTimer();
+    this.tl.pause();
+    this.renderAt(target);
+    this.applyVisibilityWindows(target);
+    this.videos.syncTo(target);
+    this.posters.syncTo(target);
+    this.sprites.syncTo(target);
+
+    this.joinTables(report.tables ?? [], now - ageMs);
+
+    if (report.state === 'holding') {
+      this.pendingHold = null;
+      this.state = 'holding';
+      this.startCrawls();
+      // A self-paging table the report did not mention — one page when it was
+      // made, or a report from a renderer older than table reports — starts its
+      // time now, as it would on reaching the hold.
+      for (const handle of this.tables.values()) {
+        if (handle.cycle && !handle.cycle.anchor) this.anchorCycle(handle, now);
+      }
+      this.scheduleCycles();
+      this.emit('hold');
+      return true;
+    }
+
+    this.pendingHold = nextHoldAfter(this.plan, target);
+    this.state = 'playing-in';
+    this.startCrawls();
+    this.videos.play(target);
+    this.tl.play();
+    this.emit('play');
+    return true;
+  }
+
+  /**
+   * Put each reported table on its page, anchored so its time left matches.
+   *
+   * `reportedAt` is when the other output made the report, in this machine's
+   * epoch: the anchor is set back from it by however far into the page that
+   * output was, and the cycle's own arithmetic walks it forward to now. Leaders
+   * first, then followers — moving a leader re-keys its followers and sends
+   * them to their own first page, so a follower's reported page is only right
+   * once its leader has moved.
+   */
+  private joinTables(reports: NonNullable<JoinReport['tables']>, reportedAt: number): void {
+    if (!reports.length || !this.tables.size) return;
+    const byAddress = new Map<string, string>();
+    for (const id of this.tables.keys()) byAddress.set(this.tableAddress(id), id);
+
+    const place = (entry: NonNullable<JoinReport['tables']>[number]): void => {
+      const id = byAddress.get(entry.table);
+      const handle = id !== undefined ? this.tables.get(id) : undefined;
+      if (!handle || !Number.isFinite(entry.page)) return;
+      const page = Math.floor(entry.page);
+      if (page >= 0 && page < handle.block.pageCount && handle.block.turnTo(page)) handle.stale = true;
+      const cycle = handle.cycle;
+      if (!cycle) return;
+      cycle.held = entry.held === true;
+      cycle.done = false;
+      const shown = handle.block.currentPage;
+      const dwell = this.cycleDurations(handle)[shown];
+      const left = typeof entry.secondsLeft === 'number' && Number.isFinite(entry.secondsLeft) ? entry.secondsLeft : null;
+      // Into the page by its dwell less the time it had left; with no time
+      // left reported (held, or not cycling), the page simply starts now.
+      const into = left !== null && dwell !== undefined ? Math.max(0, dwell - left) * 1000 : 0;
+      const at = left !== null ? reportedAt - into : Date.now();
+      cycle.anchor = { page: shown, at };
+      cycle.shown = { page: shown, at };
+      /*
+       * A `hold` or `continue` cycle that had already run its course reports
+       * no time left and is not cycling. Mark it done, or it would start its
+       * last page over.
+       */
+      const end = cycle.config.end ?? 'loop';
+      if (end !== 'loop' && !cycle.held && entry.cycling === false && shown === handle.block.pageCount - 1) cycle.done = true;
+    };
+
+    const leaders = reports.filter((r) => !r.follows);
+    const followers = reports.filter((r) => r.follows);
+    for (const entry of leaders) place(entry);
+    this.syncFollowers({});
+    for (const entry of followers) place(entry);
+    // Turned without motion: the reveal is behind the playhead, so the rows
+    // are simply at rest — `refreshTableTracks` leaves a passed reveal alone.
+    this.refreshTableTracks();
   }
 
   /** Everything `next()` does to the timeline, without the table step. */

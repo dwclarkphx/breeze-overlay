@@ -24,6 +24,7 @@
 
 import { BreezeRuntime, installGlobals, OUTPUT_PAGE_CSS } from '@breeze/runtime';
 import { DATA_UPDATE_KEY, MODE_UPDATE_KEY, type Composition, type DataSet, type SceneElement } from '@breeze/schema';
+import { SYNC_AUTO, joinTarget, type ChannelStateLike } from './join.js';
 
 declare global {
   interface Window {
@@ -96,7 +97,7 @@ function warnIfWindowSmallerThanStage(composition: Composition, scaled: boolean)
 }
 
 /** Page-level parameters that are never binding values. */
-const RESERVED_PARAMS = new Set(['autoplay', 'debug', 'scale', 'preview']);
+const RESERVED_PARAMS = new Set(['autoplay', 'debug', 'scale', 'preview', 'sync']);
 
 /**
  * Split the query string into per-channel field payloads.
@@ -237,6 +238,12 @@ function connectToHub(
    * adopting the operator's last name entry.
    */
   pinned: Set<string>,
+  /**
+   * Late join (0.74.1): this page's id, shared by every socket it opens, and
+   * which output to take up from when it connects to a graphic already on air
+   * — `?sync=`, see `client/join.ts`.
+   */
+  join: { page: string; choice: string },
 ): void {
   const channel = `${projectId}/${channelName}`;
   let socket: WebSocket | null = null;
@@ -325,11 +332,15 @@ function connectToHub(
       const role = new URLSearchParams(location.search).get('preview') === '1'
         ? 'preview'
         : 'renderer';
-      socket!.send(JSON.stringify({ type: 'subscribe', channel, role }));
+      socket!.send(JSON.stringify({ type: 'subscribe', channel, role, page: join.page }));
     });
 
     socket.addEventListener('message', (event) => {
-      let message: { type: string; command?: Parameters<typeof apply>[0]; state?: { data?: Record<string, unknown> } };
+      let message: {
+        type: string;
+        command?: Parameters<typeof apply>[0];
+        state?: ChannelStateLike & { data?: Record<string, unknown> };
+      };
       try {
         message = JSON.parse(String(event.data));
       } catch {
@@ -348,6 +359,16 @@ function connectToHub(
           if (!pinned.has(key)) adopt[key] = value;
         }
         if (Object.keys(adopt).length) runtime.update(adopt);
+        /*
+         * Late join: a graphic already on air when this page arrived is taken
+         * up from another output's report — a browser source reloaded mid-show
+         * comes back showing the hold, not blank until the next PLAY.
+         *
+         * `joinAt` only acts on an idle runtime, so a socket that merely
+         * dropped and reconnected — its graphic still running — is untouched.
+         */
+        const target = joinTarget(message.state, join.choice, join.page);
+        if (target) runtime.joinAt(target);
         report();
       }
     });
@@ -369,6 +390,13 @@ function connectToHub(
   }
 
   connect();
+}
+
+/** A random id for this page load. Not a secret — only a tag other pages can name it by. */
+function newPageId(): string {
+  const bytes = new Uint8Array(9);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(36).padStart(2, '0')).join('').slice(0, 16);
 }
 
 async function main(): Promise<void> {
@@ -500,8 +528,14 @@ async function main(): Promise<void> {
 
   installGlobals(runtime, globalThis as unknown as Record<string, unknown>, elementRuntimes);
 
+  /*
+   * One id for the page, however many graphics it carries: an output is a
+   * browser source, not a socket, and a preview told to follow one follows it
+   * on every channel the page has (0.74.1).
+   */
+  const join = { page: newPageId(), choice: params.get('sync')?.trim() || SYNC_AUTO };
   for (const item of mounted) {
-    connectToHub(item.runtime, boot.projectId, item.channel, new Set(Object.keys(item.seed)));
+    connectToHub(item.runtime, boot.projectId, item.channel, new Set(Object.keys(item.seed)), join);
   }
 
   if (boot.debug || params.get('debug') === '1') makeDebugOverlay(mounted);

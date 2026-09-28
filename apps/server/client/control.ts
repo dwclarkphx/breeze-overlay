@@ -18,6 +18,7 @@
 export {};
 
 import { bootI18n } from './i18n.js';
+import { SYNC_AUTO, SYNC_OFF, type SourceLike } from './join.js';
 
 interface Binding {
   name: string;
@@ -943,13 +944,19 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
   const previewFrame = document.getElementById('preview-frame')!;
   const previewToggle = document.getElementById('preview-toggle') as HTMLButtonElement;
   const previewDebug = document.getElementById('preview-debug') as HTMLButtonElement;
+  const previewSync = document.getElementById('preview-sync') as HTMLSelectElement;
   let previewDebugOn = false;
+  /** `?sync=` for the frame: newest output, one output's page id, or off (0.74.1). */
+  let syncChoice = SYNC_AUTO;
 
   const previewUrl = (): string => {
     const params = new URLSearchParams({ scale: 'contain', preview: '1' });
     // Debug is read at load by the output page, so toggling it reloads the
     // frame — the honest way to drive a flag the page only reads once.
     if (previewDebugOn) params.set('debug', '1');
+    // So is the sync choice: it decides what the page takes up from when it
+    // connects, and a page only connects once.
+    if (syncChoice !== SYNC_AUTO) params.set('sync', syncChoice);
     if (key) params.set('key', key);
     return `/play/${boot.projectId}/${boot.compositionId}?${params.toString()}`;
   };
@@ -985,6 +992,50 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
     previewDebugOn = !previewDebugOn;
     previewDebug.setAttribute('aria-pressed', String(previewDebugOn));
     renderPreview();
+  });
+
+  /**
+   * **Sync to** — which output the preview takes up from when it opens with
+   * the graphic already on air (0.74.1).
+   *
+   * Newest output, any one connected output, or off. The menu is rebuilt only
+   * when the set of outputs changes: state arrives on every page turn, and
+   * rebuilding an open menu under the operator's pointer would close it.
+   * An output that disconnects while chosen falls back to Newest without
+   * reloading the frame — the preview is already running and following
+   * commands; the choice only matters at the moment it connects.
+   */
+  let syncSignature = '';
+  const renderSyncMenu = (sources: SourceLike[] | undefined): void => {
+    const list = sources ?? [];
+    const onAir = (s: SourceLike) => s.playback?.state === 'holding' || s.playback?.state === 'playing-in';
+    const signature = list.map((s) => `${s.page ?? s.id}|${s.label}|${s.ip}|${onAir(s)}`).join('\n');
+    if (signature === syncSignature && previewSync.options.length) return;
+    syncSignature = signature;
+
+    if (syncChoice !== SYNC_AUTO && syncChoice !== SYNC_OFF && !list.some((s) => (s.page ?? s.id) === syncChoice)) {
+      syncChoice = SYNC_AUTO;
+    }
+    previewSync.textContent = '';
+    const add = (value: string, label: string): void => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = label;
+      previewSync.appendChild(option);
+    };
+    add(SYNC_AUTO, t('control.syncNewest'));
+    list.forEach((s, i) => {
+      const vars = { n: i + 1, label: s.label, ip: s.ip };
+      add(s.page ?? s.id, onAir(s) ? t('control.syncOutput', vars) : t('control.syncOutputOffAir', vars));
+    });
+    add(SYNC_OFF, t('control.syncOff'));
+    previewSync.value = syncChoice;
+  };
+  renderSyncMenu(undefined);
+
+  previewSync.addEventListener('change', () => {
+    syncChoice = previewSync.value || SYNC_AUTO;
+    if (previewOn) renderPreview();
   });
 
   /* ------------------------------------------------------------- fields */
@@ -1092,7 +1143,7 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
       let message: {
         type: string;
         code?: string;
-        state?: { renderers: number; playback?: unknown; data?: Record<string, unknown> };
+        state?: { renderers: number; playback?: unknown; data?: Record<string, unknown>; sources?: SourceLike[] };
       };
       try {
         message = JSON.parse(String(event.data));
@@ -1102,6 +1153,7 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
       if (message.type === 'welcome' || message.type === 'state') {
         render(message.state);
         renderFed(message.state?.data);
+        if (message.state) renderSyncMenu(message.state.sources);
       }
       // A command refused for want of the key: say how to fix it, where the
       // operator is looking, rather than a button that silently does nothing.
