@@ -278,3 +278,69 @@ export async function fetchText(url: string, opts: FetchOptions = {}): Promise<F
     clearTimeout(timer);
   }
 }
+
+/* ----------------------------------------------------------------- stream */
+
+/** Redirects a media request follows before giving up. */
+const MAX_REDIRECTS = 5;
+
+export interface StreamOptions {
+  headers?: Record<string, string>;
+  /** Aborts the request, and the body once it is flowing. */
+  signal?: AbortSignal;
+  /** Until the response headers arrive. The body is the caller's to time. */
+  timeoutMs?: number;
+}
+
+/**
+ * Open a URL for a body that may never end — a camera's motion-JPEG stream —
+ * through the same address checks as every other fetch, redirects included.
+ *
+ * Returns the `Response` with its body unread; the caller reads what it needs
+ * and cancels the rest. A login in the URL (`http://user:pass@camera/…`, as
+ * camera vendors document it) becomes a Basic `authorization` header, because
+ * a request to a URL carrying credentials is refused outright.
+ */
+export async function fetchStream(url: string, opts: StreamOptions = {}, hops = 0, login?: { origin: string; header: string }): Promise<Response> {
+  const parsed = await assertFetchable(url);
+  const headers: Record<string, string> = { 'user-agent': userAgent(), accept: '*/*', ...(opts.headers ?? {}) };
+  if (parsed.username || parsed.password) {
+    const pair = `${decodeURIComponent(parsed.username)}:${decodeURIComponent(parsed.password)}`;
+    parsed.username = '';
+    parsed.password = '';
+    login = { origin: parsed.origin, header: `Basic ${Buffer.from(pair).toString('base64')}` };
+  }
+  // The login follows a redirect within the camera's own origin, never off it.
+  if (login && login.origin === parsed.origin) headers['authorization'] = login.header;
+
+  const controller = new AbortController();
+  const abort = (): void => controller.abort();
+  opts.signal?.addEventListener('abort', abort, { once: true });
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timer = setTimeout(abort, timeoutMs);
+  try {
+    const response = await fetch(parsed, { headers, signal: controller.signal, redirect: 'manual' });
+    if (response.status >= 300 && response.status < 400) {
+      await response.body?.cancel().catch(() => undefined);
+      const location = response.headers.get('location');
+      if (!location) throw new Error(`redirect with no location (${response.status})`);
+      if (hops >= MAX_REDIRECTS) throw new Error(`more than ${MAX_REDIRECTS} redirects`);
+      return fetchStream(new URL(location, parsed).toString(), opts, hops + 1, login);
+    }
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new Error(`HTTP ${response.status} ${response.statusText}`.trim());
+    }
+    return response;
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(opts.signal?.aborted ? 'cancelled' : `timed out after ${timeoutMs}ms`);
+    }
+    // undici says only "fetch failed"; the reason is on the cause.
+    const code = (err as { cause?: { code?: string } } | null)?.cause?.code;
+    if (err instanceof Error && err.message === 'fetch failed' && code) throw new Error(`fetch failed (${code})`);
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}

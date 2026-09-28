@@ -258,6 +258,80 @@ describe('control API', () => {
     const other = await app.inject({ method: 'GET', url: '/api/control/demo-1iixd/ticker-40hbh/state' });
     expect((other.json() as { state: { data: Record<string, unknown> } }).state.data).toEqual({});
   });
+
+  it('leaves the retained data out of state on ?data=0', async () => {
+    // A Companion poll wants playback, not every data source's rows each second.
+    await app.inject({ method: 'POST', url: `${base}/update`, payload: { name: 'Heavy' } });
+    const res = await app.inject({ method: 'GET', url: `${base}/state?data=0` });
+    expect((res.json() as { state: { data: Record<string, unknown> } }).state.data).toEqual({});
+  });
+});
+
+describe('table verbs (CYCLE.md)', () => {
+  const base = '/api/control/demo-1iixd/l3rd-name-2a94g';
+
+  it('accepts prev, over GET and POST', async () => {
+    for (const method of ['GET', 'POST'] as const) {
+      const res = await app.inject({ method, url: `${base}/prev` });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ ok: true, verb: 'prev' });
+    }
+  });
+
+  it('aims next and prev at a table, from the query or a POST body', async () => {
+    const q = await app.inject({ method: 'GET', url: `${base}/next?table=standings` });
+    expect(q.json()).toMatchObject({ verb: 'next', table: 'standings' });
+    const b = await app.inject({ method: 'POST', url: `${base}/prev`, payload: { table: 'east' } });
+    expect(b.json()).toMatchObject({ verb: 'prev', table: 'east' });
+  });
+
+  it('leaves next unaimed when no table is given, as it always was', async () => {
+    const res = await app.inject({ method: 'GET', url: `${base}/next` });
+    expect(res.json()).not.toHaveProperty('table');
+  });
+
+  it('never aims play or stop, whatever the query says', async () => {
+    const res = await app.inject({ method: 'GET', url: `${base}/play?table=standings` });
+    expect(res.json()).not.toHaveProperty('table');
+  });
+
+  it('goes to a page by number or by name', async () => {
+    const n = await app.inject({ method: 'GET', url: `${base}/page?n=3` });
+    expect(n.statusCode).toBe(200);
+    expect(n.json()).toMatchObject({ verb: 'page', n: 3 });
+
+    const named = await app.inject({ method: 'POST', url: `${base}/page`, payload: { name: ' C ', table: 'standings' } });
+    expect(named.json()).toMatchObject({ verb: 'page', name: 'C', table: 'standings' });
+  });
+
+  it('refuses a page call with neither, or both, or a bad number', async () => {
+    for (const url of [`${base}/page`, `${base}/page?n=2&name=C`, `${base}/page?n=0`, `${base}/page?n=1.5`, `${base}/page?n=x`]) {
+      const res = await app.inject({ method: 'GET', url });
+      expect(res.statusCode, url).toBe(400);
+    }
+  });
+
+  it('does not read the API key as a page name', async () => {
+    // `key` is the API key on every control URL; a page is named with `name`.
+    const res = await app.inject({ method: 'GET', url: `${base}/page?key=C` });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('holds and resumes a cycle, and refuses anything else', async () => {
+    const hold = await app.inject({ method: 'GET', url: `${base}/cycle?state=hold&table=standings` });
+    expect(hold.json()).toMatchObject({ verb: 'cycle', state: 'hold', table: 'standings' });
+    const resume = await app.inject({ method: 'POST', url: `${base}/cycle`, payload: { state: 'resume' } });
+    expect(resume.json()).toMatchObject({ verb: 'cycle', state: 'resume' });
+    const bad = await app.inject({ method: 'GET', url: `${base}/cycle?state=pause` });
+    expect(bad.statusCode).toBe(400);
+  });
+
+  it('404s the table verbs for a channel that does not exist', async () => {
+    for (const url of ['/api/control/demo-1iixd/nope/page?n=1', '/api/control/demo-1iixd/nope/cycle?state=hold']) {
+      const res = await app.inject({ method: 'GET', url });
+      expect(res.statusCode, url).toBe(404);
+    }
+  });
 });
 
 describe('operator control page', () => {
@@ -354,6 +428,19 @@ describe('control page — source-fed fields', () => {
     expect(res.body).toContain('datasets:');
     expect(res.body).toContain('dataKey:');
   });
+  it('lists the fetched sources a graphic reads, for the Data block (Wave 5)', async () => {
+    const sourcesOf = (body: string) => {
+      const match = /sources: (\[.*?\]),\n/s.exec(body);
+      return match ? (JSON.parse(match[1]!) as Array<Record<string, unknown>>) : null;
+    };
+    const bug = await app.inject({ method: 'GET', url: '/control/demo-1iixd/screen-bug-8vctv' });
+    expect(sourcesOf(bug.body)).toEqual([{ id: 'wx-current', name: expect.any(String) }]);
+    expect(bug.body).toContain('id="sources"');
+
+    // A manual table is typed, not fetched: nothing to watch, no Data block.
+    const standings = await app.inject({ method: 'GET', url: '/control/demo-1iixd/standings-72q2s' });
+    expect(sourcesOf(standings.body)).toEqual([]);
+  });
 });
 
 describe('editor hosting', () => {
@@ -440,5 +527,98 @@ describe('output page', () => {
   it('blocks path traversal in asset URLs', async () => {
     const res = await app.inject({ method: 'GET', url: '/assets/demo-1iixd/../../../etc/passwd' });
     expect(res.statusCode).toBeGreaterThanOrEqual(400);
+  });
+});
+
+describe('API key status with no key set', () => {
+  it('says there is no key, and that there is nothing to sign in to', async () => {
+    expect((await app.inject({ method: 'GET', url: '/api/auth' })).json()).toEqual({ keyRequired: false, signedIn: false });
+    const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { key: 'x' } });
+    expect(login.statusCode).toBe(409);
+    expect(login.json()).toMatchObject({ code: 'error.noApiKey' });
+  });
+
+  it('shows the chip as a label, with no sign-in form', async () => {
+    const portal = await app.inject({ method: 'GET', url: '/' });
+    expect(portal.body).toContain('class="auth-chip off"');
+    expect(portal.body).not.toContain('id="auth-form"');
+  });
+});
+
+describe('favicon', () => {
+  it('serves the B as SVG, at both addresses a browser asks', async () => {
+    for (const url of ['/favicon.svg', '/favicon.ico']) {
+      const res = await app.inject({ method: 'GET', url });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toContain('image/svg+xml');
+      expect(res.body).toContain('#58a6ff');
+    }
+  });
+
+  it('is linked from the portal, and not from the output page', async () => {
+    expect((await app.inject({ method: 'GET', url: '/' })).body).toContain('href="/favicon.svg"');
+    expect((await app.inject({ method: 'GET', url: '/play/demo-1iixd/l3rd-name-2a94g' })).body).not.toContain('favicon');
+  });
+});
+
+describe('project mode (Wave 6)', () => {
+  const BASE = '/api/projects/demo-1iixd/mode';
+
+  it('starts with none, sets one, and says so to a page loaded afterwards', async () => {
+    expect((await app.inject({ method: 'GET', url: BASE })).json()).toMatchObject({ mode: '' });
+    const set = await app.inject({ method: 'POST', url: `${BASE}/set`, payload: { value: 'first-alert' } });
+    expect(set.statusCode).toBe(200);
+    expect(set.json()).toMatchObject({ ok: true, mode: 'first-alert' });
+    expect((await app.inject({ method: 'GET', url: BASE })).json()).toMatchObject({ mode: 'first-alert' });
+    const play = await app.inject({ method: 'GET', url: '/play/demo-1iixd/l3rd-name-2a94g' });
+    expect(play.body).toContain('mode: "first-alert"');
+
+    const cleared = await app.inject({ method: 'GET', url: `${BASE}/set?value=` });
+    expect(cleared.json()).toMatchObject({ mode: '' });
+  });
+
+  it('refuses a mode that is not a word on a button', async () => {
+    for (const value of ['x'.repeat(49), 'bad<script>', 'line\nbreak']) {
+      expect((await app.inject({ method: 'POST', url: `${BASE}/set`, payload: { value } })).statusCode, value).toBe(400);
+    }
+  });
+
+  it('pushes the mode to open graphics as an update', async () => {
+    const ws = await app.injectWS('/ws/control');
+    const messages: Array<Record<string, unknown>> = [];
+    ws.on('message', (raw) => messages.push(JSON.parse(String(raw)) as Record<string, unknown>));
+    ws.send(JSON.stringify({ type: 'subscribe', channel: 'demo-1iixd/l3rd-name-2a94g', role: 'renderer' }));
+    await new Promise((r) => setTimeout(r, 50));
+    const res = await app.inject({ method: 'POST', url: `${BASE}/set`, payload: { value: 'election night' } });
+    expect(res.json().delivered).toBeGreaterThanOrEqual(1);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(messages).toContainEqual(
+      expect.objectContaining({ type: 'command', command: expect.objectContaining({ verb: 'update', data: { $mode: 'election night' } }) }),
+    );
+    ws.terminate();
+    await app.inject({ method: 'POST', url: `${BASE}/set`, payload: { value: '' } });
+  });
+
+  it('stores the spelling the rules use, and keeps concurrent sets in order', async () => {
+    const { canonicalMode } = await import('../mode.js');
+    expect(canonicalMode('FIRST-ALERT', ['first-alert'])).toBe('first-alert');
+    expect(canonicalMode('storm', ['first-alert'])).toBe('storm');
+    const results = await Promise.all(
+      ['a', 'b', 'c', ''].map((value) => app.inject({ method: 'POST', url: `${BASE}/set`, payload: { value } })),
+    );
+    expect(results.map((r) => r.statusCode)).toEqual([200, 200, 200, 200]);
+    expect((await app.inject({ method: 'GET', url: BASE })).json().mode).toBe('');
+  });
+
+  it('lists the modes a project’s rules name', async () => {
+    const { projectModes } = await import('../mode.js');
+    const layer = (rules: unknown) => ({ id: 'b', type: 'shape', shape: 'rect', rules }) as never;
+    const project = {
+      compositions: [
+        { layers: [layer([{ when: [{ mode: true, cmp: 'eq', value: 'first-alert' }], show: true }])] },
+        { layers: [layer([{ when: [{ mode: true, cmp: 'in', value: 'storm, first-alert' }], color: 'red' }])] },
+      ],
+    } as never;
+    expect(projectModes(project)).toEqual(['first-alert', 'storm']);
   });
 });

@@ -23,6 +23,11 @@ import { SplitText } from 'gsap/SplitText';
 import {
   DATA_UPDATE_KEY,
   DEFAULT_CRAWL_SEPARATOR,
+  MODE_UPDATE_KEY,
+  transformSources,
+  transformsUseClock,
+  resolveRules,
+  type RuleContext,
   collectBindings,
   stepCount as schemaStepCount,
   type AnimatableProp,
@@ -33,9 +38,16 @@ import {
   type Ease,
   type Layer,
   type PlaybackState,
+  type TableCycle,
 } from '@breeze/schema';
 
 import { ClockTicker } from './clock.js';
+import {
+  cycleEnabled,
+  cyclePosition,
+  pageDurations,
+  type CycleAnchor,
+} from './cycle.js';
 import { resolveEase } from './ease.js';
 import { applyTextFit, type FitResult } from './fit.js';
 import { CrawlLoop, crawlItemsFrom, type CrawlAnimator } from './crawl.js';
@@ -46,8 +58,10 @@ import {
   type LayerNodes,
 } from './dom.js';
 import type { ExpandWarning } from './expand.js';
+import { playerOf, stopMediaIn } from './media.js';
 import { applyMaskReference, createMask, createMaskHost, type MaskHandle } from './mask.js';
 import { buildPlan, defaultFor, layerMotion, nextHoldAfter, type TimelinePlan } from './plan.js';
+import { applyRuleResult, setRuleBaseSrc } from './rules.js';
 import { injectRuntimeStyles } from './styles.js';
 import {
   TableBlock,
@@ -86,6 +100,67 @@ interface TableHandle {
   cellTrack: gsap.core.Timeline | null;
   /** The row set changed — the track no longer targets what is on screen. */
   stale: boolean;
+  /** Self-paging state; null for a table with no `cycle`. */
+  cycle: CycleState | null;
+  /**
+   * The table this one follows (CYCLE.md, Wave 4), resolved once after the
+   * build; null when it follows nothing or its leader could not be found.
+   */
+  leader: string | null;
+}
+
+/**
+ * Where a self-paging table is in its cycle.
+ *
+ * `anchor` is null until the graphic first reaches a hold: cycling runs only
+ * while a graphic holds on air, and anchoring at that moment is what makes the
+ * first page an audience sees the first page.
+ */
+interface CycleState {
+  config: TableCycle;
+  anchor: CycleAnchor | null;
+  /** Frozen by an operator. The anchor is kept; `resume` re-anchors. */
+  held: boolean;
+  /** A `hold` / `continue` cycle that has finished its last page. */
+  done: boolean;
+  /**
+   * The page on screen and when it arrived, so a data change can re-anchor on
+   * the page the audience is looking at without restarting its time.
+   */
+  shown: CycleAnchor;
+}
+
+/**
+ * One table's paging, as a control surface sees it.
+ *
+ * `table` is the address a caller aims commands with — the binding, or
+ * `<mount>.<binding>` inside a nested composition, or the layer id for a table
+ * with no binding — so what a panel reads back is exactly what it can send.
+ */
+export interface TableState {
+  table: string;
+  layerId: string;
+  page: number;
+  pageCount: number;
+  rows: number;
+  /** The page's name (see `TableCycle.keyColumn`), or null when it has none. */
+  key: string | null;
+  /** A cycle is configured — whether hold and resume mean anything here. */
+  hasCycle: boolean;
+  /** Actually turning pages right now: enabled, more than one page, on air, not held. */
+  cycling: boolean;
+  held: boolean;
+  /** Seconds to the next turn while cycling; null otherwise. */
+  secondsLeft: number | null;
+  group?: string;
+  /** The address of the table this one follows, when it follows one. */
+  follows?: string;
+}
+
+/** Where `goToPage` should go: a 1-based page number, or a page key. */
+export interface PageTarget {
+  n?: number;
+  key?: string;
 }
 
 /** A split text layer and the reveal built over its pieces. */
@@ -128,7 +203,9 @@ export type RuntimeEvent =
   | 'stop'
   | 'finished'
   | 'update'
-  | 'timeupdate';
+  | 'timeupdate'
+  /** A table turned a page — by its cycle or by a command. */
+  | 'page';
 
 export type RuntimeListener = (payload: RuntimePayload) => void;
 
@@ -138,6 +215,9 @@ export interface RuntimePayload {
   step: number;
   data: BindingData;
 }
+
+/** How long before a cycle's turn its next page's media is fetched (Wave 8). */
+const MEDIA_PRELOAD_LEAD_MS = 4000;
 
 export interface RuntimeOptions {
   container: HTMLElement;
@@ -149,6 +229,18 @@ export interface RuntimeOptions {
   resolveComposition?: (id: string) => Composition | undefined;
   /** Maps `assets/foo.png` to a loadable URL. Defaults to identity. */
   resolveAsset?: (src: string) => string;
+  /**
+   * Where hls.js can be loaded from, for a media layer playing an HLS stream
+   * in a browser that cannot play HLS itself (Wave 8). Absent: such a stream
+   * fails, and the layer does what its `onError` says.
+   */
+  hlsScript?: string;
+  /**
+   * Play media layers while the graphic is off air too. The editor's stage
+   * wants the picture while authoring; an output must not hold camera
+   * connections — or make sound — for a graphic nobody has taken to air.
+   */
+  mediaWhenIdle?: boolean;
   /** Initial dynamic-field values. */
   data?: BindingData;
   /** 'none' renders 1:1 (playout). 'contain' scales the stage into the container (editor). */
@@ -219,6 +311,8 @@ export class BreezeRuntime {
   private readonly container: HTMLElement;
   private readonly doc: Document;
   private readonly resolveAsset: (src: string) => string;
+  private readonly hlsScript: string | undefined;
+  private readonly mediaWhenIdle: boolean;
   private readonly scaleMode: 'none' | 'contain';
   /** Built for one paused frame — see `RuntimeOptions.still`. */
   readonly still: boolean;
@@ -256,9 +350,38 @@ export class BreezeRuntime {
   /** Last DataSet seen per source id, so a late-built table can catch up. */
   private datasets = new Map<string, DataSet>();
 
-  private state: PlaybackState = 'idle';
+  private stateValue: PlaybackState = 'idle';
+  /**
+   * Every change of playback state goes through here, so live media follows
+   * the graphic on and off air (Wave 8) without each transition having to
+   * remember to tell it.
+   */
+  private get state(): PlaybackState {
+    return this.stateValue;
+  }
+  private set state(next: PlaybackState) {
+    const was = this.mediaLive();
+    this.stateValue = next;
+    if (this.mediaLive() !== was) this.syncMediaLive();
+  }
   private pendingHold: number | null = null;
+  /**
+   * One timer for every self-paging table, armed for the soonest turn.
+   *
+   * Not a ticker: a cycle's next turn is known exactly, so waking every frame to
+   * ask would be sixty questions a second with one answer. Null whenever the
+   * graphic is not holding, which is the only state cycles run in.
+   */
+  private cycleTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Warms the next page's media ahead of a cycle's turn (Wave 8). */
+  private preloadTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Consecutive `skip`s per table since anything last played. */
+  private readonly mediaSkips = new Map<string, number>();
+  /** Re-runs `date` transforms as the clock moves — see `startClockTransforms`. */
+  private transformTimer: ReturnType<typeof setInterval> | null = null;
   private data: BindingData = {};
+  /** The channel's mode (Wave 6) — what `mode` rule conditions read. '' is none. */
+  private modeValue = '';
   private destroyed = false;
 
   constructor(options: RuntimeOptions) {
@@ -268,10 +391,15 @@ export class BreezeRuntime {
     this.doc = options.container.ownerDocument;
     this.composition = options.composition;
     this.resolveAsset = options.resolveAsset ?? ((s) => s);
+    this.hlsScript = options.hlsScript;
+    this.mediaWhenIdle = options.mediaWhenIdle === true;
     this.scaleMode = options.scaleMode ?? 'none';
     this.still = options.still ?? false;
     this.plan = buildPlan(options.composition, { resolve: options.resolveComposition });
     this.data = { ...(options.data ?? {}) };
+    // Read before `build()`, like the datasets below: a cell rule on the mode is
+    // evaluated as its first row is written.
+    if (MODE_UPDATE_KEY in this.data) this.modeValue = String(this.data[MODE_UPDATE_KEY] ?? '');
 
     /*
      * Datasets are unpacked from the boot payload *before* `build()`, not left
@@ -292,6 +420,8 @@ export class BreezeRuntime {
 
     this.build();
     if (Object.keys(this.data).length) this.update(this.data, { silent: true });
+    else this.refreshRules();
+    this.startClockTransforms();
     this.emit('ready');
 
     if (options.autoPlay) this.play();
@@ -315,7 +445,13 @@ export class BreezeRuntime {
     this.stage.className = 'bz-stage';
     this.root.appendChild(this.stage);
 
-    const ctx: BuildContext = { doc: this.doc, resolveAsset: this.resolveAsset, still: this.still };
+    const ctx: BuildContext = {
+      doc: this.doc,
+      resolveAsset: this.resolveAsset,
+      still: this.still,
+      ...(this.hlsScript ? { hlsScript: this.hlsScript } : {}),
+      isLive: () => this.mediaLive(),
+    };
 
     /**
      * Instances arrive parent-before-child from the expander, so appending to
@@ -480,8 +616,14 @@ export class BreezeRuntime {
         ctx,
         animator: gsap as unknown as TableAnimator,
         layerId: id,
+        onRowsBuilt: () => this.settleCells(id),
+        ruleContext: () => this.ruleContext(node.instance),
+        transformSource: (sourceId) => this.datasets.get(sourceId),
+        onMediaFail: (rowKey) => this.skipFailedMedia(id, rowKey),
+        onMediaPlay: () => this.mediaPlayed(id),
       });
       const window = this.plan.windows.find((w) => w.layerId === id);
+      const cycle = node.layer.cycle;
       this.tables.set(id, {
         block,
         anim: resolveRowAnim(node.layer.rowAnim),
@@ -489,8 +631,18 @@ export class BreezeRuntime {
         track: null,
         cellTrack: null,
         stale: false,
+        cycle: cycleEnabled(cycle)
+          ? { config: cycle, anchor: null, held: false, done: false, shown: { page: 0, at: 0 } }
+          : null,
+        leader: null,
       });
     }
+
+    // Followers find their leaders once every table exists, and take their
+    // first key now — before the timeline is built over their rows, and before
+    // the first paint, so a tile never shows every city for a frame.
+    this.resolveFollowers();
+    this.syncFollowers({ instant: true });
 
     /*
      * Split, then fit what is actually rendered.
@@ -897,6 +1049,53 @@ export class BreezeRuntime {
     return this.datasets.get(sourceId);
   }
 
+  /* --------------------------------------------------------------- rules */
+
+  /** The channel's mode, as last set. '' is none. */
+  get mode(): string {
+    return this.modeValue;
+  }
+
+  /**
+   * Set the mode on this page alone — host scripting and tests. On air the
+   * server sets it for every graphic in the project (`/api/projects/:id/mode`).
+   */
+  setMode(mode: string): void {
+    this.update({ [MODE_UPDATE_KEY]: mode });
+  }
+
+  /**
+   * What rules read. A field is read through a nested mount's overrides
+   * first, so a rule inside the AWAY badge sees AWAY's value.
+   */
+  private ruleContext(instance?: { id: string; overrides: Record<string, unknown> }): Omit<RuleContext, 'row'> {
+    // The mount this instance sits in, for a live `<mount>.<binding>` value —
+    // which is what the operator sets for one mount, and must win over the
+    // mount's authored override just as it does on screen.
+    let mount = '';
+    if (instance) for (const m of this.mountIds()) if (instance.id.startsWith(`${m}/`) && m.length > mount.length) mount = m;
+    const overrides = instance?.overrides ?? {};
+    return {
+      source: (id) => this.datasets.get(id),
+      field: (name) => {
+        const addressed = mount ? `${mount}.${name}` : '';
+        if (addressed && addressed in this.data) return this.data[addressed];
+        return name in overrides ? overrides[name] : this.data[name];
+      },
+      mode: this.modeValue,
+    };
+  }
+
+  /** Re-evaluate every layer and cell rule — after data, a field or the mode changed. */
+  private refreshRules(): void {
+    for (const node of this.nodes.values()) {
+      const rules = node.layer.rules;
+      if (!rules?.length) continue;
+      applyRuleResult(node, resolveRules(rules, this.ruleContext(node.instance)), this.resolveAsset);
+    }
+    for (const handle of this.tables.values()) handle.block.reapplyRules();
+  }
+
   /** Source ids this runtime has received data for. */
   get dataSourceIds(): string[] {
     return [...this.datasets.keys()];
@@ -919,8 +1118,13 @@ export class BreezeRuntime {
     this.datasets.set(sourceId, data);
     for (const [id, handle] of this.tables) {
       const layer = this.nodes.get(id)?.layer;
-      if (layer?.type !== 'table' || layer.source !== sourceId) continue;
-      if (handle.block.setDataSet(data)) handle.stale = true;
+      if (layer?.type !== 'table') continue;
+      if (layer.source === sourceId) {
+        if (handle.block.setDataSet(data)) handle.stale = true;
+      } else if (transformSources(layer.transforms).includes(sourceId)) {
+        // A lookup or union reads this source: same rows of its own, new result.
+        if (handle.block.refreshTransforms()) handle.stale = true;
+      }
     }
 
     /*
@@ -935,9 +1139,61 @@ export class BreezeRuntime {
      */
     for (const [id, node] of this.nodes) {
       const layer = node.layer;
-      if (layer.type !== 'crawl' || layer.source !== sourceId || !layer.column) continue;
-      this.crawlFor(id)?.setItems(crawlItemsFrom(data, layer));
+      if (layer.type !== 'crawl' || !layer.source || !layer.column || this.crawlPinned(node)) continue;
+      if (layer.source !== sourceId && !transformSources(layer.transforms).includes(sourceId)) continue;
+      const own = this.datasets.get(layer.source);
+      if (own) this.crawlFor(id)?.setItems(crawlItemsFrom(own, layer, this.transformContext()));
     }
+  }
+
+  /**
+   * A crawl whose mount overrides its binding says what the override says —
+   * `crawlFor` builds it that way, and neither a feed nor the clock replaces it.
+   */
+  private crawlPinned(node: LayerNodes): boolean {
+    const layer = node.layer;
+    return 'binding' in layer && layer.binding !== undefined && layer.binding in node.instance.overrides;
+  }
+
+  /** What transforms read besides their rows: now, and the other sources. */
+  private transformContext(): { now: Date; source: (id: string) => DataSet | undefined } {
+    return { now: new Date(), source: (id) => this.datasets.get(id) };
+  }
+
+  /**
+   * Re-run the clock-bound transforms (`date`) as time passes — "today" has to
+   * become tomorrow at midnight on a graphic that has been on air all day, and
+   * "upcoming" has to lose the 3 pm game at 3 pm. Every thirty seconds, and
+   * only when a table or crawl in this graphic has one.
+   */
+  private startClockTransforms(): void {
+    // A still is one frame: its transforms ran against now when it was built.
+    if (this.still) return;
+    const clocked = [...this.nodes.values()].some(
+      (n) => (n.layer.type === 'table' || n.layer.type === 'crawl') && transformsUseClock(n.layer.transforms),
+    );
+    if (!clocked) return;
+    this.transformTimer = setInterval(() => {
+      if (this.destroyed) return;
+      let changed = false;
+      for (const [id, handle] of this.tables) {
+        const layer = this.nodes.get(id)?.layer;
+        if (layer?.type !== 'table' || !transformsUseClock(layer.transforms)) continue;
+        if (handle.block.refreshTransforms()) {
+          handle.stale = true;
+          changed = true;
+        }
+      }
+      for (const [id, node] of this.nodes) {
+        const layer = node.layer;
+        if (layer.type !== 'crawl' || !layer.source || !layer.column || !transformsUseClock(layer.transforms)) continue;
+        if (this.crawlPinned(node)) continue;
+        const own = this.datasets.get(layer.source);
+        if (own) this.crawlFor(id)?.setItems(crawlItemsFrom(own, layer, this.transformContext()));
+      }
+      // The same follow-through a data push gets: followers, tracks, cycles, rules.
+      if (changed) this.update({}, { silent: true });
+    }, 30_000);
   }
 
   private proxyFor(layerId: string): FilterProxy {
@@ -1119,6 +1375,7 @@ export class BreezeRuntime {
       this.tl.time(holdAt, false);
       this.videos.tick(holdAt);
       this.sprites.tick(holdAt);
+      this.startCycles();
       this.emit('hold');
       return;
     }
@@ -1130,6 +1387,7 @@ export class BreezeRuntime {
 
   private onComplete(): void {
     this.state = 'finished';
+    this.stopCycleTimer();
     this.stopCrawls();
     this.videos.pause();
     this.emit('finished');
@@ -1177,10 +1435,21 @@ export class BreezeRuntime {
 
     const atEnd = this.tl.time() >= this.tl.duration() - 1e-4;
     if (this.state === 'finished' || this.state === 'idle' || this.state === 'playing-out' || atEnd) {
+      /*
+       * A fresh run of a self-paging graphic starts on its first page, not on
+       * whichever page its last run was cycling through when it went off air.
+       * Not from `idle`: that is either a graphic that has never run or one a
+       * CLEAR already reset — and in both cases any page it is on now was
+       * chosen by an operator for it to open on.
+       */
+      if (this.state !== 'idle') this.resetCycles();
       this.tl.pause();
       this.renderAt(0);
+      // Pages reset above rebuilt rows the reveal no longer targets.
+      this.refreshTableTracks();
       this.applyVisibilityWindows(0);
     }
+    this.stopCycleTimer();
     this.pendingHold = nextHoldAfter(this.plan, this.tl.time());
     this.state = 'playing-in';
     this.startCrawls();
@@ -1209,6 +1478,7 @@ export class BreezeRuntime {
      */
     if (this.state === 'idle' || this.state === 'finished' || this.state === 'playing-out') return;
 
+    this.stopCycleTimer();
     this.pendingHold = null;
     this.state = 'playing-out';
     this.videos.play(this.tl.time());
@@ -1217,9 +1487,21 @@ export class BreezeRuntime {
     this.emit('stop');
   }
 
-  /** Advance to the next STOP marker; behaves like stop() when none remain. */
-  next(): void {
+  /**
+   * Advance to the next STOP marker; behaves like stop() when none remain.
+   *
+   * With `table`, only that table (and its cycle group) turns a page, and the
+   * timeline is never touched — a caller aiming at a table has asked for a page,
+   * and a single-page table answering by running the outro would be a very
+   * surprising way to learn it had only one.
+   */
+  next(table?: string): void {
     if (this.destroyed) return;
+
+    if (table !== undefined) {
+      if (this.turnTables(this.tablesFor(table), +1)) this.afterPageCommand();
+      return;
+    }
 
     /*
      * A table with more rows than fit consumes NEXT before the timeline sees it.
@@ -1232,15 +1514,119 @@ export class BreezeRuntime {
      * mid-animation with no way forward.
      */
     if (this.state === 'holding' && this.advanceTables()) {
-      this.emit('update');
+      this.afterPageCommand();
       return;
     }
 
+    this.advanceTimeline();
+  }
+
+  /**
+   * The mirror of `next()`: back a page while holding, otherwise back to the
+   * previous hold.
+   *
+   * The previous hold is reached by a cut, not by playing the timeline
+   * backwards. An intro run in reverse is not a graphic anyone designed, and
+   * the operator pressing PREV wants the earlier state on screen, not a
+   * rewind effect. With no earlier hold it does nothing — PREV must never be
+   * the button that takes a graphic off air.
+   */
+  prev(table?: string): void {
+    if (this.destroyed) return;
+
+    if (table !== undefined) {
+      if (this.turnTables(this.tablesFor(table), -1)) this.afterPageCommand();
+      return;
+    }
+
+    if (this.state === 'holding' && this.turnTables([...this.tables.keys()], -1)) {
+      this.afterPageCommand();
+      return;
+    }
+
+    if (this.state !== 'holding' && this.state !== 'playing-in') return;
+    const now = this.tl.time();
+    // Strictly before where we are — from a hold, that is the one before it.
+    const earlier = this.plan.holds.filter((h) => h < now - 1e-3);
+    const target = earlier.length ? earlier[earlier.length - 1]! : null;
+    if (target === null) return;
+
+    this.stopCycleTimer();
+    this.pendingHold = null;
+    this.tl.pause();
+    this.renderAt(target);
+    this.applyVisibilityWindows(target);
+    this.videos.syncTo(target);
+    this.sprites.syncTo(target);
+    this.state = 'holding';
+    this.startCycles();
+    this.emit('hold');
+  }
+
+  /**
+   * Go to a page — 1-based `n`, or the page whose key matches `key`.
+   *
+   * Works in any state. Choosing Group C before rolling a graphic in is a real
+   * operator move, and the cycle then anchors on the page it finds itself on,
+   * so the graphic opens on Group C. True when any table moved.
+   */
+  goToPage(target: PageTarget, table?: string): boolean {
+    if (this.destroyed) return false;
+    const animate = this.state === 'holding';
+    let moved = false;
+    for (const id of this.tablesFor(table)) {
+      const handle = this.tables.get(id)!;
+      const block = handle.block;
+      let page = -1;
+      if (target.key !== undefined) page = block.findPage(target.key, handle.cycle?.config.keyColumn);
+      else if (target.n !== undefined && Number.isFinite(target.n)) page = Math.floor(target.n) - 1;
+      if (page < 0 || page >= block.pageCount) continue;
+      if (block.turnTo(page, { animate })) {
+        moved = true;
+        if (!animate) handle.stale = true;
+      }
+      this.anchorCycle(handle);
+    }
+    if (moved) this.afterPageCommand();
+    else this.scheduleCycles();
+    return moved;
+  }
+
+  /**
+   * Freeze self-paging tables on the page they show (`hold`), or set them going
+   * again from that page with its full time (`resume`).
+   *
+   * A hold survives the graphic leaving air and coming back: an operator who
+   * froze Group C for an interview meant it until they say otherwise, not
+   * until the next time somebody pressed PLAY.
+   */
+  setCycle(state: 'hold' | 'resume', table?: string): boolean {
+    if (this.destroyed) return false;
+    let changed = false;
+    for (const id of this.tablesFor(table)) {
+      const handle = this.tables.get(id)!;
+      if (!handle.cycle) continue;
+      const held = state === 'hold';
+      if (handle.cycle.held !== held) changed = true;
+      handle.cycle.held = held;
+      if (!held) {
+        handle.cycle.done = false;
+        this.anchorCycle(handle);
+      }
+    }
+    this.scheduleCycles();
+    if (changed) this.emit('page');
+    return changed;
+  }
+
+  /** Everything `next()` does to the timeline, without the table step. */
+  private advanceTimeline(): void {
     const upcoming = nextHoldAfter(this.plan, this.tl.time());
     if (upcoming === null) {
       this.stop();
       return;
     }
+    this.stopCycleTimer();
     this.pendingHold = upcoming;
     this.state = 'playing-in';
     this.startCrawls();
@@ -1265,8 +1651,11 @@ export class BreezeRuntime {
       this.tl.pause();
       this.renderAt(0);
       this.applyVisibilityWindows(0);
+      this.resetCycles();
+      this.refreshTableTracks();
     }
 
+    this.stopCycleTimer();
     this.pendingHold = null;
     this.state = 'playing-in';
     this.startCrawls();
@@ -1282,6 +1671,8 @@ export class BreezeRuntime {
     this.pendingHold = null;
     this.tl.pause();
     this.renderAt(0);
+    this.resetCycles();
+    this.refreshTableTracks();
     this.stopCrawls();
     this.videos.syncTo(0);
     this.posters.syncTo(0);
@@ -1307,6 +1698,7 @@ export class BreezeRuntime {
   update(data: BindingData, opts: { silent?: boolean } = {}): void {
     if (this.destroyed) return;
     this.data = { ...this.data, ...data };
+    if (MODE_UPDATE_KEY in data) this.modeValue = String(data[MODE_UPDATE_KEY] ?? '');
 
     /*
      * Data-source pushes ride the same verb as operator field edits — one
@@ -1365,8 +1757,13 @@ export class BreezeRuntime {
       this.applyBinding(node, data[layer.binding]);
     }
 
+    this.refreshRules();
     this.refitAfterTextChange();
+    // New data can rename the page a leader is on (the rotation's third city
+    // is now Yuma), so followers are re-keyed before the tracks are refreshed.
+    this.syncFollowers({ animate: this.state === 'holding' });
     this.refreshTableTracks();
+    this.reconcileCycles();
     if (!opts.silent) this.emit('update');
   }
 
@@ -1439,7 +1836,12 @@ export class BreezeRuntime {
           this.posters.setSrc(node.instance.id, this.resolveAsset(value));
           break;
         }
-        if (node.media) node.media.src = this.resolveAsset(value);
+        // Under an image rule, the field's new picture waits for the rule to end.
+        if (node.media && !setRuleBaseSrc(node.el, this.resolveAsset(value))) node.media.src = this.resolveAsset(value);
+        break;
+      case 'media':
+        // A URL typed on the control panel; empty stops the layer.
+        node.mediaPlayer?.show(typeof value === 'string' ? value : value == null ? '' : String(value));
         break;
       case 'crawl': {
         // Queued, not applied: the loop swaps it in at the seam so the ticker
@@ -1546,11 +1948,566 @@ export class BreezeRuntime {
    * step would show page 2 beside page 1.
    */
   private advanceTables(): boolean {
-    let advanced = false;
-    for (const handle of this.tables.values()) {
-      if (handle.block.nextPage()) advanced = true;
+    return this.turnTables([...this.tables.keys()], +1);
+  }
+
+  /**
+   * Turn the given tables one page forward or back. True when any had a page to
+   * turn to. Animated only on air — a page chosen while idle or mid-intro is a
+   * setup move, not something an audience watches.
+   */
+  private turnTables(ids: string[], step: 1 | -1): boolean {
+    const animate = this.state === 'holding';
+    let turned = false;
+    for (const id of ids) {
+      const handle = this.tables.get(id);
+      if (!handle) continue;
+      const block = handle.block;
+      const ok = step > 0 ? block.nextPage({ animate }) : block.prevPage({ animate });
+      if (!ok) continue;
+      turned = true;
+      // Off air the rows were rebuilt with no motion, and the intro's reveal
+      // still targets the old ones; `afterPageCommand` refills it.
+      if (!animate) handle.stale = true;
+      // An operator's turn restarts that page's full time; `done` clears so a
+      // round-up stepped back from its last page carries on from there.
+      if (handle.cycle) handle.cycle.done = false;
+      this.anchorCycle(handle);
     }
-    return advanced;
+    return turned;
+  }
+
+  /** After an operator page command: move followers, tell listeners, re-arm the timer. */
+  private afterPageCommand(): void {
+    this.syncFollowers({ animate: this.state === 'holding' });
+    this.refreshTableTracks();
+    this.scheduleCycles();
+    this.emit('page');
+    // Older listeners learned of a page turn through `update`, which is what
+    // `next()` emitted before pages had an event of their own.
+    this.emit('update');
+  }
+
+  /**
+   * The table layers a command is aimed at, with their cycle groups.
+   *
+   * No target is every table. Otherwise the target is matched, in order, as a
+   * binding name, as a `<mount>.<binding>` address, or as a layer id — the
+   * namespaced instance id or the authored id at the end of it. Nothing matching
+   * is an empty list: a command aimed at a table this graphic does not have
+   * does nothing, rather than guessing which one was meant.
+   *
+   * Then groups: a table that names a group brings the rest of the group with
+   * it, because the whole point of a group is that its members never disagree
+   * about the page.
+   */
+  private tablesFor(target: string | undefined): string[] {
+    if (target === undefined || target === '') return [...this.tables.keys()];
+
+    const matched = new Set<string>(this.matchTables(target));
+
+    const groups = new Set<string>();
+    for (const id of matched) {
+      const group = this.tables.get(id)?.cycle?.config.group;
+      if (group) groups.add(group);
+    }
+    if (groups.size) {
+      for (const [id, handle] of this.tables) {
+        const group = handle.cycle?.config.group;
+        if (group && groups.has(group)) matched.add(id);
+      }
+    }
+    return [...matched];
+  }
+
+  /** Tables a name matches — binding, `<mount>.<binding>`, or layer id — without group expansion. */
+  private matchTables(target: string): string[] {
+    const out: string[] = [];
+    for (const id of this.tables.keys()) {
+      const layer = this.nodes.get(id)?.layer;
+      if (!layer || layer.type !== 'table') continue;
+      if (
+        this.tableAddress(id) === target ||
+        (layer.binding !== undefined && layer.binding === target) ||
+        id === target ||
+        id.endsWith(`/${target}`)
+      ) {
+        out.push(id);
+      }
+    }
+    return out;
+  }
+
+  /* --------------------------------------------------------------- follow */
+
+  /**
+   * Find each follower's leader (CYCLE.md, Wave 4).
+   *
+   * Among several tables answering to the name, the one sharing the longest
+   * mount path with the follower wins: six copies of a tile composition each
+   * containing a `rotation` table should each follow their own. A chain that
+   * loops back on itself is broken where it closes, with a warning — two
+   * tables following each other would each filter on the other's key and
+   * settle on whichever happened to render first.
+   */
+  private resolveFollowers(): void {
+    const depth = (a: string, b: string): number => {
+      const pa = a.split('/');
+      const pb = b.split('/');
+      let n = 0;
+      while (n < pa.length - 1 && n < pb.length - 1 && pa[n] === pb[n]) n += 1;
+      return n;
+    };
+
+    for (const [id, handle] of this.tables) {
+      const layer = this.nodes.get(id)?.layer;
+      const follow = layer?.type === 'table' ? layer.follow : undefined;
+      if (!follow) continue;
+      const candidates = this.matchTables(follow.table).filter((c) => c !== id);
+      if (candidates.length === 0) {
+        console.warn(`[breeze] table ${id} follows "${follow.table}", which this graphic does not contain`);
+        continue;
+      }
+      candidates.sort((a, b) => depth(b, id) - depth(a, id));
+      if (candidates.length > 1 && depth(candidates[0]!, id) === depth(candidates[1]!, id)) {
+        console.warn(
+          `[breeze] table ${id} follows "${follow.table}", which names ${candidates.length} tables equally near; ` +
+            `it follows ${this.tableAddress(candidates[0]!)} — use a mount.binding address to choose`,
+        );
+      }
+      handle.leader = candidates[0]!;
+    }
+
+    for (const [id, handle] of this.tables) {
+      const seen = new Set<string>([id]);
+      let at = handle.leader;
+      while (at !== null) {
+        // Back to where the walk began: this table closes a loop, so it lets go.
+        if (at === id) {
+          console.warn(`[breeze] table ${id} is part of a follow loop; it will not follow`);
+          handle.leader = null;
+          break;
+        }
+        // A loop further up that this table only hangs off. Its own members
+        // break it when their turn comes; this table keeps its leader.
+        if (seen.has(at)) break;
+        seen.add(at);
+        at = this.tables.get(at)?.leader ?? null;
+      }
+    }
+  }
+
+  /**
+   * Re-key every follower from its leader's current page.
+   *
+   * Cheap and idempotent — a follower whose key has not changed does nothing
+   * — so it runs after anything that could have moved a leader: a command, a
+   * cycle turn, new data, a reset. Repeats until nothing changes, so a chain
+   * (a follower that is itself followed) settles in one call whatever order the
+   * tables were built in. True when any follower moved.
+   */
+  private syncFollowers(opts: { animate?: boolean; instant?: boolean }): boolean {
+    let any = false;
+    /** Followers with a running cycle that were re-keyed — anchored together below. */
+    const restarted = new Set<string>();
+    for (let pass = 0; pass <= this.tables.size; pass += 1) {
+      let changed = false;
+      for (const [id, handle] of this.tables) {
+        if (handle.leader === null) continue;
+        const layer = this.nodes.get(id)?.layer;
+        const follow = layer?.type === 'table' ? layer.follow : undefined;
+        const leader = this.tables.get(handle.leader);
+        if (!follow || !leader) continue;
+        const column =
+          follow.leaderColumn ??
+          leader.cycle?.config.keyColumn ??
+          (leader.block.hasColumn(follow.column) ? follow.column : undefined);
+        const key = leader.block.pageKey(leader.block.currentPage, column);
+        if (!handle.block.setFollow(follow.column, key, opts)) continue;
+        changed = true;
+        if (!opts.animate) handle.stale = true;
+        // Its own pages are new, so a cycling follower starts its time again.
+        if (handle.cycle) {
+          handle.cycle.done = false;
+          if (handle.cycle.anchor) restarted.add(id);
+        }
+      }
+      if (!changed) break;
+      any = true;
+    }
+
+    /*
+     * One timestamp for every restarted follower, and its cycle group comes
+     * with it: a group exists so its members never show different pages, and
+     * a follower sent back to page one beside a partner left on page two is
+     * exactly that. The partner goes back to page one and starts again too.
+     */
+    if (restarted.size) {
+      const at = Date.now();
+      const groups = new Set<string>();
+      for (const id of restarted) {
+        const group = this.tables.get(id)?.cycle?.config.group;
+        if (group) groups.add(group);
+      }
+      for (const [id, handle] of this.tables) {
+        const cycle = handle.cycle;
+        if (!cycle?.anchor) continue;
+        const inGroup = cycle.config.group !== undefined && groups.has(cycle.config.group);
+        if (!restarted.has(id) && !inGroup) continue;
+        if (!restarted.has(id) && handle.block.turnTo(0, opts.animate ? { animate: true } : {}) && !opts.animate) handle.stale = true;
+        cycle.done = false;
+        this.anchorCycle(handle, at);
+      }
+    }
+    return any;
+  }
+
+  /**
+   * What a caller should send to reach this table: the 0.72 field-address
+   * shape, so tables and override fields are aimed at the same way.
+   */
+  private tableAddress(id: string): string {
+    const layer = this.nodes.get(id)?.layer;
+    const binding = layer && layer.type === 'table' ? layer.binding : undefined;
+    if (!binding) return id;
+    let mount = '';
+    for (const m of this.mountIds()) {
+      if (id.startsWith(`${m}/`) && m.length > mount.length) mount = m;
+    }
+    return mount ? `${mount}.${binding}` : binding;
+  }
+
+  /* ---------------------------------------------------------------- cycle */
+
+  /** Anchor a table's cycle on the page it shows, from now. */
+  private anchorCycle(handle: TableHandle, at = Date.now()): void {
+    if (!handle.cycle) return;
+    const page = handle.block.currentPage;
+    handle.cycle.anchor = { page, at };
+    handle.cycle.shown = { page, at };
+  }
+
+  /**
+   * The graphic reached a hold: anchor every self-paging table that is not
+   * already anchored, all on one timestamp.
+   *
+   * One `Date.now()` for all of them is what keeps a group — and tables that
+   * merely share a dwell — turning on the same frame. Tables anchored before
+   * this hold (a page chosen while idle, a return to a hold via PREV) keep
+   * their page but restart its time, because the audience has only just
+   * started looking at it.
+   */
+  private startCycles(): void {
+    const at = Date.now();
+    for (const handle of this.tables.values()) {
+      if (!handle.cycle) continue;
+      handle.cycle.done = false;
+      this.anchorCycle(handle, at);
+    }
+    this.scheduleCycles();
+  }
+
+  /** Back to page one with no anchor — a fresh run, or a CLEAR. */
+  private resetCycles(): void {
+    this.stopCycleTimer();
+    for (const handle of this.tables.values()) {
+      if (!handle.cycle) continue;
+      if (handle.block.turnTo(0)) handle.stale = true;
+      handle.cycle.anchor = null;
+      handle.cycle.done = false;
+    }
+    // Tracks are refilled by the caller once the playhead is back at the
+    // start — `refreshTableTracks` only refills a reveal that is still ahead.
+    this.syncFollowers({});
+  }
+
+  private stopCycleTimer(): void {
+    if (this.cycleTimer !== null) clearTimeout(this.cycleTimer);
+    this.cycleTimer = null;
+    if (this.preloadTimer !== null) clearTimeout(this.preloadTimer);
+    this.preloadTimer = null;
+  }
+
+  /**
+   * A media cell failed on air and says `skip` (Wave 8): turn its table on to
+   * the next page, as NEXT would — only while that table's cycle is running,
+   * only for a row the audience is looking at, and not round and round a
+   * rotation where nothing plays: after a whole lap of failures it rests
+   * until something plays again.
+   */
+  private skipFailedMedia(tableId: string, rowKey: string): void {
+    const handle = this.tables.get(tableId);
+    if (!handle?.cycle || this.destroyed) return;
+    if (![...this.runningCycles()].some(([id]) => id === tableId)) return;
+    if (!handle.block.showsRow(rowKey)) return;
+    const skips = (this.mediaSkips.get(tableId) ?? 0) + 1;
+    if (skips > handle.block.pageCount) return;
+    this.mediaSkips.set(tableId, skips);
+    // A group turns together — a skip must not leave its members on different pages.
+    const group = handle.cycle.config.group;
+    const ids = group
+      ? [...this.tables].filter(([, h]) => h.cycle?.config.group === group).map(([id]) => id)
+      : [tableId];
+    // Asynchronously: the failure can arrive inside the render that built the row.
+    setTimeout(() => {
+      if (this.destroyed || !handle.block.showsRow(rowKey)) return;
+      if (![...this.runningCycles()].some(([id]) => id === tableId)) return;
+      if (this.turnTables(ids, +1)) this.afterPageCommand();
+    }, 0);
+  }
+
+  /** Whether media layers should be playing: the graphic is on air, or the host asked for always. */
+  private mediaLive(): boolean {
+    const s = this.stateValue;
+    return this.mediaWhenIdle || s === 'playing-in' || s === 'holding' || s === 'playing-out';
+  }
+
+  /** Tell every player the graphic went on or off air. */
+  private syncMediaLive(): void {
+    if (this.destroyed || !this.root) return;
+    const live = this.mediaLive();
+    this.root.querySelectorAll<HTMLElement>('.bz-media').forEach((host) => playerOf(host)?.setLive(live));
+  }
+
+  /** Something played: the next failure starts a fresh lap. */
+  private mediaPlayed(tableId: string): void {
+    this.mediaSkips.delete(tableId);
+  }
+
+  /** Durations for a cycling table's current pages. */
+  private cycleDurations(handle: TableHandle): number[] {
+    return pageDurations(handle.block.pages, handle.cycle!.config);
+  }
+
+  /** Tables whose cycle should be turning right now. */
+  private *runningCycles(): Iterable<[string, TableHandle]> {
+    if (this.state !== 'holding' || this.destroyed || this.still) return;
+    for (const entry of this.tables) {
+      const cycle = entry[1].cycle;
+      if (!cycle || cycle.held || cycle.done || !cycle.anchor) continue;
+      if (entry[1].block.pageCount <= 1 && (cycle.config.end ?? 'loop') === 'loop') continue;
+      yield entry;
+    }
+  }
+
+  /**
+   * Bring every running cycle to the page it should be on, then arm the timer
+   * for the soonest next turn.
+   *
+   * Idempotent, and called from everywhere that could have moved the answer —
+   * a timer firing, an operator command, data arriving — because asking "which
+   * page now?" of an anchor is cheap and always right, and trying to work out
+   * which of those callers actually needed it is neither.
+   */
+  private scheduleCycles(): void {
+    this.stopCycleTimer();
+    const now = Date.now();
+    let soonest: number | null = null;
+    let turned = false;
+    let finish = false;
+
+    /*
+     * Solved in passes until nothing turns. A leader's turn re-keys its
+     * followers, which re-anchors any that cycle and can change which tables
+     * are running at all (a city with one page, the next with three) — so
+     * their next turn is only known after the sync, and the timer must be
+     * armed from the second look, not the first.
+     *
+     * Within a pass, a table whose leader (or a leader further up) is turning
+     * is left alone: its anchor is about to be replaced, and turning it on the
+     * old one first would start a half-turn the sync then cuts off on air.
+     */
+    for (let pass = 0; pass <= this.tables.size + 1; pass += 1) {
+      soonest = null;
+      finish = false;
+      const running = [...this.runningCycles()];
+      const solved = running.map(([id, handle]) => {
+        const cycle = handle.cycle!;
+        const durations = this.cycleDurations(handle);
+        const end = cycle.config.end ?? 'loop';
+        return { id, handle, durations, end, pos: cyclePosition(durations, cycle.anchor!, now, end) };
+      });
+      const turning = new Set(solved.filter((s) => s.pos.page !== s.handle.block.currentPage).map((s) => s.id));
+      const ledByTurning = (handle: TableHandle): boolean => {
+        const seen = new Set<string>();
+        for (let at = handle.leader; at !== null && !seen.has(at); at = this.tables.get(at)?.leader ?? null) {
+          if (turning.has(at)) return true;
+          seen.add(at);
+        }
+        return false;
+      };
+
+      let movedThisPass = false;
+      for (const { id, handle, durations, pos } of solved) {
+        if (!turning.has(id) || ledByTurning(handle)) continue;
+        handle.block.turnTo(pos.page, { animate: true });
+        movedThisPass = true;
+        // The page began at its boundary, not when this timer happened to fire.
+        const began = pos.nextAt !== null ? pos.nextAt - durations[pos.page]! * 1000 : now;
+        handle.cycle!.shown = { page: pos.page, at: began };
+      }
+
+      if (movedThisPass) {
+        turned = true;
+        this.syncFollowers({ animate: true });
+        continue;
+      }
+
+      // Settled: nothing left to turn, so what was solved is what stands.
+      for (const { handle, end, pos } of solved) {
+        if (pos.done) {
+          handle.cycle!.done = true;
+          if (end === 'continue') finish = true;
+        }
+        if (pos.nextAt !== null && (soonest === null || pos.nextAt < soonest)) soonest = pos.nextAt;
+      }
+      break;
+    }
+
+    if (turned) this.emit('page');
+
+    /*
+     * A `continue` cycle that has shown its last page hands the graphic on.
+     * Deferred a tick so the listeners told about the last page are told first,
+     * and so `advanceTimeline` never runs inside the loop that decided to.
+     */
+    if (finish) {
+      setTimeout(() => {
+        if (!this.destroyed && this.state === 'holding') this.advanceTimeline();
+      }, 0);
+      return;
+    }
+
+    if (soonest !== null) this.armPreload(soonest, now);
+
+    if (soonest !== null) {
+      // A few ms past the boundary, so the position is unambiguously the new page.
+      const delay = Math.max(16, soonest - now + 5);
+      this.cycleTimer = setTimeout(() => {
+        this.cycleTimer = null;
+        this.scheduleCycles();
+      }, delay);
+    }
+  }
+
+  /**
+   * A few seconds before the soonest turn, fetch what the next page will show
+   * (Wave 8) — the snapshot is in the cache when the page arrives, and a
+   * camera that is down is already known to be, so `skip` passes it at once.
+   */
+  private armPreload(soonest: number, now: number): void {
+    const at = soonest - MEDIA_PRELOAD_LEAD_MS;
+    const fire = (): void => {
+      this.preloadTimer = null;
+      if (this.destroyed) return;
+      const when = Date.now();
+      for (const [, handle] of this.runningCycles()) {
+        if (!handle.block.hasMediaCells) continue;
+        const durations = this.cycleDurations(handle);
+        const end = handle.cycle!.config.end ?? 'loop';
+        const pos = cyclePosition(durations, handle.cycle!.anchor!, when, end);
+        if (pos.nextAt === null || pos.nextAt - when > MEDIA_PRELOAD_LEAD_MS + 50) continue;
+        const next = cyclePosition(durations, handle.cycle!.anchor!, pos.nextAt + 5, end).page;
+        if (next !== pos.page) handle.block.preloadPage(next, pos.nextAt);
+      }
+    };
+    if (![...this.tables.values()].some((h) => h.cycle && h.block.hasMediaCells)) return;
+    if (at <= now) fire();
+    else this.preloadTimer = setTimeout(fire, at - now);
+  }
+
+  /**
+   * Data changed under a cycle: stay on the page the audience is looking at.
+   *
+   * The anchor moves to the shown page and the moment it arrived, so a feed tick
+   * neither restarts the page's time nor lets a changed page count re-solve the
+   * cycle onto some other page. A page that no longer exists has already been
+   * wrapped to the first by `TableBlock`, and starts its time now.
+   */
+  private reconcileCycles(): void {
+    let any = false;
+    for (const handle of this.tables.values()) {
+      const cycle = handle.cycle;
+      if (!cycle?.anchor) continue;
+      any = true;
+      const page = handle.block.currentPage;
+      if (page === cycle.shown.page) cycle.anchor = { ...cycle.shown };
+      else this.anchorCycle(handle);
+    }
+    if (any) this.scheduleCycles();
+  }
+
+  /**
+   * Put a table's keyframed cells at rest on rows built after its reveal played.
+   *
+   * A keyframed cell hands its transform to GSAP outright (`TableBlock.buildRow`),
+   * so a row built by a page turn or a feed tick mid-hold arrives with none —
+   * and the cell track that would have placed it is behind the playhead, where
+   * `refreshTableTracks` deliberately leaves it alone. Without this, page two's
+   * animated cells stacked at the row origin.
+   *
+   * At rest means each animated property's value at the end of its last tween,
+   * or its set value for a property that only has one.
+   */
+  private settleCells(id: string): void {
+    const handle = this.tables.get(id);
+    if (!handle || !this.tl) return;
+    if (this.tl.time() <= handle.start + 1e-4) return;
+
+    for (const cell of handle.block.animatedCells) {
+      const targets = handle.block.cellElements(cell.id);
+      if (!targets.length) continue;
+      const motion = layerMotion(cell);
+      const rest: Record<string, { value: number; at: number }> = {};
+      for (const s of motion.sets) {
+        const prop = GSAP_PROP[s.prop];
+        if (prop && (!rest[prop] || s.at >= rest[prop]!.at)) rest[prop] = { value: s.value, at: s.at };
+      }
+      for (const tw of motion.tweens) {
+        const prop = GSAP_PROP[tw.prop];
+        const end = tw.start + tw.duration;
+        if (prop && (!rest[prop] || end >= rest[prop]!.at)) rest[prop] = { value: tw.to, at: end };
+      }
+      const values = Object.fromEntries(Object.entries(rest).map(([k, v]) => [k, v.value]));
+      if (Object.keys(values).length) gsap.set(targets, values);
+    }
+  }
+
+  /** Every table's paging and cycle, for control surfaces and the output page's report. */
+  get tableStates(): TableState[] {
+    const now = Date.now();
+    const running = new Set([...this.runningCycles()].map(([id]) => id));
+    const out: TableState[] = [];
+    for (const [id, handle] of this.tables) {
+      const block = handle.block;
+      const cycle = handle.cycle;
+      const cycling = running.has(id);
+      let secondsLeft: number | null = null;
+      if (cycling) {
+        const pos = cyclePosition(
+          this.cycleDurations(handle),
+          cycle!.anchor!,
+          now,
+          cycle!.config.end ?? 'loop',
+        );
+        if (pos.nextAt !== null) secondsLeft = Math.max(0, Math.round((pos.nextAt - now) / 100) / 10);
+      }
+      out.push({
+        table: this.tableAddress(id),
+        layerId: id,
+        page: block.currentPage,
+        pageCount: block.pageCount,
+        rows: block.totalRows,
+        key: block.pageKey(block.currentPage, cycle?.config.keyColumn),
+        hasCycle: cycle !== null,
+        cycling,
+        held: cycle?.held ?? false,
+        secondsLeft,
+        ...(cycle?.config.group ? { group: cycle.config.group } : {}),
+        ...(handle.leader !== null ? { follows: this.tableAddress(handle.leader) } : {}),
+      });
+    }
+    return out;
   }
 
   /** Current page and page count per table layer, for the operator panel. */
@@ -1652,7 +2609,7 @@ export class BreezeRuntime {
       overridden !== undefined
         ? (Array.isArray(overridden) ? overridden.map(stringify) : [stringify(overridden)])
         : seeded
-          ? crawlItemsFrom(seeded, layer)
+          ? crawlItemsFrom(seeded, layer, this.transformContext())
           : layer.items,
     );
 
@@ -1826,6 +2783,9 @@ export class BreezeRuntime {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.stopCycleTimer();
+    if (this.transformTimer !== null) clearInterval(this.transformTimer);
+    this.transformTimer = null;
     this.fitObserver?.disconnect();
     this.fitObserver = null;
     this.stopCrawls();
@@ -1865,6 +2825,9 @@ export class BreezeRuntime {
     this.listeners.clear();
     this.nodes.clear();
     this.proxies.clear();
+    // Streams and embeds hold connections until they are let go of — before
+    // the tree goes, or an editor rebuilding per keystroke leaks one per edit.
+    stopMediaIn(this.root);
     this.root.remove();
   }
 }

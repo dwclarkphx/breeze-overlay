@@ -6125,7 +6125,7 @@
       "formatVersion": 1,
       "id": "wc26-tree-6g023",
       "name": "World Cup — Bracket, round of 16 on",
-      "duration": 3,
+      "duration": 5.3,
       "stage": {
         "width": 1920,
         "height": 1080,
@@ -6135,8 +6135,28 @@
       "markers": [
         {
           "type": "stop",
-          "time": 2.4,
-          "name": "Hold on air"
+          "time": 1.3,
+          "name": "Round of 16"
+        },
+        {
+          "type": "stop",
+          "time": 2.3,
+          "name": "Quarter-finals"
+        },
+        {
+          "type": "stop",
+          "time": 3.0,
+          "name": "Semi-finals"
+        },
+        {
+          "type": "stop",
+          "time": 3.7,
+          "name": "Third place"
+        },
+        {
+          "type": "stop",
+          "time": 4.7,
+          "name": "Final"
         }
       ],
       "layers": [
@@ -6151,12 +6171,12 @@
           "keyframes": {
             "opacity": [
               {
-                "t": 2.4,
+                "t": 4.7,
                 "v": 1,
                 "ease": "power1.in"
               },
               {
-                "t": 3,
+                "t": 5.3,
                 "v": 0
               }
             ]
@@ -6407,12 +6427,30 @@
               }
             },
             {
-              "id": "connectors",
+              "id": "connectors-qf",
               "type": "group",
-              "name": "Bracket connectors",
+              "name": "Connectors — R16 to QF",
               "transform": {
                 "x": 0,
                 "y": 0
+              },
+              "keyframes": {
+                "opacity": [
+                  {
+                    "t": 0,
+                    "v": 0,
+                    "ease": "none"
+                  },
+                  {
+                    "t": 1.3,
+                    "v": 0,
+                    "ease": "power2.out"
+                  },
+                  {
+                    "t": 1.65,
+                    "v": 1
+                  }
+                ]
               },
               "children": [
                 {
@@ -6544,86 +6582,6 @@
                   }
                 },
                 {
-                  "id": "t-9",
-                  "type": "shape",
-                  "shape": "rect",
-                  "fill": "rgba(120,150,180,0.45)",
-                  "size": {
-                    "width": 5,
-                    "height": 2
-                  },
-                  "transform": {
-                    "x": 540,
-                    "y": 277,
-                    "anchorX": 0,
-                    "anchorY": 0
-                  }
-                },
-                {
-                  "id": "t-10",
-                  "type": "shape",
-                  "shape": "rect",
-                  "fill": "rgba(120,150,180,0.45)",
-                  "size": {
-                    "width": 5,
-                    "height": 2
-                  },
-                  "transform": {
-                    "x": 540,
-                    "y": 749,
-                    "anchorX": 0,
-                    "anchorY": 0
-                  }
-                },
-                {
-                  "id": "t-11",
-                  "type": "shape",
-                  "shape": "rect",
-                  "fill": "rgba(120,150,180,0.45)",
-                  "size": {
-                    "width": 2,
-                    "height": 472
-                  },
-                  "transform": {
-                    "x": 544,
-                    "y": 278,
-                    "anchorX": 0,
-                    "anchorY": 0
-                  }
-                },
-                {
-                  "id": "t-12",
-                  "type": "shape",
-                  "shape": "rect",
-                  "fill": "rgba(120,150,180,0.45)",
-                  "size": {
-                    "width": 5,
-                    "height": 2
-                  },
-                  "transform": {
-                    "x": 545,
-                    "y": 513,
-                    "anchorX": 0,
-                    "anchorY": 0
-                  }
-                },
-                {
-                  "id": "t-13",
-                  "type": "shape",
-                  "shape": "rect",
-                  "fill": "rgba(120,150,180,0.45)",
-                  "size": {
-                    "width": 10,
-                    "height": 2
-                  },
-                  "transform": {
-                    "x": 800,
-                    "y": 513,
-                    "anchorX": 0,
-                    "anchorY": 0
-                  }
-                },
-                {
                   "id": "t-14",
                   "type": "shape",
                   "shape": "rect",
@@ -6750,6 +6708,99 @@
                     "anchorX": 0,
                     "anchorY": 0
                   }
+                }
+              ]
+            },
+            {
+              "id": "connectors-sf",
+              "type": "group",
+              "name": "Connectors — QF to SF",
+              "transform": {
+                "x": 0,
+                "y": 0
+              },
+              "keyframes": {
+                "opacity": [
+                  {
+                    "t": 0,
+                    "v": 0,
+                    "ease": "none"
+                  },
+                  {
+                    "t": 2.3,
+                    "v": 0,
+                    "ease": "power2.out"
+                  },
+                  {
+                    "t": 2.65,
+                    "v": 1
+                  }
+                ]
+              },
+              "children": [
+                {
+                  "id": "t-9",
+                  "type": "shape",
+                  "shape": "rect",
+                  "fill": "rgba(120,150,180,0.45)",
+                  "size": {
+                    "width": 5,
+                    "height": 2
+                  },
+                  "transform": {
+                    "x": 540,
+                    "y": 277,
+                    "anchorX": 0,
+                    "anchorY": 0
+                  }
+                },
+                {
+                  "id": "t-10",
+                  "type": "shape",
+                  "shape": "rect",
+                  "fill": "rgba(120,150,180,0.45)",
+                  "size": {
+                    "width": 5,
+                    "height": 2
+                  },
+                  "transform": {
+                    "x": 540,
+                    "y": 749,
+                    "anchorX": 0,
+                    "anchorY": 0
+                  }
+                },
+                {
+                  "id": "t-11",
+                  "type": "shape",
+                  "shape": "rect",
+                  "fill": "rgba(120,150,180,0.45)",
+                  "size": {
+                    "width": 2,
+                    "height": 472
+                  },
+                  "transform": {
+                    "x": 544,
+                    "y": 278,
+                    "anchorX": 0,
+                    "anchorY": 0
+                  }
+                },
+                {
+                  "id": "t-12",
+                  "type": "shape",
+                  "shape": "rect",
+                  "fill": "rgba(120,150,180,0.45)",
+                  "size": {
+                    "width": 5,
+                    "height": 2
+                  },
+                  "transform": {
+                    "x": 545,
+                    "y": 513,
+                    "anchorX": 0,
+                    "anchorY": 0
+                  }
                 },
                 {
                   "id": "t-22",
@@ -6814,6 +6865,51 @@
                     "anchorX": 0,
                     "anchorY": 0
                   }
+                }
+              ]
+            },
+            {
+              "id": "connectors-final",
+              "type": "group",
+              "name": "Connectors — SF to final",
+              "transform": {
+                "x": 0,
+                "y": 0
+              },
+              "keyframes": {
+                "opacity": [
+                  {
+                    "t": 0,
+                    "v": 0,
+                    "ease": "none"
+                  },
+                  {
+                    "t": 3.7,
+                    "v": 0,
+                    "ease": "power2.out"
+                  },
+                  {
+                    "t": 4.05,
+                    "v": 1
+                  }
+                ]
+              },
+              "children": [
+                {
+                  "id": "t-13",
+                  "type": "shape",
+                  "shape": "rect",
+                  "fill": "rgba(120,150,180,0.45)",
+                  "size": {
+                    "width": 10,
+                    "height": 2
+                  },
+                  "transform": {
+                    "x": 800,
+                    "y": 513,
+                    "anchorX": 0,
+                    "anchorY": 0
+                  }
                 },
                 {
                   "id": "t-26",
@@ -6831,20 +6927,7 @@
                     "anchorY": 0
                   }
                 }
-              ],
-              "keyframes": {
-                "opacity": [
-                  {
-                    "t": 0,
-                    "v": 0,
-                    "ease": "power2.out"
-                  },
-                  {
-                    "t": 1,
-                    "v": 1
-                  }
-                ]
-              }
+              ]
             },
             {
               "id": "th-27",
@@ -6919,12 +7002,12 @@
                     "ease": "none"
                   },
                   {
-                    "t": 0.32,
+                    "t": 1.3,
                     "v": 0,
                     "ease": "power2.out"
                   },
                   {
-                    "t": 0.6699999999999999,
+                    "t": 1.65,
                     "v": 1
                   }
                 ]
@@ -6961,12 +7044,12 @@
                     "ease": "none"
                   },
                   {
-                    "t": 0.32,
+                    "t": 2.3,
                     "v": 0,
                     "ease": "power2.out"
                   },
                   {
-                    "t": 0.6699999999999999,
+                    "t": 2.65,
                     "v": 1
                   }
                 ]
@@ -7003,12 +7086,12 @@
                     "ease": "none"
                   },
                   {
-                    "t": 0.32,
+                    "t": 3.7,
                     "v": 0,
                     "ease": "power2.out"
                   },
                   {
-                    "t": 0.6699999999999999,
+                    "t": 4.05,
                     "v": 1
                   }
                 ]
@@ -7045,12 +7128,12 @@
                     "ease": "none"
                   },
                   {
-                    "t": 0.32,
+                    "t": 2.3,
                     "v": 0,
                     "ease": "power2.out"
                   },
                   {
-                    "t": 0.6699999999999999,
+                    "t": 2.65,
                     "v": 1
                   }
                 ]
@@ -7087,12 +7170,12 @@
                     "ease": "none"
                   },
                   {
-                    "t": 0.32,
+                    "t": 1.3,
                     "v": 0,
                     "ease": "power2.out"
                   },
                   {
-                    "t": 0.6699999999999999,
+                    "t": 1.65,
                     "v": 1
                   }
                 ]
@@ -7171,12 +7254,12 @@
                     "ease": "none"
                   },
                   {
-                    "t": 1.3,
+                    "t": 3.0,
                     "v": 0,
                     "ease": "power2.out"
                   },
                   {
-                    "t": 1.65,
+                    "t": 3.35,
                     "v": 1
                   }
                 ]
@@ -7213,12 +7296,12 @@
                     "ease": "none"
                   },
                   {
-                    "t": 1.5,
+                    "t": 4.3,
                     "v": 0,
                     "ease": "power2.out"
                   },
                   {
-                    "t": 1.85,
+                    "t": 4.65,
                     "v": 1
                   }
                 ]
@@ -9997,24 +10080,7 @@
                   }
                 ]
               },
-              "keyframes": {
-                "opacity": [
-                  {
-                    "t": 0,
-                    "v": 0,
-                    "ease": "none"
-                  },
-                  {
-                    "t": 0.55,
-                    "v": 0,
-                    "ease": "power2.out"
-                  },
-                  {
-                    "t": 0.8500000000000001,
-                    "v": 1
-                  }
-                ]
-              }
+              "in": 1.4
             },
             {
               "id": "sfl",
@@ -11393,24 +11459,7 @@
                   }
                 ]
               },
-              "keyframes": {
-                "opacity": [
-                  {
-                    "t": 0,
-                    "v": 0,
-                    "ease": "none"
-                  },
-                  {
-                    "t": 0.85,
-                    "v": 0,
-                    "ease": "power2.out"
-                  },
-                  {
-                    "t": 1.15,
-                    "v": 1
-                  }
-                ]
-              }
+              "in": 2.4
             },
             {
               "id": "sfr",
@@ -12789,24 +12838,7 @@
                   }
                 ]
               },
-              "keyframes": {
-                "opacity": [
-                  {
-                    "t": 0,
-                    "v": 0,
-                    "ease": "none"
-                  },
-                  {
-                    "t": 0.85,
-                    "v": 0,
-                    "ease": "power2.out"
-                  },
-                  {
-                    "t": 1.15,
-                    "v": 1
-                  }
-                ]
-              }
+              "in": 2.4
             },
             {
               "id": "qfr",
@@ -14185,24 +14217,7 @@
                   }
                 ]
               },
-              "keyframes": {
-                "opacity": [
-                  {
-                    "t": 0,
-                    "v": 0,
-                    "ease": "none"
-                  },
-                  {
-                    "t": 0.55,
-                    "v": 0,
-                    "ease": "power2.out"
-                  },
-                  {
-                    "t": 0.8500000000000001,
-                    "v": 1
-                  }
-                ]
-              }
+              "in": 1.4
             },
             {
               "id": "r16r",
@@ -16977,24 +16992,7 @@
                   }
                 ]
               },
-              "keyframes": {
-                "opacity": [
-                  {
-                    "t": 0,
-                    "v": 0,
-                    "ease": "none"
-                  },
-                  {
-                    "t": 1.1,
-                    "v": 0,
-                    "ease": "power2.out"
-                  },
-                  {
-                    "t": 1.4000000000000001,
-                    "v": 1
-                  }
-                ]
-              }
+              "in": 3.8
             },
             {
               "id": "third",
@@ -18373,24 +18371,7 @@
                   }
                 ]
               },
-              "keyframes": {
-                "opacity": [
-                  {
-                    "t": 0,
-                    "v": 0,
-                    "ease": "none"
-                  },
-                  {
-                    "t": 1.3,
-                    "v": 0,
-                    "ease": "power2.out"
-                  },
-                  {
-                    "t": 1.6,
-                    "v": 1
-                  }
-                ]
-              }
+              "in": 3.1
             }
           ]
         }

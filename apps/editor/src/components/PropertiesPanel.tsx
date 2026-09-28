@@ -24,8 +24,18 @@ import {
   DEFAULT_CRAWL_SEPARATOR,
   FILTER_OPS,
   NAMED_EASES,
+  DATE_KEEPS,
+  DEFAULT_MEDIA_TIMEOUT,
+  MEDIA_KINDS,
+  MEDIA_ON_ERROR,
+  mediaKindOf,
+  UNPIVOT_DEFAULTS,
+  applyTransforms,
   collectBindings,
+  localParts,
+  modesIn,
   normalizeKey,
+  walkLayers,
   type AdvanceTransform,
   type AnimatableProp,
   type AssetRef,
@@ -34,15 +44,27 @@ import {
   type CompositionLayer,
   type CrawlLayer,
   type DataColumn,
+  type DataSet,
   type DataTransform,
+  type DateKeep,
+  type DateTransform,
   type FilterOp,
   type Layer,
   type RowAnimPresetId,
+  type TableCycle,
+  type TableCycleEnd,
+  type TableFollow,
   type TableLayer,
   type TextAnimPresetId,
   type TextLayer,
   type TextClock,
   type TextStyle,
+  type LookupTransform,
+  type MediaKind,
+  type MediaLayer,
+  type MediaOnError,
+  type UnionTransform,
+  type UnpivotTransform,
 } from '@breeze/schema';
 import { useI18n, useRichT, useT } from '@breeze/i18n/react';
 import {
@@ -57,6 +79,7 @@ import {
 } from '@breeze/runtime';
 
 import { LayerThumb } from './LayerThumb.js';
+import { RulesSection } from './RulesSection.js';
 import { useEditor } from '../state/store.js';
 import {
   addPoint,
@@ -209,6 +232,17 @@ export function PropertiesPanel(): JSX.Element {
           return cols.map((c) => c.key);
         })()
       : [];
+
+  // Modes other rules already name, so a second rule can pick the same word.
+  const projectModeNames = (() => {
+    const found = new Set<string>();
+    const visit = (l: Layer): void => {
+      for (const m of modesIn(l.rules)) found.add(m);
+      if (l.type === 'table') l.row.cells.forEach(visit);
+    };
+    for (const comp of project?.compositions ?? []) walkLayers(comp.layers, visit);
+    return [...found].sort();
+  })();
 
   // Measured by the runtime on its last build — see the store fields.
   const pieces = textPieces[layer.id] ?? 0;
@@ -702,6 +736,19 @@ export function PropertiesPanel(): JSX.Element {
             sources={dataSources}
             overflowing={overflowingTables.includes(layer.id)}
             pages={tablePages[layer.id]}
+            compositions={project?.compositions ?? []}
+            onPatch={(p) => patch(p as Partial<Layer>)}
+          />
+        )}
+
+        {layer.type === 'media' && (
+          <MediaSection
+            // Re-seeds the typed URL when the stored one changes — undo, another layer.
+            key={`${layer.id}\u0000${layer.src}`}
+            layer={layer}
+            inCell={Boolean(cellOwner)}
+            cycling={cellOwner?.type === 'table' && (cellOwner.cycle?.dwell ?? 0) > 0}
+            cellColumns={cellColumns}
             onPatch={(p) => patch(p as Partial<Layer>)}
           />
         )}
@@ -1058,6 +1105,15 @@ export function PropertiesPanel(): JSX.Element {
           setValue={setValue}
           onPatch={patch}
           onWipePreset={applyWipePreset}
+        />
+
+        <RulesSection
+          layer={layer}
+          inCell={cellOwner !== null}
+          cellColumns={cellColumns}
+          sources={dataSources}
+          modes={projectModeNames}
+          onPatch={patch}
         />
 
         <details className="raw-json">
@@ -2421,6 +2477,564 @@ function ColumnPick({
   );
 }
 
+/** The blank a new follow is patched onto. One key a line: the i18n detector pairs quotes per line. */
+const NO_FOLLOW: TableFollow = {
+  table: '',
+  column: '',
+};
+
+/**
+ * The leader field. Committed on blur or Enter rather than per keystroke:
+ * clearing the box to retype a name would otherwise remove the follow, and
+ * the match and leader columns with it.
+ */
+function LeaderInput({
+  listId,
+  value,
+  onCommit,
+}: {
+  listId: string;
+  value: string;
+  onCommit: (table: string) => void;
+}): JSX.Element {
+  const t = useT();
+  const [text, setText] = useState(value);
+  const commit = () => {
+    if (text.trim() !== value) onCommit(text.trim());
+  };
+  return (
+    <input
+      list={listId}
+      value={text}
+      placeholder={t('editor.properties.followTablePlaceholder')}
+      title={t('editor.properties.followTableTitle')}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit();
+      }}
+    />
+  );
+}
+
+/** A comma-separated column list; blank means absent. */
+function parseColumnList(text: string): string[] | undefined {
+  const list = text.split(',').map((k) => k.trim()).filter(Boolean);
+  return list.length ? list : undefined;
+}
+
+/**
+ * The `unpivot` editor. Column lists are typed rather than picked: the keys
+ * to fold are often ones a live sheet has not delivered yet (next week's
+ * days), and a comma list is quicker than a multi-select for a dozen of them.
+ */
+function UnpivotFields({
+  unpivot,
+  onChange,
+}: {
+  unpivot: UnpivotTransform;
+  onChange: (next: UnpivotTransform) => void;
+}): JSX.Element {
+  const t = useT();
+  const [fold, setFold] = useState((unpivot.columns ?? []).join(', '));
+  const [keep, setKeep] = useState((unpivot.keep ?? []).join(', '));
+  const set = (patch: Partial<UnpivotTransform>) => {
+    const next: Record<string, unknown> = { ...unpivot, ...patch };
+    for (const [k, v] of Object.entries(next)) if (v === undefined) delete next[k];
+    onChange(next as unknown as UnpivotTransform);
+  };
+  return (
+    <div className="transform-advance">
+      <label>
+        <span>{t('editor.properties.unpivotColumns')}</span>
+        <input
+          value={fold}
+          placeholder={t('editor.properties.unpivotColumnsPlaceholder')}
+          title={t('editor.properties.unpivotListTitle')}
+          onChange={(e) => setFold(e.target.value)}
+          onBlur={() => set({ columns: parseColumnList(fold) })}
+        />
+      </label>
+      <label>
+        <span>{t('editor.properties.unpivotKeep')}</span>
+        <input
+          value={keep}
+          placeholder={t('editor.properties.unpivotKeepPlaceholder')}
+          title={t('editor.properties.unpivotListTitle')}
+          onChange={(e) => setKeep(e.target.value)}
+          onBlur={() => set({ keep: parseColumnList(keep) })}
+        />
+      </label>
+      <label>
+        <span>{t('editor.properties.unpivotKey')}</span>
+        <input
+          value={unpivot.key ?? ''}
+          placeholder={UNPIVOT_DEFAULTS.key}
+          onChange={(e) => set({ key: e.target.value.trim() || undefined })}
+        />
+      </label>
+      <label>
+        <span>{t('editor.properties.unpivotValue')}</span>
+        <input
+          value={unpivot.value ?? ''}
+          placeholder={UNPIVOT_DEFAULTS.value}
+          onChange={(e) => set({ value: e.target.value.trim() || undefined })}
+        />
+      </label>
+    </div>
+  );
+}
+
+type SourceChoice = { id: string; name: string; columns: DataColumn[] };
+
+const MEDIA_KIND_LABEL: Record<MediaKind, string> = {
+  image: 'editor.properties.mediaKindImage',
+  mjpeg: 'editor.properties.mediaKindMjpeg',
+  video: 'editor.properties.mediaKindVideo',
+  youtube: 'editor.properties.mediaKindYoutube',
+  hls: 'editor.properties.mediaKindHls',
+};
+const MEDIA_ON_ERROR_LABEL: Record<MediaOnError, string> = {
+  hide: 'editor.properties.mediaOnErrorHide',
+  hold: 'editor.properties.mediaOnErrorHold',
+  skip: 'editor.properties.mediaOnErrorSkip',
+};
+const MEDIA_FITS = ['contain', 'cover', 'fill'] as const;
+const MEDIA_FIT_LABEL: Record<(typeof MEDIA_FITS)[number], string> = {
+  contain: 'editor.properties.mediaFitContain',
+  cover: 'editor.properties.mediaFitCover',
+  fill: 'editor.properties.mediaFitFill',
+};
+
+/**
+ * A media layer (Wave 8): where its picture comes from, what kind it is, and
+ * what it does when the source goes down. The URL commits on blur — every
+ * keystroke would otherwise reopen the camera on the stage.
+ */
+function MediaSection({
+  layer,
+  inCell,
+  cycling,
+  cellColumns,
+  onPatch,
+}: {
+  layer: MediaLayer;
+  inCell: boolean;
+  cycling: boolean;
+  cellColumns: string[];
+  onPatch: (patch: Partial<MediaLayer>) => void;
+}): JSX.Element {
+  const t = useT();
+  const [src, setSrc] = useState(layer.src);
+  // The patch as it is: an undefined value is how a setting is cleared — the
+  // command merges, so leaving the key out would keep the old value.
+  const set = (patch: Partial<MediaLayer>) => onPatch(patch);
+  const commitSrc = () => {
+    if (src.trim() !== layer.src) set({ src: src.trim() });
+  };
+  const fromColumn = inCell && Boolean(layer.cell);
+  const detected = !fromColumn && layer.src ? layer.kind ?? mediaKindOf(layer.src) : null;
+  const kindIsImage = (layer.kind ?? (layer.src ? mediaKindOf(layer.src) : 'image')) === 'image' || fromColumn;
+
+  return (
+    <Section title={t('editor.properties.sectionMedia')}>
+      {fromColumn ? (
+        <p className="hint">{t('editor.properties.mediaFromColumn', { column: layer.cell ?? '' })}</p>
+      ) : (
+        <Field label={t('editor.properties.mediaUrl')}>
+          <input
+            value={src}
+            placeholder={t('editor.properties.mediaUrlPlaceholder')}
+            onChange={(e) => setSrc(e.target.value)}
+            onBlur={commitSrc}
+            onKeyDown={(e) => { if (e.key === 'Enter') commitSrc(); }}
+          />
+        </Field>
+      )}
+      {detected && (
+        <p className="prop-note" data-preview="media-kind">
+          {t('editor.properties.mediaPlaysAs', { kind: t(MEDIA_KIND_LABEL[detected]) })}
+        </p>
+      )}
+      {!inCell && (
+        <Field label={t('editor.properties.binding')}>
+          <input
+            value={layer.binding ?? ''}
+            title={t('editor.properties.mediaBindingTitle')}
+            onChange={(e) => set({ binding: e.target.value || undefined })}
+          />
+        </Field>
+      )}
+      <Field label={t('editor.properties.mediaKind')}>
+        <select value={layer.kind ?? ''} onChange={(e) => set({ kind: (e.target.value || undefined) as MediaKind | undefined })}>
+          <option value="">{t('editor.properties.mediaKindAuto')}</option>
+          {MEDIA_KINDS.map((k) => <option key={k} value={k}>{t(MEDIA_KIND_LABEL[k])}</option>)}
+        </select>
+      </Field>
+      {fromColumn && (
+        <Field label={t('editor.properties.mediaKindColumn')}>
+          <select value={layer.kindColumn ?? ''} onChange={(e) => set({ kindColumn: e.target.value || undefined })}>
+            <option value="">{t('editor.properties.mediaKindColumnNone')}</option>
+            {cellColumns.map((k) => <option key={k} value={k}>{k}</option>)}
+            {layer.kindColumn && !cellColumns.includes(layer.kindColumn) && (
+              <option value={layer.kindColumn}>{layer.kindColumn}</option>
+            )}
+          </select>
+        </Field>
+      )}
+      {kindIsImage && (
+        <Field label={t('editor.properties.mediaRefresh')}>
+          <input
+            type="number"
+            min={0}
+            value={layer.refresh ?? ''}
+            placeholder={t('editor.properties.mediaRefreshOnce')}
+            title={t('editor.properties.mediaRefreshTitle')}
+            onChange={(e) => {
+              const n = Number(e.target.value);
+              set({ refresh: e.target.value === '' || !Number.isFinite(n) || n <= 0 ? undefined : Math.max(1, n) });
+            }}
+          />
+        </Field>
+      )}
+      <Field label={t('editor.properties.mediaFit')}>
+        <select value={layer.fit ?? 'contain'} onChange={(e) => set({ fit: e.target.value as MediaLayer['fit'] })}>
+          {MEDIA_FITS.map((f) => <option key={f} value={f}>{t(MEDIA_FIT_LABEL[f])}</option>)}
+        </select>
+      </Field>
+      <Field label={t('editor.properties.mediaOnError')}>
+        <select value={layer.onError ?? 'hide'} onChange={(e) => set({ onError: e.target.value as MediaOnError })}>
+          {MEDIA_ON_ERROR.map((o) => (
+            <option key={o} value={o} disabled={o === 'skip' && !(inCell && cycling)}>
+              {t(MEDIA_ON_ERROR_LABEL[o])}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label={t('editor.properties.mediaTimeout')}>
+        <input
+          type="number"
+          min={1}
+          max={120}
+          value={layer.timeout ?? ''}
+          placeholder={String(DEFAULT_MEDIA_TIMEOUT)}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            set({ timeout: e.target.value === '' || !Number.isFinite(n) ? undefined : Math.min(120, Math.max(1, n)) });
+          }}
+        />
+      </Field>
+      <label className="checkbox">
+        <input type="checkbox" checked={Boolean(layer.audio)} onChange={(e) => set({ audio: e.target.checked || undefined })} />
+        <span>{t('editor.properties.mediaAudio')}</span>
+      </label>
+      <p className="hint">{t(inCell ? 'editor.properties.mediaCellHint' : 'editor.properties.mediaHint')}</p>
+    </Section>
+  );
+}
+
+// Shared empties, so a table without them does not defeat `useMemo` every render.
+const NO_COLUMNS: DataColumn[] = [];
+const NO_TRANSFORMS: DataTransform[] = [];
+
+const DATE_KEEP_LABEL: Record<DateKeep, string> = {
+  days: 'editor.properties.dateKeepDays',
+  upcoming: 'editor.properties.dateKeepUpcoming',
+  past: 'editor.properties.dateKeepPast',
+};
+
+/** Whether this machine knows the zone. The render machines are the same engine. */
+function knownZone(zone: string): boolean {
+  // The schema's pattern too: `America/New York` is refused on save.
+  if (!/^[A-Za-z0-9_/+-]+$/.test(zone)) return false;
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Drop the keys a patch cleared, so the validator never sees an empty field. */
+function withoutEmpty(value: Record<string, unknown>): unknown {
+  for (const [k, v] of Object.entries(value)) if (v === undefined || v === '') delete value[k];
+  return value;
+}
+
+/** Re-seeds the typed column list when the stored one changes (undo, another table). */
+function lookupFieldsKey(layerId: string, index: number, t: LookupTransform): string {
+  return [layerId, index, (t.columns ?? []).join()].join(':');
+}
+
+/**
+ * The `date` editor (Wave 7). The day it resolves to is shown under the zone —
+ * a graphics machine in UTC and a station in Phoenix disagree about "today"
+ * for seven hours of every day, and this is the place to catch it.
+ */
+function DateFields({
+  date,
+  columns,
+  onChange,
+}: {
+  date: DateTransform;
+  columns: DataColumn[];
+  onChange: (next: DateTransform) => void;
+}): JSX.Element {
+  const t = useT();
+  const rt = useRichT();
+  // The zone is committed on blur: half a zone name is not a zone.
+  const [zone, setZone] = useState(date.timezone ?? '');
+  const set = (patch: Partial<DateTransform>) =>
+    onChange(withoutEmpty({ ...date, ...patch }) as DateTransform);
+  // Only a zone this engine knows is stored; anything else stays in the box,
+  // flagged, rather than reaching the save as a schema error.
+  const typed = zone.trim();
+  const badZone = typed !== '' && !knownZone(typed);
+  const commitZone = () => {
+    if (!badZone) set({ timezone: typed || undefined });
+  };
+  const today = localParts(badZone ? undefined : typed || undefined, new Date()).date;
+
+  return (
+    <div className="transform-advance">
+      <label>
+        <span>{t('editor.properties.dateColumn')}</span>
+        <select value={date.column} onChange={(e) => set({ column: e.target.value })}>
+          {columns.map((c) => <option key={c.key} value={c.key}>{c.key}</option>)}
+          {!columns.some((c) => c.key === date.column) && <option value={date.column}>{date.column}</option>}
+        </select>
+      </label>
+      <label>
+        <span>{t('editor.properties.dateKeep')}</span>
+        <select
+          value={date.keep}
+          onChange={(e) => {
+            const keep = e.target.value as DateKeep;
+            // A window only means something for `days`; the validator warns otherwise.
+            set(keep === 'days' ? { keep } : { keep, from: undefined, days: undefined });
+          }}
+        >
+          {DATE_KEEPS.map((k) => <option key={k} value={k}>{t(DATE_KEEP_LABEL[k])}</option>)}
+        </select>
+      </label>
+      {date.keep === 'days' && (
+        <>
+          <label>
+            <span>{t('editor.properties.dateFrom')}</span>
+            <input
+              type="number"
+              min={-366}
+              max={366}
+              value={date.from ?? 0}
+              title={t('editor.properties.dateFromTitle')}
+              onChange={(e) => {
+                const from = Math.max(-366, Math.min(366, Math.trunc(Number(e.target.value) || 0)));
+                set({ from: from === 0 ? undefined : from });
+              }}
+            />
+          </label>
+          <label>
+            <span>{t('editor.properties.dateDays')}</span>
+            <input
+              type="number"
+              min={1}
+              max={366}
+              value={date.days ?? 1}
+              onChange={(e) => {
+                const days = Math.max(1, Math.min(366, Math.trunc(Number(e.target.value) || 1)));
+                set({ days: days === 1 ? undefined : days });
+              }}
+            />
+          </label>
+        </>
+      )}
+      <label>
+        <span>{t('editor.properties.timezone')}</span>
+        <input
+          value={zone}
+          placeholder={t('editor.properties.timezonePlaceholder')}
+          title={t('editor.properties.timezoneTitle')}
+          onChange={(e) => setZone(e.target.value)}
+          onBlur={commitZone}
+          onKeyDown={(e) => { if (e.key === 'Enter') commitZone(); }}
+        />
+      </label>
+      {badZone ? (
+        <p className="prop-warning" data-warning="date-timezone">{t('editor.properties.timezoneUnknown')}</p>
+      ) : (
+        <p className="prop-note" data-preview="date-today">
+          {rt('editor.properties.dateToday', { date: <strong>{today}</strong> })}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** The source picker `lookup` and `union` share: every source but the table's own. */
+function OtherSourcePick({
+  value,
+  sources,
+  own,
+  onChange,
+}: {
+  value: string;
+  sources: SourceChoice[];
+  own: string | undefined;
+  onChange: (id: string) => void;
+}): JSX.Element {
+  const t = useT();
+  const others = sources.filter((s) => s.id !== own);
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)}>
+      {!value && <option value="">{t('editor.properties.transformPickSource')}</option>}
+      {others.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+      {value && !others.some((s) => s.id === value) && <option value={value}>{value}</option>}
+    </select>
+  );
+}
+
+/** A note when a `lookup` or `union` names a source this project does not have. */
+function MissingSource({ id, sources }: { id: string; sources: SourceChoice[] }): JSX.Element | null {
+  const t = useT();
+  if (sources.some((s) => s.id === id)) return null;
+  return (
+    <p className="prop-warning" data-warning="transform-source">
+      {id ? t('editor.properties.transformSourceMissing', { id }) : t('editor.properties.transformPickSource')}
+    </p>
+  );
+}
+
+/** The `lookup` editor (Wave 7). */
+function LookupFields({
+  lookup,
+  columns,
+  sources,
+  own,
+  onChange,
+}: {
+  lookup: LookupTransform;
+  columns: DataColumn[];
+  sources: SourceChoice[];
+  own: string | undefined;
+  onChange: (next: LookupTransform) => void;
+}): JSX.Element {
+  const t = useT();
+  const [bring, setBring] = useState((lookup.columns ?? []).join(', '));
+  const set = (patch: Partial<LookupTransform>) =>
+    onChange(withoutEmpty({ ...lookup, ...patch }) as LookupTransform);
+  const other = sources.find((s) => s.id === lookup.source);
+  const commitBring = () => {
+    const list = parseColumnList(bring);
+    set({ columns: list?.length ? list : undefined });
+  };
+  return (
+    <div className="transform-advance">
+      <label>
+        <span>{t('editor.properties.lookupSource')}</span>
+        <OtherSourcePick
+          value={lookup.source}
+          sources={sources}
+          own={own}
+          // Another source has other columns: what it matched on and brought no longer apply.
+          onChange={(source) => set({ source, on: undefined, columns: undefined })}
+        />
+      </label>
+      <label>
+        <span>{t('editor.properties.lookupKey')}</span>
+        <select value={lookup.key} onChange={(e) => set({ key: e.target.value })}>
+          {columns.map((c) => <option key={c.key} value={c.key}>{c.key}</option>)}
+          {!columns.some((c) => c.key === lookup.key) && <option value={lookup.key}>{lookup.key}</option>}
+        </select>
+      </label>
+      <label>
+        <span>{t('editor.properties.lookupOn')}</span>
+        <select value={lookup.on ?? ''} onChange={(e) => set({ on: e.target.value || undefined })}>
+          <option value="">{t('editor.properties.lookupOnSame', { name: lookup.key })}</option>
+          {(other?.columns ?? []).map((c) => <option key={c.key} value={c.key}>{c.key}</option>)}
+          {lookup.on && !other?.columns.some((c) => c.key === lookup.on) && (
+            <option value={lookup.on}>{lookup.on}</option>
+          )}
+        </select>
+      </label>
+      <label>
+        <span>{t('editor.properties.lookupColumns')}</span>
+        <input
+          value={bring}
+          placeholder={t('editor.properties.lookupColumnsPlaceholder')}
+          title={t('editor.properties.unpivotListTitle')}
+          onChange={(e) => setBring(e.target.value)}
+          onBlur={commitBring}
+          onKeyDown={(e) => { if (e.key === 'Enter') commitBring(); }}
+        />
+      </label>
+      <MissingSource id={lookup.source} sources={sources} />
+    </div>
+  );
+}
+
+/** The `union` editor (Wave 7). */
+function UnionFields({
+  union,
+  sources,
+  own,
+  onChange,
+}: {
+  union: UnionTransform;
+  sources: SourceChoice[];
+  own: string | undefined;
+  onChange: (next: UnionTransform) => void;
+}): JSX.Element {
+  const t = useT();
+  return (
+    <div className="transform-advance">
+      <label>
+        <span>{t('editor.properties.unionSource')}</span>
+        <OtherSourcePick value={union.source} sources={sources} own={own} onChange={(source) => onChange({ ...union, source })} />
+      </label>
+      <MissingSource id={union.source} sources={sources} />
+    </div>
+  );
+}
+
+/** The first column whose name or type says date or time — the likely one for a `date` step. */
+function dateLikeColumn(columns: DataColumn[]): string | undefined {
+  return (
+    columns.find((c) => c.type === 'date')?.key
+    ?? columns.find((c) => /date|time|day|start|when/i.test(c.key))?.key
+  );
+}
+
+/**
+ * The columns at each step of a pipeline: `[i]` is what transform `i` sees,
+ * the last is what the cells see. Run over the column lists alone — no rows —
+ * so a lookup's brought columns, an unpivot's name and value, a rank all show
+ * up in the pickers below the step that makes them.
+ */
+function columnStages(
+  columns: DataColumn[],
+  transforms: DataTransform[],
+  sources: SourceChoice[],
+): DataColumn[][] {
+  const shell = (id: string, cols: DataColumn[]): DataSet => ({ id, columns: cols, rows: [] });
+  const ctx = {
+    source: (id: string) => {
+      const s = sources.find((x) => x.id === id);
+      return s ? shell(id, s.columns) : undefined;
+    },
+  };
+  const stages: DataColumn[][] = [columns];
+  let at = shell('', columns);
+  for (const tr of transforms) {
+    try {
+      at = applyTransforms(at, [tr], ctx);
+    } catch {
+      // A half-configured step keeps the columns it was given.
+    }
+    stages.push(at.columns);
+  }
+  return stages;
+}
+
 /**
  * The `advance` editor.
  *
@@ -2606,12 +3220,14 @@ function TableSection({
   sources,
   overflowing,
   pages,
+  compositions,
   onPatch,
 }: {
   layer: TableLayer;
   sources: Array<{ id: string; name: string; columns: DataColumn[] }>;
   overflowing: boolean;
   pages: { page: number; pageCount: number; rows: number } | undefined;
+  compositions: Composition[];
   onPatch: (patch: Partial<TableLayer>) => void;
 }): JSX.Element {
   const t = useT();
@@ -2619,8 +3235,16 @@ function TableSection({
   const bound = sources.find((s) => s.id === layer.source);
   // Live columns where a source is attached, the authored snapshot otherwise —
   // the author needs the keys that will actually arrive, not the placeholder.
-  const columns = bound?.columns.length ? bound.columns : layer.data?.columns ?? [];
-  const transforms = layer.transforms ?? [];
+  const sourceColumns = bound?.columns.length ? bound.columns : layer.data?.columns ?? NO_COLUMNS;
+  const transforms = layer.transforms ?? NO_TRANSFORMS;
+  // What each transform sees, and — last — what the cells, cycle and follow see.
+  const stages = useMemo(
+    () => columnStages(sourceColumns, transforms, sources),
+    [sourceColumns, transforms, sources],
+  );
+  const columns = stages[stages.length - 1]!;
+  const noColumns = columns.length === 0;
+  const noOtherSource = !sources.some((x) => x.id !== layer.source);
 
   const setTransform = (index: number, next: DataTransform | null) => {
     const list = [...transforms];
@@ -2631,6 +3255,62 @@ function TableSection({
 
   const anim = resolveRowAnim(layer.rowAnim);
   const revealSeconds = rowAnimDuration(anim, pages?.rows ?? layer.data?.rows.length ?? 0);
+
+  /*
+   * Cycle edits merge into whatever is there, and a blank field removes its key
+   * rather than storing an empty string the validator would refuse. The cycle
+   * itself only goes away when the author empties every field — a dwell of 0
+   * switches cycling off and keeps the rest, so turning it back on does not
+   * mean setting it all up again.
+   */
+  const cycle = layer.cycle;
+  const setCycle = (patch: Partial<TableCycle>) => {
+    const next: Record<string, unknown> = { ...(cycle ?? { dwell: 0 }), ...patch };
+    for (const [k, v] of Object.entries(next)) if (v === undefined || v === '') delete next[k];
+    const empty = (next['dwell'] ?? 0) === 0 && Object.keys(next).length === 1;
+    onPatch({ cycle: empty ? undefined : (next as unknown as TableCycle) });
+  };
+  // Worked out here rather than inline: comparison operators between JSX tags
+  // read as stray text to the i18n detector.
+  const cycleOn = (cycle?.dwell ?? 0) > 0;
+  const cycleOnePage = cycleOn && pages !== undefined && pages.pageCount <= 1;
+  const cycleTurning = cycleOn && !cycleOnePage;
+
+  /*
+   * Follow. Suggestions come from every table in the project, not just this
+   * composition: the usual leader is the rotation in the graphic this one is
+   * mounted into, which this composition cannot see. The field stays free text
+   * for a `<mount>.<binding>` address. Emptying the leader removes the follow.
+   */
+  const follow = layer.follow;
+  const leaders = useMemo(() => {
+    const names = new Set<string>();
+    for (const comp of compositions) {
+      walkLayers(comp.layers, (l) => {
+        if (l.type !== 'table' || l.id === layer.id) return;
+        names.add(l.binding ?? l.id);
+      });
+    }
+    if (layer.binding) names.delete(layer.binding);
+    return [...names].sort();
+  }, [compositions, layer.id, layer.binding]);
+  const setFollow = (patch: Partial<TableFollow>) => {
+    const next: TableFollow = { ...(follow ?? NO_FOLLOW), ...patch };
+    if (!next.table.trim()) {
+      onPatch({ follow: undefined });
+      return;
+    }
+    // A new follow picks `place` where the table has one — the case it exists for.
+    if (!next.column) next.column = columns.some((c) => c.key === 'place') ? 'place' : columns[0]?.key ?? 'place';
+    if (!next.leaderColumn) delete next.leaderColumn;
+    onPatch({ follow: next });
+  };
+  // Built apart from the call: two JSX tags in one argument list read as stray
+  // text to the i18n detector.
+  const followLeader = <code>{follow?.table}</code>;
+  const followColumn = <code>{follow?.column}</code>;
+  const followsSelf = follow !== undefined
+    && (follow.table === layer.id || (layer.binding !== undefined && follow.table === layer.binding));
 
   return (
     <>
@@ -2660,11 +3340,11 @@ function TableSection({
           </p>
         )}
         <p className="hint">
-          {columns.length
+          {sourceColumns.length
             ? rt('editor.properties.tableColumns', {
                 columns: (
                   <>
-                    {columns.map((c, i) => (
+                    {sourceColumns.map((c, i) => (
                       <Fragment key={c.key}>
                         {i > 0 && ' '}
                         <code>{c.key}</code>
@@ -2704,8 +3384,8 @@ function TableSection({
                 value={transform.key}
                 onChange={(e) => setTransform(i, { ...transform, key: e.target.value })}
               >
-                {columns.map((c) => <option key={c.key} value={c.key}>{c.key}</option>)}
-                {!columns.some((c) => c.key === transform.key) && <option value={transform.key}>{transform.key}</option>}
+                {stages[i]!.map((c) => <option key={c.key} value={c.key}>{c.key}</option>)}
+                {!stages[i]!.some((c) => c.key === transform.key) && <option value={transform.key}>{transform.key}</option>}
               </select>
             )}
 
@@ -2756,10 +3436,49 @@ function TableSection({
               />
             )}
 
+            {transform.op === 'unpivot' && (
+              <UnpivotFields
+                // Keyed on what is stored, so the typed lists re-seed when the
+                // selection moves to another table, or undo changes this one.
+                key={`${layer.id}:${i}:${(transform.columns ?? []).join()}|${(transform.keep ?? []).join()}`}
+                unpivot={transform}
+                onChange={(next) => setTransform(i, next)}
+              />
+            )}
+
             {transform.op === 'advance' && (
               <AdvanceFields
                 advance={transform}
-                columns={columns}
+                columns={stages[i]!}
+                onChange={(next) => setTransform(i, next)}
+              />
+            )}
+
+            {transform.op === 'date' && (
+              <DateFields
+                key={`${layer.id}:${i}:${transform.timezone ?? ''}`}
+                date={transform}
+                columns={stages[i]!}
+                onChange={(next) => setTransform(i, next)}
+              />
+            )}
+
+            {transform.op === 'lookup' && (
+              <LookupFields
+                key={lookupFieldsKey(layer.id, i, transform)}
+                lookup={transform}
+                columns={stages[i]!}
+                sources={sources}
+                own={layer.source}
+                onChange={(next) => setTransform(i, next)}
+              />
+            )}
+
+            {transform.op === 'union' && (
+              <UnionFields
+                union={transform}
+                sources={sources}
+                own={layer.source}
                 onChange={(next) => setTransform(i, next)}
               />
             )}
@@ -2789,7 +3508,9 @@ function TableSection({
               const op = e.target.value as DataTransform['op'];
               e.target.value = '';
               if (!op) return;
+              // A new step sees the columns the pipeline ends with so far.
               const key = columns[0]?.key ?? '';
+              const other = sources.find((x) => x.id !== layer.source)?.id ?? '';
               const next: DataTransform =
                 op === 'sort' ? { op: 'sort', key, dir: 'desc' }
                 : op === 'filter' ? { op: 'filter', key, cmp: 'notEmpty' }
@@ -2798,6 +3519,13 @@ function TableSection({
                 // ordinary bracket laid out in round order works with no
                 // configuration and the fields below stay optional.
                 : op === 'advance' ? { op: 'advance' }
+                // Keeping the first column and folding the rest is the shape
+                // of nearly every wide sheet: a place, then a column a day.
+                : op === 'unpivot' ? (columns[0] ? { op: 'unpivot', keep: [columns[0].key] } : { op: 'unpivot' })
+                // Today, in the machine's zone, on the column that looks most like a date.
+                : op === 'date' ? { op: 'date', column: dateLikeColumn(columns) ?? key, keep: 'days' }
+                : op === 'lookup' ? { op: 'lookup', source: other, key }
+                : op === 'union' ? { op: 'union', source: other }
                 : { op, n: op === 'limit' ? 10 : 0 };
               // advance reads every round, so it can only ever be right at the
               // front. Appending it would put it after the filters most tables
@@ -2814,6 +3542,11 @@ function TableSection({
             <option value="limit">{t('editor.properties.opLimit')}</option>
             <option value="offset">{t('editor.properties.opOffset')}</option>
             <option value="advance">{t('editor.properties.opAdvance')}</option>
+            <option value="unpivot">{t('editor.properties.opUnpivot')}</option>
+            {/* Each needs something to point at: a column, another source. */}
+            <option value="date" disabled={noColumns}>{t('editor.properties.opDate')}</option>
+            <option value="lookup" disabled={noColumns || noOtherSource}>{t('editor.properties.opLookup')}</option>
+            <option value="union" disabled={noOtherSource}>{t('editor.properties.opUnion')}</option>
           </select>
         </Field>
       </Section>
@@ -2858,6 +3591,131 @@ function TableSection({
         )}
         {overflowing && (
           <p className="hint warn">{t('editor.properties.tableOverflow')}</p>
+        )}
+      </Section>
+
+      <Section title={t('editor.properties.sectionCycle')}>
+        <Field label={t('editor.properties.cycleDwell')}>
+          <input
+            type="number"
+            min={0}
+            step={0.5}
+            value={cycle?.dwell ?? 0}
+            title={t('editor.properties.cycleDwellTitle')}
+            onChange={(e) => setCycle({ dwell: Math.max(0, Number(e.target.value) || 0) })}
+          />
+        </Field>
+        {cycle && (
+          <>
+            <Field label={t('editor.properties.cycleDurationColumn')}>
+              <select
+                value={cycle.durationColumn ?? ''}
+                onChange={(e) => setCycle({ durationColumn: e.target.value || undefined })}
+              >
+                <option value="">{t('editor.properties.cycleNone')}</option>
+                {columns.map((c) => (
+                  <option key={c.key} value={c.key}>{c.label ?? c.key}</option>
+                ))}
+              </select>
+            </Field>
+            {cycle.durationColumn && (
+              <Field label={t('editor.properties.cycleUnit')}>
+                <select
+                  value={cycle.durationUnit ?? 's'}
+                  onChange={(e) => setCycle({ durationUnit: e.target.value === 'ms' ? 'ms' : undefined })}
+                >
+                  <option value="s">{t('editor.properties.cycleUnitSeconds')}</option>
+                  <option value="ms">{t('editor.properties.cycleUnitMs')}</option>
+                </select>
+              </Field>
+            )}
+            <Field label={t('editor.properties.cycleEnd')}>
+              <select
+                value={cycle.end ?? 'loop'}
+                onChange={(e) => {
+                  const end = e.target.value as TableCycleEnd;
+                  setCycle({ end: end === 'loop' ? undefined : end });
+                }}
+              >
+                <option value="loop">{t('editor.properties.cycleEndLoop')}</option>
+                <option value="hold">{t('editor.properties.cycleEndHold')}</option>
+                <option value="continue">{t('editor.properties.cycleEndContinue')}</option>
+              </select>
+            </Field>
+            <Field label={t('editor.properties.cycleGroup')}>
+              <input
+                value={cycle.group ?? ''}
+                placeholder={t('editor.properties.cycleGroupPlaceholder')}
+                title={t('editor.properties.cycleGroupTitle')}
+                onChange={(e) => setCycle({ group: e.target.value.trim() || undefined })}
+              />
+            </Field>
+            <Field label={t('editor.properties.cycleKeyColumn')}>
+              <select
+                value={cycle.keyColumn ?? ''}
+                title={t('editor.properties.cycleKeyColumnTitle')}
+                onChange={(e) => setCycle({ keyColumn: e.target.value || undefined })}
+              >
+                <option value="">{t('editor.properties.cycleKeyDefault')}</option>
+                {columns.map((c) => (
+                  <option key={c.key} value={c.key}>{c.label ?? c.key}</option>
+                ))}
+              </select>
+            </Field>
+            {cycleOnePage && (
+              <p className="hint warn">{t('editor.properties.cycleOnePage')}</p>
+            )}
+            {cycleTurning && (
+              <p className="hint">{t('editor.properties.cycleReadout', { seconds: cycle.dwell })}</p>
+            )}
+          </>
+        )}
+      </Section>
+
+      <Section title={t('editor.properties.sectionFollow')}>
+        <Field label={t('editor.properties.followTable')}>
+          <LeaderInput
+            key={`${layer.id}:${follow?.table ?? ''}`}
+            listId={`follow-leaders-${layer.id}`}
+            value={follow?.table ?? ''}
+            onCommit={(table) => setFollow({ table })}
+          />
+          <datalist id={`follow-leaders-${layer.id}`}>
+            {leaders.map((name) => <option key={name} value={name} />)}
+          </datalist>
+        </Field>
+        {follow && (
+          <>
+            <Field label={t('editor.properties.followColumn')}>
+              <select
+                value={follow.column}
+                title={t('editor.properties.followColumnTitle')}
+                onChange={(e) => setFollow({ column: e.target.value })}
+              >
+                {columns.map((c) => (
+                  <option key={c.key} value={c.key}>{c.label ?? c.key}</option>
+                ))}
+                {!columns.some((c) => c.key === follow.column) && (
+                  <option value={follow.column}>{follow.column}</option>
+                )}
+              </select>
+            </Field>
+            <Field label={t('editor.properties.followLeaderColumn')}>
+              <input
+                value={follow.leaderColumn ?? ''}
+                placeholder={t('editor.properties.followLeaderDefault')}
+                title={t('editor.properties.followLeaderColumnTitle')}
+                onChange={(e) => setFollow({ leaderColumn: e.target.value.trim() || undefined })}
+              />
+            </Field>
+            {followsSelf ? (
+              <p className="hint warn">{t('editor.properties.followSelf')}</p>
+            ) : (
+              <p className="hint">
+                {rt('editor.properties.followReadout', { table: followLeader, column: followColumn })}
+              </p>
+            )}
+          </>
         )}
       </Section>
 

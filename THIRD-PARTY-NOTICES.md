@@ -30,6 +30,18 @@ with a different GSAP release without rebuilding Breeze.
 > Subject to the terms of the GreenSock Standard License:
 > <https://gsap.com/standard-license>
 
+## hls.js — staged, not bundled
+
+Media layers play HLS streams with **hls.js 1.7.3**, licensed under the
+Apache License 2.0. Like GSAP it is not compiled into any Breeze bundle: the
+unmodified `hls.light.min.js` and the package’s own `LICENSE` are copied into
+`apps/server/public/vendor/hls/` at build time by `scripts/vendor-hls.mjs`,
+and loaded only by a graphic that plays an HLS stream.
+
+> Copyright (c) 2017 Dailymotion (http://www.dailymotion.com)
+> Licensed under the Apache License, Version 2.0:
+> <https://www.apache.org/licenses/LICENSE-2.0>
+
 ## Bundled and installed dependencies
 
 122 packages. Licences present: MIT (103), ISC (7), BlueOak-1.0.0 (5), BSD-3-Clause (4), (MIT AND Zlib) (1), Apache-2.0 (1), Unlicense (1).

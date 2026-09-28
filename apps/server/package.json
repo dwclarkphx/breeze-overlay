@@ -1,13 +1,13 @@
 {
   "name": "@breeze/server",
-  "version": "0.73.0",
+  "version": "0.74.0",
   "private": true,
   "license": "MPL-2.0",
   "type": "module",
   "main": "./dist/index.js",
   "scripts": {
-    "//vendor": "GSAP is staged into public/vendor/gsap/ rather than bundled, so it must run before anything serves a page — the client bundle references window.gsap and the page reads the staged VERSION to build its cache-busting query. Ahead of build-client on every path, including dev, so a dev server can never be the one arrangement that lacks it.",
-    "vendor": "node ../../scripts/vendor-gsap.mjs",
+    "//vendor": "GSAP (and hls.js, for HLS media layers) is staged into public/vendor/ rather than bundled, so it must run before anything serves a page — the client bundle references window.gsap and the page reads the staged VERSION to build its cache-busting query. Ahead of build-client on every path, including dev, so a dev server can never be the one arrangement that lacks it.",
+    "vendor": "node ../../scripts/vendor-gsap.mjs && node ../../scripts/vendor-hls.mjs",
     "build": "pnpm vendor && node scripts/build-client.mjs && tsc -p tsconfig.json && node scripts/ensure-env.mjs",
     "build:client": "pnpm vendor && node scripts/build-client.mjs",
     "dev": "pnpm vendor && node scripts/build-client.mjs && tsx watch src/index.ts",
@@ -31,6 +31,7 @@
     "@types/node": "^24.13.3",
     "@types/ssh2-sftp-client": "^9.0.6",
     "esbuild": "^0.28.1",
+    "hls.js": "^1.7.3",
     "tsx": "^4.23.1",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"

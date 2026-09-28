@@ -39,7 +39,15 @@ export type AuditAction =
   | 'scene.create'
   | 'scene.delete'
   | 'panel.connect'
-  | 'panel.disconnect';
+  | 'panel.disconnect'
+  /** An operator chose whose rows a data source serves (Wave 5). */
+  | 'source.use'
+  /** A browser signed in with the API key, signed out, or gave a wrong key. */
+  | 'session.start'
+  | 'session.end'
+  | 'session.refused'
+  /** The project's mode was set or cleared (Wave 6). */
+  | 'mode.set';
 
 export interface AuditActor {
   /** Remote address, as the server saw it. */

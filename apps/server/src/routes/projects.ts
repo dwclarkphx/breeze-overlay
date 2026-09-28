@@ -24,6 +24,7 @@ import {
 } from '@breeze/schema';
 import { CompositionValidationError, assertValidComposition } from '@breeze/schema/validate';
 
+import { forgetMode } from '../mode.js';
 import { actorOf, record } from '../audit.js';
 import { fail } from '../errors.js';
 import {
@@ -117,6 +118,7 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       .catch(() => undefined);
 
     await deleteProject(req.params.id);
+    forgetMode(req.params.id);
     void record({
       action: 'project.delete',
       actor: actorOf(req),

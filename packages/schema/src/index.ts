@@ -16,6 +16,9 @@
  */
 
 export * from './data.js';
+export * from './rules.js';
+export * from './time.js';
+export * from './media.js';
 export * from './types.js';
 export * from './schema.js';
 export * from './duration.js';

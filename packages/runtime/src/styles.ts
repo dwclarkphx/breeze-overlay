@@ -45,6 +45,8 @@ export const RUNTIME_CSS = `
   transform: translateZ(0);
 }
 .bz-layer[data-hidden='1'] { display: none; }
+/* A layer rule's hide (Wave 6) — see rules.ts for why not display. */
+.bz-layer[data-rule-hidden='1'] { visibility: hidden !important; }
 .bz-content {
   position: absolute;
   inset: 0;
@@ -52,6 +54,14 @@ export const RUNTIME_CSS = `
 }
 .bz-shape { position: absolute; inset: 0; }
 .bz-image, .bz-video, .bz-sprite { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* Live media (Wave 8). Never a pointer target: an embed would swallow the
+   editor's drags, and nothing on air is clicked. The back buffer of a
+   refreshing snapshot loads out of sight. A failed source is hidden unless the
+   layer holds its last picture. */
+.bz-media { position: absolute; inset: 0; overflow: hidden; pointer-events: none; background-repeat: no-repeat; background-position: center; }
+.bz-media > img, .bz-media > video, .bz-media > iframe { position: absolute; inset: 0; width: 100%; height: 100%; display: block; border: 0; }
+.bz-media > .bz-media-back { visibility: hidden; }
+.bz-media[data-state='failed']:not([data-on-error='hold']) { visibility: hidden; }
 .bz-text {
   position: absolute;
   inset: 0;

@@ -19,7 +19,9 @@
  *    part of the graphic's intro),
  *  - **re-sort** — a FLIP, owned by this module and running on its own clock
  *    because it is triggered by data arriving, not by the playhead,
- *  - **paging** — an instant swap on `next()`, again data-driven.
+ *  - **paging** — `next()`, `prev()` or a cycle's timer. The outgoing page plays
+ *    the row reveal in reverse and the new page reveals, again on this
+ *    module's own clock; with no reveal preset it is an instant swap.
  *
  * Mixing those into the timeline was the first thing tried and it does not work:
  * a standings feed changing while the graphic holds at its STOP marker has no
@@ -35,17 +37,28 @@ import {
   type DataColumn,
   type DataRow,
   type DataSet,
+  type DataValue,
   type Ease,
   type Layer,
   type RowAnimPreset,
   type RowAnimPresetId,
   type TableLayer,
+  resolveRules,
+  type RuleContext,
+  MEDIA_COLUMNS,
+  mediaKindOf,
+  parseMediaKind,
+  type MediaKind,
+  type MediaLayer,
 } from '@breeze/schema';
 
+import { normalisePageKey } from './cycle.js';
 import { buildLayerElement, type BuildContext, type LayerNodes } from './dom.js';
 import type { LayerInstance } from './expand.js';
 import { applyTextFit } from './fit.js';
 import { hasKeyframes } from './plan.js';
+import { preloadMedia, resolveMediaSrc, stopMediaIn } from './media.js';
+import { applyRuleResult } from './rules.js';
 
 /* ------------------------------------------------------------------- pure */
 
@@ -244,6 +257,40 @@ export interface TableBlockOptions {
   animator: TableAnimator;
   /** Namespaced id of the table layer, for row element ids and warnings. */
   layerId: string;
+  /**
+   * Called after a render that built new row elements, once they are in the
+   * DOM and positioned.
+   *
+   * The runtime uses it to put keyframed cells at rest on rows that arrive
+   * after the reveal has already played — a page turn or a feed tick mid-hold.
+   * Those cells hand their transform to GSAP (see `buildRow`), so a freshly
+   * built one has none at all until somebody writes it.
+   */
+  onRowsBuilt?: () => void;
+  /**
+   * What cell rules read besides their row — sources, fields, the mode
+   * (Wave 6). Absent: rules see no data but their own row.
+   */
+  ruleContext?: () => Omit<RuleContext, 'row'>;
+  /** Other sources, for `lookup` and `union` transforms (Wave 7). */
+  transformSource?: (id: string) => DataSet | undefined;
+  /** A media cell set to `skip` failed on the row with this key (Wave 8). */
+  onMediaFail?: (rowKey: string) => void;
+  /** A media cell showed a picture (Wave 8). */
+  onMediaPlay?: (rowKey: string) => void;
+}
+
+/** What `render` was asked to do beyond the ordinary rebuild. */
+interface RenderOptions {
+  /** Animate re-sorts and late arrivals. False only for the very first render. */
+  animate?: boolean;
+  /**
+   * Treat every row as arriving — the second half of a page turn. Existing row
+   * elements are discarded rather than reused: a row that played the outgoing
+   * half of the turn is faded out, and reusing it by key would leave it
+   * invisible on the new page.
+   */
+  reveal?: boolean;
 }
 
 interface RowHandle {
@@ -251,6 +298,8 @@ interface RowHandle {
   el: HTMLElement;
   /** Cell nodes, so a data change rewrites text without rebuilding the row. */
   cells: Array<{ nodes: LayerNodes; column: string | undefined }>;
+  /** The row last written, so rules can be re-read when the mode or a field changes. */
+  row?: DataRow;
   /** Current y, in stage px — the FLIP "first" position. */
   y: number;
 }
@@ -289,6 +338,10 @@ export class TableBlock {
   private page = 0;
   private paging: Paging = { perPage: 0, pageCount: 1, overflow: false };
   private destroyed = false;
+  /** The outgoing half of a page turn, while it plays. */
+  private turn: { kill(): void } | null = null;
+  /** The leader's page key this table is filtered to; null when not following. */
+  private follow: { column: string; key: string | null } | null = null;
 
   constructor(options: TableBlockOptions) {
     this.opts = options;
@@ -307,6 +360,28 @@ export class TableBlock {
   }
 
   /* ------------------------------------------------------------- data in */
+
+  /**
+   * Re-run the transforms over the rows already held — the clock moved on for
+   * a `date` transform, or a source a `lookup` or `union` reads changed. True
+   * when that changed what is shown.
+   */
+  refreshTransforms(): boolean {
+    if (this.destroyed) return false;
+    /*
+     * Rendered only when the answer changed. This runs every thirty seconds
+     * on a table with a `date` step, and a render landing mid-turn finishes
+     * the turn at once — a clock tick that changes nothing must not cut a
+     * page transition short on air.
+     */
+    const before = JSON.stringify(this.view);
+    this.computeView();
+    if (JSON.stringify(this.view) === before) return false;
+    // The view is already the new one, so `setDataSet`'s before/after
+    // comparison would see no change; a changed view is the answer here.
+    this.render({ animate: true });
+    return true;
+  }
 
   /** Replace the data. Returns true when the rendered view actually changed. */
   setDataSet(data: DataSet | null): boolean {
@@ -387,28 +462,222 @@ export class TableBlock {
    * behavior. Pages are not steps: a step is a STOP marker, so `stepCount()`
    * stays marker-only.
    */
-  nextPage(): boolean {
+  nextPage(opts: { animate?: boolean } = {}): boolean {
     if (this.destroyed || this.paging.pageCount <= 1) return false;
-    this.page = (this.page + 1) % this.paging.pageCount;
-    this.render({ animate: true });
+    this.turnTo(this.page + 1, opts);
     return true;
   }
 
-  setPage(page: number): void {
+  /** Back one page, wrapping to the last. False when there is only one page. */
+  prevPage(opts: { animate?: boolean } = {}): boolean {
+    if (this.destroyed || this.paging.pageCount <= 1) return false;
+    this.turnTo(this.page - 1, opts);
+    return true;
+  }
+
+  setPage(page: number, opts: { animate?: boolean } = {}): void {
     if (this.destroyed) return;
     const next = Math.max(0, Math.min(Math.floor(page), this.paging.pageCount - 1));
     if (next === this.page) return;
-    this.page = next;
-    this.render({ animate: true });
+    this.turnTo(next, opts);
+  }
+
+  /**
+   * Turn to `page`, wrapping out-of-range values. True when the page changed.
+   *
+   * The page is committed immediately and only the DOM follows on the
+   * animator's clock. Anything asking "which page is this table on" — the
+   * runtime's state report, a second NEXT pressed mid-turn, the tests — gets
+   * the answer the operator just asked for, not the one still fading out.
+   *
+   * `animate` plays the row reveal in reverse on the outgoing rows and the
+   * reveal proper on the incoming ones. Off by default so a caller that has not
+   * asked for motion — the editor, anything headless — keeps the old instant
+   * swap. With a reveal of `none` there is nothing to play and it cuts.
+   */
+  turnTo(page: number, opts: { animate?: boolean } = {}): boolean {
+    if (this.destroyed) return false;
+    const count = Math.max(1, this.paging.pageCount);
+    const target = ((Math.floor(page) % count) + count) % count;
+    if (target === this.page && this.turn === null) return false;
+
+    this.transition(() => {
+      this.page = target;
+    }, opts);
+    return true;
+  }
+
+  /**
+   * Commit a change to what is shown, then bring the DOM along.
+   *
+   * The shared half of a page turn and a follow change: both replace every row,
+   * and both want the outgoing rows to leave the way they came before the new
+   * ones arrive. `instant` is for the build, where nothing is on air yet and a
+   * FLIP from the authored snapshot would be motion nobody asked for.
+   */
+  private transition(commit: () => void, opts: { animate?: boolean; instant?: boolean }): void {
+    commit();
+    this.cancelTurn();
+
+    if (opts.instant) {
+      this.render({ animate: false });
+      return;
+    }
+
+    const anim = opts.animate ? resolveRowAnim(this.opts.layer.rowAnim) : null;
+    const outgoing = this.rowElements;
+    if (!anim || outgoing.length === 0) {
+      this.render({ animate: true, reveal: anim !== null });
+      return;
+    }
+
+    this.turn = this.opts.animator.to(outgoing, {
+      ...anim.from,
+      duration: anim.duration,
+      ease: anim.ease,
+      stagger: anim.stagger,
+      overwrite: 'auto',
+      onComplete: () => {
+        this.turn = null;
+        this.render({ animate: true, reveal: true });
+      },
+    });
+  }
+
+  /* -------------------------------------------------------------- follow */
+
+  /**
+   * Show only the rows whose `column` equals `key` (CYCLE.md, Wave 4).
+   *
+   * Set by the runtime from the leader's page key. `null` is a real key — the
+   * leader's page has no name — and matches nothing: a tile blank because its
+   * leader cannot say which city it is on beats one showing the wrong city.
+   * Back to page one on every change, since the follower's pages belong to
+   * the old key. True when the key changed.
+   */
+  setFollow(
+    column: string,
+    key: string | null,
+    opts: { animate?: boolean; instant?: boolean } = {},
+  ): boolean {
+    if (this.destroyed) return false;
+    const next = { column, key: key === null ? null : normalisePageKey(key) };
+    if (this.follow && this.follow.column === next.column && this.follow.key === next.key) return false;
+    this.transition(() => {
+      this.follow = next;
+      this.page = 0;
+      this.computeView();
+    }, opts);
+    return true;
+  }
+
+  /** Whether the transformed data has a column — how the runtime picks a leader's key column. */
+  hasColumn(key: string): boolean {
+    return this.view.columns.some((c) => c.key === key);
+  }
+
+  /** Stop an outgoing half-turn where it is; the next render replaces its rows. */
+  private cancelTurn(): void {
+    if (!this.turn) return;
+    this.turn.kill();
+    this.turn = null;
+  }
+
+  /** Every page's rows, in order — what a cycle times. */
+  get pages(): DataRow[][] {
+    const perPage = this.paging.perPage;
+    const all = this.view.rows;
+    if (perPage <= 0 || all.length <= perPage) return [all];
+    const out: DataRow[][] = [];
+    for (let i = 0; i < all.length; i += perPage) out.push(all.slice(i, i + perPage));
+    return out;
+  }
+
+  /**
+   * The name of a page: the value in `keyColumn` on its first row.
+   *
+   * Defaults to the first string column — the convention `rowKey` already uses
+   * for a row's identity, because the column that names a row is the one that
+   * names the group it opens. Null when that cell is empty; a caller shows
+   * the page number instead.
+   */
+  pageKey(page: number, keyColumn?: string): string | null {
+    const first = this.pages[page]?.[0];
+    if (!first) return null;
+    const column =
+      keyColumn ??
+      this.view.columns.find((c) => c.type === 'string')?.key ??
+      this.view.columns[0]?.key;
+    if (!column) return null;
+    const value = first[column];
+    if (value === null || value === undefined || value === '') return null;
+    return String(value);
+  }
+
+  /** The first page whose key matches, trimmed and case-insensitive; -1 if none. */
+  findPage(key: string, keyColumn?: string): number {
+    const wanted = normalisePageKey(key);
+    if (!wanted) return -1;
+    const count = this.pages.length;
+    for (let i = 0; i < count; i += 1) {
+      if (normalisePageKey(this.pageKey(i, keyColumn)) === wanted) return i;
+    }
+    return -1;
   }
 
   /* -------------------------------------------------------------- render */
 
-  private pageRows(): DataRow[] {
+  private pageRows(page = this.page): DataRow[] {
     const perPage = this.paging.perPage;
     if (perPage <= 0) return this.view.rows;
-    const start = this.page * perPage;
+    const start = page * perPage;
     return this.view.rows.slice(start, start + perPage);
+  }
+
+  /* --------------------------------------------------------------- media */
+
+  /** Whether a row cell plays live media — the only tables worth preloading. */
+  get hasMediaCells(): boolean {
+    return this.opts.layer.row.cells.some((c) => c.type === 'media');
+  }
+
+  /** Whether the row with this key is on screen now. */
+  showsRow(key: string): boolean {
+    // Mid-turn the rows still here are the ones leaving; the page is already the next.
+    return this.turn === null && this.rows.has(key);
+  }
+
+  /** What a media cell plays for a row: its URL and kind. */
+  private mediaFor(cell: MediaLayer, row: DataRow): { src: string; kind: MediaKind | null } {
+    const raw = cell.cell ? row[cell.cell] : cell.src;
+    const src = raw === null || raw === undefined ? '' : String(raw).trim();
+    /*
+     * A kind column the author named, else the kind a media check worked out —
+     * when the cell plays that check's `mediaSrc` — else the layer's, else the URL's.
+     */
+    const kindColumn = cell.kindColumn ?? (cell.cell === MEDIA_COLUMNS.src ? MEDIA_COLUMNS.kind : undefined);
+    const kind = (kindColumn ? parseMediaKind(row[kindColumn]) : null) ?? cell.kind ?? null;
+    return { src, kind };
+  }
+
+  /** Warm a page's media ahead of a turn onto it — see `preloadMedia`. */
+  preloadPage(page: number, at = Date.now()): void {
+    if (this.destroyed || page < 0 || page >= this.pageCount) return;
+    const cells = this.opts.layer.row.cells.filter((c): c is MediaLayer => c.type === 'media');
+    for (const row of this.pageRows(page)) {
+      for (const cell of cells) {
+        const { src, kind } = this.mediaFor(cell, row);
+        if (!src) continue;
+        const url = resolveMediaSrc(src, this.opts.ctx.resolveAsset);
+        preloadMedia(url, kind ?? mediaKindOf(url), cell.refresh, this.opts.ctx.doc, at);
+      }
+    }
+  }
+
+  /** Remove a row element, letting go of any stream or embed in it first. */
+  private dropRowElement(handle: RowHandle): void {
+    stopMediaIn(handle.el);
+    handle.el.remove();
   }
 
   /** Cheap identity of what is on screen, for change detection. */
@@ -417,22 +686,38 @@ export class TableBlock {
   }
 
   /**
-   * Rebuild the row list against the current data.
+   * The transformed, followed rows and their paging — the table's logical
+   * state, apart from the DOM.
    *
-   * Reuses row elements by key so a re-sort moves the elements that are already
-   * on screen. `animate` is false on construction and true afterwards — the
-   * first render must not FLIP from nowhere.
+   * Split out of `render` so a follow change can commit it at once: a turn
+   * animates the old rows out before the new ones are rendered, and in that
+   * half-second the page key, page count and rows a caller reads (a follower
+   * further down a chain, `tableStates`) must already be the new city's.
    */
-  render(opts: { animate?: boolean } = {}): void {
-    if (this.destroyed) return;
-
+  private computeView(): void {
     const layer = this.opts.layer;
     const gap = layer.row.gap ?? 0;
     const height = layer.row.height;
 
-    this.view = this.source
-      ? applyTransforms(this.source, layer.transforms)
+    /*
+     * Following filters *before* the transforms when the source already has
+     * the column — so `limit 5` means five days of this city, and `rank`
+     * ranks within it — and after them only when a transform is what makes
+     * the column (an `unpivot` key, a `rank`).
+     */
+    const follow = this.follow;
+    const keep = (rows: DataRow[]): DataRow[] =>
+      follow!.key === null ? [] : rows.filter((row) => normalisePageKey(row[follow!.column]) === follow!.key);
+    const early = follow !== null && this.source !== null && this.source.columns.some((c) => c.key === follow.column);
+    const input = this.source && early ? { ...this.source, rows: keep(this.source.rows) } : this.source;
+
+    this.view = input
+      ? applyTransforms(input, layer.transforms, {
+          now: new Date(),
+          ...(this.opts.transformSource ? { source: this.opts.transformSource } : {}),
+        })
       : { id: '', columns: [], rows: [] };
+    if (follow && !early) this.view = { ...this.view, rows: keep(this.view.rows) };
 
     this.paging = paging(
       this.view.rows.length,
@@ -442,6 +727,37 @@ export class TableBlock {
       layer.rowsPerPage,
     );
     if (this.page >= this.paging.pageCount) this.page = 0;
+  }
+
+  /**
+   * Rebuild the row list against the current data.
+   *
+   * Reuses row elements by key so a re-sort moves the elements that are already
+   * on screen. `animate` is false on construction and true afterwards — the
+   * first render must not FLIP from nowhere.
+   */
+  render(opts: RenderOptions = {}): void {
+    if (this.destroyed) return;
+
+    /*
+     * A render landing while the outgoing half of a turn plays — a feed tick
+     * mid-turn — finishes the turn itself. Its rows are part-faded, so they
+     * are discarded and the page arrives with its reveal, rather than being
+     * reused by key and left half-transparent on air.
+     */
+    const reveal = opts.reveal === true || this.turn !== null;
+    this.cancelTurn();
+    if (reveal) {
+      for (const handle of this.rows.values()) this.dropRowElement(handle);
+      this.rows.clear();
+      this.order = [];
+    }
+
+    const layer = this.opts.layer;
+    const gap = layer.row.gap ?? 0;
+    const height = layer.row.height;
+
+    this.computeView();
 
     const rows = this.pageRows();
     const nextOrder: string[] = [];
@@ -482,7 +798,7 @@ export class TableBlock {
     // data, and holding a ghost of it on screen is worse than a hard cut.
     for (const [key, handle] of [...this.rows]) {
       if (kept.has(key)) continue;
-      handle.el.remove();
+      this.dropRowElement(handle);
       this.rows.delete(key);
     }
 
@@ -527,8 +843,12 @@ export class TableBlock {
      * Rows arriving into a table that is already on screen fade in on their own
      * clock. The timeline's reveal covers the graphic's intro; a feed adding a
      * team at 19:58 has no timeline time left to animate over.
+     *
+     * A page turn's second half is the same case with every row arriving, which
+     * the size test alone would mistake for the table's first fill.
      */
-    if (entering.length && this.rows.size > entering.length) {
+    if (entering.length) this.opts.onRowsBuilt?.();
+    if (entering.length && (reveal || this.rows.size > entering.length)) {
       const anim = resolveRowAnim(layer.rowAnim);
       if (anim) {
         this.opts.animator.set(entering, { ...anim.from });
@@ -595,6 +915,12 @@ export class TableBlock {
       }
 
       if (cellLayer.visible === false) nodes.el.dataset['hidden'] = '1';
+      if (nodes.mediaPlayer) {
+        if (cellLayer.type === 'media' && cellLayer.onError === 'skip') {
+          nodes.mediaPlayer.onFail = () => this.opts.onMediaFail?.(key);
+        }
+        nodes.mediaPlayer.onPlay = () => this.opts.onMediaPlay?.(key);
+      }
       el.appendChild(nodes.el);
       cells.push({ nodes, column: cellLayer.cell });
     });
@@ -605,21 +931,62 @@ export class TableBlock {
 
   /** Write one data row into an existing row element's cells. */
   private writeRow(handle: RowHandle, row: DataRow): void {
+    handle.row = row;
     for (const cell of handle.cells) {
-      if (!cell.column) continue;
-      const value = row[cell.column];
       const layer = cell.nodes.layer;
+      const value = cell.column ? row[cell.column] : undefined;
 
-      if (layer.type === 'text' && cell.nodes.textInner) {
+      if (cell.column && layer.type === 'text' && cell.nodes.textInner) {
         const text = value === null || value === undefined ? '' : String(value);
-        if (cell.nodes.textInner.textContent === text) continue;
-        cell.nodes.textInner.textContent = text;
-        // Per-cell Fit Width. This is the reason cells are layers: a long team
-        // name squeezes into its column with no extra machinery.
-        applyTextFit(cell.nodes.textInner, layer.fit, layer.size?.width ?? 0);
-      } else if (layer.type === 'image' && cell.nodes.media) {
-        const src = value === null || value === undefined ? '' : String(value);
-        if (src) cell.nodes.media.src = this.opts.ctx.resolveAsset(src);
+        if (cell.nodes.textInner.textContent !== text) {
+          cell.nodes.textInner.textContent = text;
+          // Per-cell Fit Width. This is the reason cells are layers: a long team
+          // name squeezes into its column with no extra machinery.
+          applyTextFit(cell.nodes.textInner, layer.fit, layer.size?.width ?? 0);
+        }
+      }
+      if (layer.type === 'media' && cell.nodes.mediaPlayer && layer.cell) {
+        const { src, kind } = this.mediaFor(layer, row);
+        cell.nodes.mediaPlayer.show(src, kind);
+      }
+      this.applyCellRules(cell, row, value);
+    }
+  }
+
+  /**
+   * A cell's rules against its own row, and its image — which the row and a
+   * rule decide together: a rule's `src` while it holds, the row's value
+   * otherwise, the authored image when the cell reads no column.
+   */
+  private applyCellRules(cell: RowHandle['cells'][number], row: DataRow, value: DataValue | undefined): void {
+    const layer = cell.nodes.layer;
+    const result = layer.rules?.length && this.opts.ruleContext
+      ? resolveRules(layer.rules, { ...this.opts.ruleContext(), row })
+      : layer.rules?.length
+        ? resolveRules(layer.rules, { row, source: () => undefined, field: () => undefined, mode: '' })
+        : undefined;
+    if (layer.type === 'image' && cell.nodes.media) {
+      const fromRow = cell.column && value !== null && value !== undefined && value !== '' ? String(value) : undefined;
+      const src = result?.src ?? fromRow ?? (cell.column ? undefined : layer.src);
+      if (src) {
+        const next = this.opts.ctx.resolveAsset(src);
+        if (cell.nodes.media.getAttribute('src') !== next) cell.nodes.media.src = next;
+      } else if (cell.column) {
+        // Nothing for this row — not the picture a rule or an earlier row left.
+        cell.nodes.media.removeAttribute('src');
+      }
+    }
+    if (result) applyRuleResult(cell.nodes, result, this.opts.ctx.resolveAsset, false);
+  }
+
+  /** Re-read every cell rule — the mode, a field or another source changed, not this table's rows. */
+  reapplyRules(): void {
+    if (!this.opts.layer.row.cells.some((c) => c.rules?.length)) return;
+    for (const handle of this.rows.values()) {
+      if (!handle.row) continue;
+      for (const cell of handle.cells) {
+        if (!cell.nodes.layer.rules?.length) continue;
+        this.applyCellRules(cell, handle.row, cell.column ? handle.row[cell.column] : undefined);
       }
     }
   }
@@ -637,8 +1004,9 @@ export class TableBlock {
 
   destroy(): void {
     if (this.destroyed) return;
+    this.cancelTurn();
     this.destroyed = true;
-    for (const handle of this.rows.values()) handle.el.remove();
+    for (const handle of this.rows.values()) this.dropRowElement(handle);
     this.rows.clear();
     this.order = [];
   }

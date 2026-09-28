@@ -16,6 +16,10 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { actorOf, record } from '../audit.js';
+import { config } from '../config.js';
+import { projectModes, readMode } from '../mode.js';
+import { fail } from '../errors.js';
+import { SESSION_COOKIE, keyMatches, readCookie, sameOrigin, type Sessions } from '../session.js';
 import { controlPage, isFedSource, type ControlPanelBinding } from '../pages.js';
 import { channelKey, parseClientMessage, type ControlHub, type ControlVerb } from '../hub.js';
 import type { DataRegistry } from '../data/registry.js';
@@ -29,9 +33,46 @@ import {
   sceneElements,
   stepCount,
   type DataSourceDef,
+  type Layer,
 } from '@breeze/schema';
 
-const VERBS: ControlVerb[] = ['play', 'stop', 'next', 'clear'];
+/** Every composition id mounted in a layer tree, groups expanded. */
+function eachMount(layers: Layer[], fn: (ref: string) => void): void {
+  for (const layer of layers) {
+    if (layer.type === 'composition') fn(layer.ref);
+    else if (layer.type === 'group') eachMount(layer.children, fn);
+  }
+}
+
+const VERBS: ControlVerb[] = ['play', 'stop', 'next', 'prev', 'clear'];
+
+/** Verbs that may be aimed at one table with `?table=` (CYCLE.md). */
+const AIMABLE: ReadonlySet<ControlVerb> = new Set(['next', 'prev']);
+
+/**
+ * Parameters for the table verbs, from the query string and, on a POST, a JSON
+ * body — whichever the caller's device finds easier, as with `update`. The
+ * body wins where both name a field, being the more deliberate of the two.
+ *
+ * `key` is never a parameter here: it is the API key on every control URL.
+ * That is why a page is named with `name=`, not `key=`.
+ */
+function tableParams(req: FastifyRequest): Record<string, unknown> {
+  const query = { ...(req.query as Record<string, unknown>) };
+  delete query['key'];
+  const body =
+    req.method === 'POST' && req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+      ? { ...(req.body as Record<string, unknown>) }
+      : {};
+  delete body['key'];
+  return { ...query, ...body };
+}
+
+/** `table` as a trimmed string, or undefined. Empty means "every table". */
+function tableOf(params: Record<string, unknown>): string | undefined {
+  const table = params['table'];
+  return typeof table === 'string' && table.trim() !== '' ? table.trim() : undefined;
+}
 
 /**
  * `projectId/compositionId` → the two halves.
@@ -56,6 +97,8 @@ export async function registerControlRoutes(
   hub: ControlHub,
   /** Optional so tests can register the routes without a polling registry. */
   data?: DataRegistry,
+  /** Browser sessions, for a socket that sends commands on a server with a key. */
+  sessions?: Sessions,
 ): Promise<void> {
   /* ------------------------------------------------------------ websocket */
 
@@ -65,6 +108,31 @@ export async function registerControlRoutes(
     // Read before the hub hears of the socket, so the peers list can name it
     // from its first appearance. The same actor the activity log records.
     const actor = actorOf(req);
+
+    /*
+     * Commands over the socket need the API key exactly as the REST verbs do.
+     * Subscribing — reading state — stays open, as every read does. Decided
+     * once, at the upgrade: the key in the socket URL or a header, or a
+     * signed-in browser session from a page of this server's own.
+     */
+    const query = req.query as { key?: unknown } | undefined;
+    const header = req.headers['x-breeze-key'];
+    const presented = [query?.key, Array.isArray(header) ? header[0] : header].filter((k) => k !== undefined);
+    let byKey = !config.apiKey;
+    if (!byKey && presented.length > 0 && (!sessions || sessions.mayTry(req.ip))) {
+      byKey = presented.some((k) => keyMatches(k, config.apiKey));
+      if (!byKey) sessions?.failed(req.ip);
+    }
+    /*
+     * A session is re-checked on every command, not just at the upgrade: a
+     * panel left open must lose its rights when its browser signs out or the
+     * session runs out, not keep them for as long as the socket stays up.
+     */
+    const sessionToken =
+      !byKey && sessions && sameOrigin(req.headers.origin, req.headers.host)
+        ? readCookie(req.headers.cookie, SESSION_COOKIE)
+        : undefined;
+    const mayCommand = (): boolean => byKey || (sessionToken !== undefined && sessions!.expiry(sessionToken) !== undefined);
 
     const client = hub.addClient(
       id,
@@ -93,6 +161,11 @@ export async function registerControlRoutes(
       const message = parseClientMessage(raw.toString());
       if (!message) {
         client.send({ type: 'error', message: 'unrecognised message' });
+        return;
+      }
+      if (message.type === 'command' && !mayCommand()) {
+        const refusal = fail('error.apiKeyRequired');
+        client.send({ type: 'error', message: refusal.error, code: refusal.code });
         return;
       }
 
@@ -159,13 +232,98 @@ export async function registerControlRoutes(
       await getChannel(req.params.id, req.params.compId);
 
       const channel = channelKey(req.params.id, req.params.compId);
-      const delivered = hub.dispatch(channel, { verb, source: 'rest' });
-      return { ok: true, verb, channel, delivered };
+      // `?table=` aims NEXT / PREV at one table. The server cannot check the
+      // name — tables are only known to a built runtime — so an unknown one is
+      // delivered and ignored by the page, like any command to an absent layer.
+      const table = AIMABLE.has(verb) ? tableOf(tableParams(req)) : undefined;
+      const delivered = hub.dispatch(channel, {
+        verb,
+        source: 'rest',
+        ...(table !== undefined ? { table } : {}),
+      });
+      return { ok: true, verb, channel, delivered, ...(table !== undefined ? { table } : {}) };
     };
 
     app.get(`/api/control/:id/:compId/${verb}`, handler);
     app.post(`/api/control/:id/:compId/${verb}`, handler);
   }
+
+  /**
+   * Go to a page: `?n=3` (1-based) or `?name=C` (a page key), optionally
+   * `&table=`. Exactly one of the two, or 400 — a URL that asks for both is a
+   * button somebody wired wrong, and choosing one of them for it would hide
+   * that until the day it mattered.
+   */
+  const page = async (
+    req: FastifyRequest<{ Params: { id: string; compId: string } }>,
+    reply: FastifyReply,
+  ) => {
+    await getChannel(req.params.id, req.params.compId);
+    const params = tableParams(req);
+    const rawN = params['n'];
+    const rawName = params['name'];
+    const hasN = rawN !== undefined && rawN !== '';
+    const hasName = typeof rawName === 'string' && rawName.trim() !== '';
+    if (hasN === hasName) {
+      reply.code(400);
+      return { error: 'give exactly one of n (a 1-based page number) or name (a page key)' };
+    }
+
+    let n: number | undefined;
+    if (hasN) {
+      n = Number(rawN);
+      if (!Number.isInteger(n) || n < 1) {
+        reply.code(400);
+        return { error: 'n must be a whole number, 1 or more' };
+      }
+    }
+
+    const table = tableOf(params);
+    const channel = channelKey(req.params.id, req.params.compId);
+    const delivered = hub.dispatch(channel, {
+      verb: 'page',
+      source: 'rest',
+      ...(n !== undefined ? { page: n } : { key: String(rawName).trim() }),
+      ...(table !== undefined ? { table } : {}),
+    });
+    return {
+      ok: true,
+      verb: 'page',
+      channel,
+      delivered,
+      ...(n !== undefined ? { n } : { name: String(rawName).trim() }),
+      ...(table !== undefined ? { table } : {}),
+    };
+  };
+
+  app.get('/api/control/:id/:compId/page', page);
+  app.post('/api/control/:id/:compId/page', page);
+
+  /** Freeze or restart self-paging tables: `?state=hold|resume`, optionally `&table=`. */
+  const cycle = async (
+    req: FastifyRequest<{ Params: { id: string; compId: string } }>,
+    reply: FastifyReply,
+  ) => {
+    await getChannel(req.params.id, req.params.compId);
+    const params = tableParams(req);
+    const state = params['state'];
+    if (state !== 'hold' && state !== 'resume') {
+      reply.code(400);
+      return { error: 'state must be hold or resume' };
+    }
+    const table = tableOf(params);
+    const channel = channelKey(req.params.id, req.params.compId);
+    const delivered = hub.dispatch(channel, {
+      verb: 'cycle',
+      cycle: state,
+      source: 'rest',
+      ...(table !== undefined ? { table } : {}),
+    });
+    return { ok: true, verb: 'cycle', channel, delivered, state, ...(table !== undefined ? { table } : {}) };
+  };
+
+  app.get('/api/control/:id/:compId/cycle', cycle);
+  app.post('/api/control/:id/:compId/cycle', cycle);
 
   /**
    * Take a whole scene down in one call.
@@ -227,12 +385,20 @@ export async function registerControlRoutes(
   app.get('/api/control/:id/:compId/update', update);
   app.post('/api/control/:id/:compId/update', update);
 
-  /** What is this graphic doing right now? */
-  app.get<{ Params: { id: string; compId: string } }>(
+  /**
+   * What is this graphic doing right now?
+   *
+   * `?data=0` leaves out the retained field data — the same opt-out as the
+   * socket's `data: false`, for a poller that only wants playback. Every data
+   * source's DataSet rides in that object, once a second per watched button.
+   */
+  app.get<{ Params: { id: string; compId: string }; Querystring: { data?: string } }>(
     '/api/control/:id/:compId/state',
     async (req) => {
       const channel = channelKey(req.params.id, req.params.compId);
-      return { channel, state: hub.state(channel) };
+      const state = hub.state(channel);
+      const lean = req.query.data === '0' || req.query.data === 'false';
+      return { channel, state: lean ? { ...state, data: {} } : state };
     },
   );
 
@@ -329,6 +495,37 @@ export async function registerControlRoutes(
 
       const bindings = [...feds, ...editable, ...overrides];
 
+      /*
+       * The Data block (CYCLE.md, Wave 5): every fetched source this graphic
+       * reads — its own layers and those of compositions mounted in it — with
+       * its backup, so an operator can see a feed failing and put the backup
+       * on air from the panel they already have open.
+       */
+      const watched: Array<{ id: string; name: string; backup?: string; backupName?: string; media?: boolean; fed?: boolean }> = [];
+      const visited = new Set<string>();
+      const walk = (comp: typeof composition): void => {
+        if (visited.has(comp.id)) return;
+        visited.add(comp.id);
+        for (const ref of collectSources(comp)) {
+          const def = byId.get(ref.id);
+          // A typed camera list is watched too: its cameras are checked (Wave 8).
+          if (!def || !(isFedSource(def.type) || def.media) || watched.some((w) => w.id === def.id)) continue;
+          const backup = def.fallback !== undefined ? byId.get(def.fallback) : undefined;
+          watched.push({
+            id: def.id,
+            name: def.name,
+            ...(backup ? { backup: backup.id, backupName: backup.name } : {}),
+            ...(def.media ? { media: true } : {}),
+            ...(isFedSource(def.type) ? {} : { fed: false }),
+          });
+        }
+        eachMount(comp.layers, (refId) => {
+          const nested = byCompId.get(refId);
+          if (nested) walk(nested);
+        });
+      };
+      walk(composition);
+
       reply.type('text/html; charset=utf-8');
       reply.header('cache-control', 'no-store');
       return controlPage({
@@ -338,6 +535,9 @@ export async function registerControlRoutes(
         schema: bindingsJsonSchema(composition, (id) => byCompId.get(id)),
         stepCount: stepCount(composition),
         datasets: data?.datasets(req.params.id) ?? {},
+        sources: watched,
+        mode: await readMode(req.params.id),
+        modes: projectModes(project),
       });
     },
   );

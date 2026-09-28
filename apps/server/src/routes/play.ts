@@ -11,6 +11,7 @@ import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 
 import { config, projectAssetsDir } from '../config.js';
+import { readMode } from '../mode.js';
 import type { DataRegistry } from '../data/registry.js';
 import { playPage } from '../pages.js';
 import { fail } from '../errors.js';
@@ -56,6 +57,7 @@ export async function registerPlayRoutes(
       assetBase: `/assets/${encodeURIComponent(req.params.id)}`,
       cacheBust: project.updatedAt,
       datasets: data?.datasets(req.params.id) ?? {},
+      mode: await readMode(req.params.id),
     });
   });
 

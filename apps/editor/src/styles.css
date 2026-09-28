@@ -219,6 +219,10 @@ input[type='checkbox'] { width: auto; }
 }
 .panel-sub { color: var(--muted); font-weight: 400; font-size: 11px; }
 .panel-actions { display: flex; gap: 4px; }
+/* The add menu is as wide as its longest option, and it sits beside the delete
+   button: a long entry once pushed that button under the stage, where the zoom
+   controls took its clicks. The closed menu only ever shows "+ Add…". */
+.panel-actions select.add-layer { max-width: 7.5em; }
 
 /* A nested composition's still. The host is sized by the mount helper, which
    owns the single transform that scales the stage down — see
@@ -755,6 +759,9 @@ img.layer-thumb {
   color: var(--muted); font-size: 10px; margin-top: 2px;
 }
 .source-error { color: #ff9d95; font-size: 11px; margin-top: 3px; word-break: break-word; }
+/* A partial success — some places on last-good rows — and the AirNow terms: amber, not red.
+   The source is working; this is something to know, not something broken. */
+.source-warning { color: #ffcf7a; font-size: 11px; margin-top: 3px; word-break: break-word; }
 .source-actions { display: flex; gap: 4px; margin-top: 5px; flex-wrap: wrap; }
 .source-actions .primary { background: var(--accent-dim); }
 
@@ -772,10 +779,16 @@ img.layer-thumb {
  * refuses to shrink below its input's intrinsic width and overflows the panel.
  */
 .source-editor .field-row { display: flex; gap: 8px; }
+.source-guard { border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; margin-bottom: 8px; }
+.source-guard > summary { cursor: pointer; color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+.source-guard .guard-ranges { margin-bottom: 8px; }
+.source-guard .guard-label { display: block; color: var(--muted); font-size: 11px; margin-bottom: 3px; }
+.source-guard .field-row > .guard-del { align-self: flex-end; margin-bottom: 8px; }
+.source-actions .source-use { max-width: 9em; }
 .source-editor .field-row > label { flex: 1; min-width: 0; }
 .source-editor .field-row > label > input,
 .source-editor .field-row > label > select { min-width: 0; width: 100%; }
-.source-editor .source-error a, .source-editor .hint a { color: inherit; }
+.source-editor .source-error a, .source-editor .source-warning a, .source-editor .hint a { color: inherit; }
 .linkish {
   border: none; background: none; padding: 0; color: var(--accent);
   font: inherit; font-size: 10px; text-decoration: underline; cursor: pointer;
@@ -1319,3 +1332,14 @@ img.layer-thumb {
   background: rgba(248, 81, 73, 0.18); border-color: rgba(248, 81, 73, 0.5); color: var(--danger);
 }
 .dialog-actions .danger:disabled { opacity: 0.45; }
+
+/* Layer rules (Wave 6). */
+.rules-section .rule { border: 1px solid var(--border); border-radius: 4px; padding: 6px; margin-bottom: 6px; }
+.rules-section .rule-head, .rules-section .rule-then { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rules-section .rule-head > span, .rules-section .rule-then > span { color: var(--muted); font-size: 11px; }
+.rules-section .rule-head > button { margin-inline-start: auto; }
+.rules-section .rule-condition { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; margin: 4px 0; }
+.rules-section .rule-condition > input, .rules-section .rule-condition > select { min-width: 0; flex: 1 1 5em; }
+.rules-section .rule-then { margin-top: 6px; }
+.rules-section .rule-then input[type='color'] { width: 28px; padding: 0; }
+.stage-toolbar .stage-mode { background: #a52834; border: 1px solid #c9313f; color: #fff; border-radius: 999px; padding: 1px 10px; font-size: 11px; cursor: pointer; }

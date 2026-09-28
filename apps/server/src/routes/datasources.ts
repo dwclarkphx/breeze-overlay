@@ -13,12 +13,15 @@
  * candidate URL without saving anything, and `refresh`, which forces a poll.
  */
 
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import {
   MIN_POLL_INTERVAL,
+  SOURCE_USES,
+  applyGuard,
   applyTransforms,
   type DataSourceDef,
+  type SourceUse,
   type DataTransform,
 } from '@breeze/schema';
 
@@ -35,6 +38,7 @@ import {
   readDataSources,
   redact,
 } from '../data/sources.js';
+import { actorOf, record } from '../audit.js';
 import { fetchText } from '../data/fetch.js';
 import { NotFoundError, readProject } from '../store.js';
 
@@ -171,6 +175,45 @@ export async function registerDataSourceRoutes(
   );
 
   /**
+   * Choose whose rows go on air: `auto`, `primary` or `backup` (CYCLE.md,
+   * Wave 5) — the operator's switch for a feed that is up and wrong, which no
+   * guard can see.
+   *
+   * GET as well as POST for header-less panels, and gated either way: the auth
+   * hook treats `…/use` as an action, because a GET that changes what is on
+   * air is a write.
+   */
+  const use = async (
+    req: FastifyRequest<{ Params: SourceParams; Querystring: { mode?: string } }>,
+    reply: FastifyReply,
+  ) => {
+    const body = req.body && typeof req.body === 'object' ? (req.body as { mode?: unknown }) : {};
+    const mode = String(body.mode ?? req.query.mode ?? '').trim().toLowerCase();
+    if (!(SOURCE_USES as readonly string[]).includes(mode)) {
+      reply.code(400);
+      return { error: `mode must be one of ${SOURCE_USES.join(', ')}` };
+    }
+    const def = await getDataSource(req.params.id, req.params.sourceId);
+    if (mode === 'backup' && def.fallback === undefined) {
+      reply.code(409);
+      return { error: `data source "${def.id}" has no backup to use` };
+    }
+    if (!registry.get(req.params.id, def.id)) await registry.register(req.params.id);
+    const entry = registry.setUse(req.params.id, def.id, mode as SourceUse);
+    // Logged: "who put the backup on air at 3 a.m." is a question someone asks.
+    void record({
+      action: 'source.use',
+      actor: actorOf(req),
+      project: req.params.id,
+      name: def.name,
+      detail: { source: def.id, mode },
+    });
+    return { status: entry.status };
+  };
+  app.get<{ Params: SourceParams; Querystring: { mode?: string } }>('/api/projects/:id/datasources/:sourceId/use', use);
+  app.post<{ Params: SourceParams; Querystring: { mode?: string } }>('/api/projects/:id/datasources/:sourceId/use', use);
+
+  /**
    * Fetch a candidate source without saving it.
    *
    * This is what makes the path picker usable: paste a URL, see the columns and
@@ -189,14 +232,33 @@ export async function registerDataSourceRoutes(
       }
 
       try {
-        const result = await loadDataSource({ ...def, id: def.id || 'preview' });
-        const data = result.data ?? { id: def.id || 'preview', columns: [], rows: [] };
-        const shaped = applyTransforms(data, req.body.transforms ?? []);
+        // A table-fed source previews against the project's live tables, so
+        // "read places from Cities" shows real cities before it is saved.
+        const result = await loadDataSource({ ...def, id: def.id || 'preview' }, undefined, {
+          lookup: (sourceId) => registry.get(req.params.id, sourceId)?.data,
+        });
+        const fetched = result.data ?? { id: def.id || 'preview', columns: [], rows: [] };
+        /*
+         * The guard, as the registry would apply it — minus the row-count drop,
+         * which needs a last-good a preview does not have. A refusal still
+         * shows the rows: the author needs to see what the guard objected to.
+         */
+        const guard = def.type === 'manual' ? undefined : def.guard;
+        const checked = applyGuard(guard, fetched);
+        const data = checked.ok ? checked.data : fetched;
+        // A lookup or union in the pipeline reads the project's other live sources.
+        const shaped = applyTransforms(data, req.body.transforms ?? [], {
+          now: new Date(),
+          source: (sourceId) => registry.get(req.params.id, sourceId)?.data,
+        });
         return {
           ok: true,
           data: { ...shaped, rows: shaped.rows.slice(0, 50) },
           rowCount: shaped.rows.length,
           truncated: shaped.rows.length > 50,
+          ...(result.warning ? { warning: result.warning } : {}),
+          ...(!checked.ok ? { refused: checked.reason } : {}),
+          ...(checked.ok && checked.dropped ? { dropped: checked.dropped } : {}),
         };
       } catch (err) {
         // 200 with `ok: false`. The editor renders this into the panel beside

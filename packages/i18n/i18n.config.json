@@ -22,6 +22,7 @@
     "apps/editor/src/components/AssetLibrary.tsx",
     "apps/editor/src/components/DataPanel.tsx",
     "apps/editor/src/components/PropertiesPanel.tsx",
+    "apps/editor/src/components/RulesSection.tsx",
     "apps/server/client/backup.ts",
     "apps/server/client/portal.ts",
     "apps/server/client/control.ts",

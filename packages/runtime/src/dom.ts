@@ -30,6 +30,8 @@ import {
   type VideoLayer,
 } from '@breeze/schema';
 
+import { MediaPlayer } from './media.js';
+
 import type { LayerInstance } from './expand.js';
 
 export interface LayerNodes {
@@ -55,6 +57,8 @@ export interface LayerNodes {
   poster?: HTMLImageElement;
   /** Sprite-only: the box carrying the sheet as a background. */
   sprite?: HTMLElement;
+  /** Media-only (Wave 8): the player filling the layer. */
+  mediaPlayer?: MediaPlayer;
 }
 
 export interface BuildContext {
@@ -69,6 +73,10 @@ export interface BuildContext {
    * property `still.dom.test.ts` guards.
    */
   still?: boolean;
+  /** Where hls.js can be loaded from, for a media layer playing HLS (Wave 8). */
+  hlsScript?: string;
+  /** Whether live media should play now — the graphic is on air (Wave 8). Absent: always. */
+  isLive?: () => boolean;
 }
 
 export function fillToCss(fill: Fill | undefined, fallback = 'transparent'): string {
@@ -450,6 +458,15 @@ export function buildLayerElement(instance: LayerInstance, ctx: BuildContext): L
       const sprite = buildSprite(layer, ctx);
       content.appendChild(sprite);
       nodes.sprite = sprite;
+      break;
+    }
+    case 'media': {
+      const host = ctx.doc.createElement('div');
+      content.appendChild(host);
+      const player = new MediaPlayer({ layer, host, env: ctx });
+      nodes.mediaPlayer = player;
+      // A cell reading a column is filled by its row; anything else plays its own source.
+      if (!layer.cell && layer.src) player.show(layer.src);
       break;
     }
     case 'crawl': {

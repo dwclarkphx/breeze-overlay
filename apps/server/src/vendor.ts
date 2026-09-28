@@ -42,9 +42,9 @@ export const UNSTAGED = 'unstaged';
 /** Where the staged files live, relative to the URL space, without a trailing slash. */
 export const GSAP_VENDOR_URL = '/public/vendor/gsap';
 
-function read(): string {
+function read(dir = 'gsap'): string {
   try {
-    const stamp = path.join(config.publicDir, 'vendor', 'gsap', 'VERSION');
+    const stamp = path.join(config.publicDir, 'vendor', dir, 'VERSION');
     const raw = fs.readFileSync(stamp, 'utf8').trim();
     return raw || UNSTAGED;
   } catch {
@@ -70,3 +70,12 @@ function read(): string {
  * whole job is to be predictable under load.
  */
 export const GSAP_VERSION = read();
+
+/**
+ * hls.js (Wave 8), staged by `scripts/vendor-hls.mjs`. Not a script tag on
+ * the page: the runtime loads it the first time a media layer plays an HLS
+ * stream, so this is the URL it is handed, cache-busted the same way.
+ */
+export const HLS_VENDOR_URL = '/public/vendor/hls';
+export const HLS_VERSION = read('hls');
+export const HLS_SCRIPT = `${HLS_VENDOR_URL}/hls.light.min.js?v=${encodeURIComponent(HLS_VERSION)}`;

@@ -10,7 +10,7 @@
       "formatVersion": 1,
       "id": "wc26-bracket-2e7br",
       "name": "Bracket — 2026 World Cup Knockout",
-      "duration": 3,
+      "duration": 6.4,
       "stage": {
         "width": 1920,
         "height": 1080,
@@ -20,8 +20,33 @@
       "markers": [
         {
           "type": "stop",
+          "time": 1.3,
+          "name": "Round of 32"
+        },
+        {
+          "type": "stop",
           "time": 2.4,
-          "name": "Hold on air"
+          "name": "Round of 16"
+        },
+        {
+          "type": "stop",
+          "time": 3.4,
+          "name": "Quarter-finals"
+        },
+        {
+          "type": "stop",
+          "time": 4.1,
+          "name": "Semi-finals"
+        },
+        {
+          "type": "stop",
+          "time": 4.8,
+          "name": "Third place"
+        },
+        {
+          "type": "stop",
+          "time": 5.8,
+          "name": "Final"
         }
       ],
       "layers": [
@@ -36,12 +61,12 @@
           "keyframes": {
             "opacity": [
               {
-                "t": 2.4,
+                "t": 5.8,
                 "v": 1,
                 "ease": "power1.in"
               },
               {
-                "t": 3,
+                "t": 6.4,
                 "v": 0
               }
             ]
@@ -238,12 +263,12 @@
                     "ease": "none"
                   },
                   {
-                    "t": 0.33999999999999997,
+                    "t": 4.1,
                     "v": 0,
                     "ease": "power2.out"
                   },
                   {
-                    "t": 0.69,
+                    "t": 4.45,
                     "v": 1
                   }
                 ]
@@ -280,12 +305,12 @@
                     "ease": "none"
                   },
                   {
-                    "t": 0.4,
+                    "t": 5.4,
                     "v": 0,
                     "ease": "power2.out"
                   },
                   {
-                    "t": 0.75,
+                    "t": 5.75,
                     "v": 1
                   }
                 ]
@@ -376,12 +401,30 @@
               }
             },
             {
-              "id": "connectors",
+              "id": "connectors-r16",
               "type": "group",
-              "name": "Bracket connectors",
+              "name": "Connectors — R32 to R16",
               "transform": {
                 "x": 0,
                 "y": 0
+              },
+              "keyframes": {
+                "opacity": [
+                  {
+                    "t": 0,
+                    "v": 0,
+                    "ease": "none"
+                  },
+                  {
+                    "t": 1.3,
+                    "v": 0,
+                    "ease": "power2.out"
+                  },
+                  {
+                    "t": 1.65,
+                    "v": 1
+                  }
+                ]
               },
               "children": [
                 {
@@ -641,214 +684,6 @@
                   }
                 },
                 {
-                  "id": "c-17",
-                  "type": "shape",
-                  "shape": "rect",
-                  "fill": "rgba(120,150,180,0.45)",
-                  "size": {
-                    "width": 7,
-                    "height": 2
-                  },
-                  "transform": {
-                    "x": 436,
-                    "y": 195,
-                    "anchorX": 0,
-                    "anchorY": 0
-                  }
-                },
-                {
-                  "id": "c-18",
-                  "type": "shape",
-                  "shape": "rect",
-                  "fill": "rgba(120,150,180,0.45)",
-                  "size": {
-                    "width": 7,
-                    "height": 2
-                  },
-                  "transform": {
-                    "x": 436,
-                    "y": 419,
-                    "anchorX": 0,
-                    "anchorY": 0
-                  }
-                },
-                {
-                  "id": "c-19",
-                  "type": "shape",
-                  "shape": "rect",
-                  "fill": "rgba(120,150,180,0.45)",
-                  "size": {
-                    "width": 2,
-                    "height": 224
-                  },
-                  "transform": {
-                    "x": 442,
-                    "y": 196,
-                    "anchorX": 0,
-                    "anchorY": 0
-                  }
-                },
-                {
-                  "id": "c-20",
-                  "type": "shape",
-                  "shape": "rect",
-                  "fill": "rgba(120,150,180,0.45)",
-                  "size": {
-                    "width": 7,
-                    "height": 2
-                  },
-                  "transform": {
-                    "x": 443,
-                    "y": 307,
-                    "anchorX": 0,
-                    "anchorY": 0
-                  }
-                },
-                {
-                  "id": "c-21",
-                  "type": "shape",
-                  "shape": "rect",
-                  "fill": "rgba(120,150,180,0.45)",
-                  "size": {
-                    "width": 7,
-                    "height": 2
-                  },
-                  "transform": {
-                    "x": 436,
-                    "y": 643,
-                    "anchorX": 0,
-                    "anchorY": 0
-                  }
-                },
-                {
-                  "id": "c-22",
-                  "type": "shape",
-                  "shape": "rect",
-                  "fill": "rgba(120,150,180,0.45)",
-                  "size": {
-                    "width": 7,
-                    "height": 2
-                  },
-                  "transform": {
-                    "x": 436,
-                    "y": 867,
-                    "anchorX": 0,
-                    "anchorY": 0
-                  }
-                },
-                {
-                  "id": "c-23",
-                  "type": "shape",
-                  "shape": "rect",
-                  "fill": "rgba(120,150,180,0.45)",
-                  "size": {
-                    "width": 2,
-                    "height": 224
-                  },
-                  "transform": {
-                    "x": 442,
-                    "y": 644,
-                    "anchorX": 0,
-                    "anchorY": 0
-                  }
-                },
-                {
-                  "id": "c-24",
-                  "type": "shape",
-                  "shape": "rect",
-                  "fill": "rgba(120,150,180,0.45)",
-                  "size": {
-                    "width": 7,
-                    "height": 2
-                  },
-                  "transform": {
-                    "x": 443,
-                    "y": 755,
-                    "anchorX": 0,
-                    "anchorY": 0
-                  }
-                },
-                {
-                  "id": "c-25",
-                  "type": "shape",
-                  "shape": "rect",
-                  "fill": "rgba(120,150,180,0.45)",
-                  "size": {
-                    "width": 7,
-                    "height": 2
-                  },
-                  "transform": {
-                    "x": 634,
-                    "y": 307,
-                    "anchorX": 0,
-                    "anchorY": 0
-                  }
-                },
-                {
-                  "id": "c-26",
-                  "type": "shape",
-                  "shape": "rect",
-                  "fill": "rgba(120,150,180,0.45)",
-                  "size": {
-                    "width": 7,
-                    "height": 2
-                  },
-                  "transform": {
-                    "x": 634,
-                    "y": 755,
-                    "anchorX": 0,
-                    "anchorY": 0
-                  }
-                },
-                {
-                  "id": "c-27",
-                  "type": "shape",
-                  "shape": "rect",
-                  "fill": "rgba(120,150,180,0.45)",
-                  "size": {
-                    "width": 2,
-                    "height": 448
-                  },
-                  "transform": {
-                    "x": 640,
-                    "y": 308,
-                    "anchorX": 0,
-                    "anchorY": 0
-                  }
-                },
-                {
-                  "id": "c-28",
-                  "type": "shape",
-                  "shape": "rect",
-                  "fill": "rgba(120,150,180,0.45)",
-                  "size": {
-                    "width": 7,
-                    "height": 2
-                  },
-                  "transform": {
-                    "x": 641,
-                    "y": 531,
-                    "anchorX": 0,
-                    "anchorY": 0
-                  }
-                },
-                {
-                  "id": "c-29",
-                  "type": "shape",
-                  "shape": "rect",
-                  "fill": "rgba(120,150,180,0.45)",
-                  "size": {
-                    "width": 14,
-                    "height": 2
-                  },
-                  "transform": {
-                    "x": 824,
-                    "y": 531,
-                    "anchorX": 0,
-                    "anchorY": 0
-                  }
-                },
-                {
                   "id": "c-30",
                   "type": "shape",
                   "shape": "rect",
@@ -1103,6 +938,163 @@
                     "anchorX": 0,
                     "anchorY": 0
                   }
+                }
+              ]
+            },
+            {
+              "id": "connectors-qf",
+              "type": "group",
+              "name": "Connectors — R16 to QF",
+              "transform": {
+                "x": 0,
+                "y": 0
+              },
+              "keyframes": {
+                "opacity": [
+                  {
+                    "t": 0,
+                    "v": 0,
+                    "ease": "none"
+                  },
+                  {
+                    "t": 2.4,
+                    "v": 0,
+                    "ease": "power2.out"
+                  },
+                  {
+                    "t": 2.75,
+                    "v": 1
+                  }
+                ]
+              },
+              "children": [
+                {
+                  "id": "c-17",
+                  "type": "shape",
+                  "shape": "rect",
+                  "fill": "rgba(120,150,180,0.45)",
+                  "size": {
+                    "width": 7,
+                    "height": 2
+                  },
+                  "transform": {
+                    "x": 436,
+                    "y": 195,
+                    "anchorX": 0,
+                    "anchorY": 0
+                  }
+                },
+                {
+                  "id": "c-18",
+                  "type": "shape",
+                  "shape": "rect",
+                  "fill": "rgba(120,150,180,0.45)",
+                  "size": {
+                    "width": 7,
+                    "height": 2
+                  },
+                  "transform": {
+                    "x": 436,
+                    "y": 419,
+                    "anchorX": 0,
+                    "anchorY": 0
+                  }
+                },
+                {
+                  "id": "c-19",
+                  "type": "shape",
+                  "shape": "rect",
+                  "fill": "rgba(120,150,180,0.45)",
+                  "size": {
+                    "width": 2,
+                    "height": 224
+                  },
+                  "transform": {
+                    "x": 442,
+                    "y": 196,
+                    "anchorX": 0,
+                    "anchorY": 0
+                  }
+                },
+                {
+                  "id": "c-20",
+                  "type": "shape",
+                  "shape": "rect",
+                  "fill": "rgba(120,150,180,0.45)",
+                  "size": {
+                    "width": 7,
+                    "height": 2
+                  },
+                  "transform": {
+                    "x": 443,
+                    "y": 307,
+                    "anchorX": 0,
+                    "anchorY": 0
+                  }
+                },
+                {
+                  "id": "c-21",
+                  "type": "shape",
+                  "shape": "rect",
+                  "fill": "rgba(120,150,180,0.45)",
+                  "size": {
+                    "width": 7,
+                    "height": 2
+                  },
+                  "transform": {
+                    "x": 436,
+                    "y": 643,
+                    "anchorX": 0,
+                    "anchorY": 0
+                  }
+                },
+                {
+                  "id": "c-22",
+                  "type": "shape",
+                  "shape": "rect",
+                  "fill": "rgba(120,150,180,0.45)",
+                  "size": {
+                    "width": 7,
+                    "height": 2
+                  },
+                  "transform": {
+                    "x": 436,
+                    "y": 867,
+                    "anchorX": 0,
+                    "anchorY": 0
+                  }
+                },
+                {
+                  "id": "c-23",
+                  "type": "shape",
+                  "shape": "rect",
+                  "fill": "rgba(120,150,180,0.45)",
+                  "size": {
+                    "width": 2,
+                    "height": 224
+                  },
+                  "transform": {
+                    "x": 442,
+                    "y": 644,
+                    "anchorX": 0,
+                    "anchorY": 0
+                  }
+                },
+                {
+                  "id": "c-24",
+                  "type": "shape",
+                  "shape": "rect",
+                  "fill": "rgba(120,150,180,0.45)",
+                  "size": {
+                    "width": 7,
+                    "height": 2
+                  },
+                  "transform": {
+                    "x": 443,
+                    "y": 755,
+                    "anchorX": 0,
+                    "anchorY": 0
+                  }
                 },
                 {
                   "id": "c-46",
@@ -1231,6 +1223,99 @@
                     "anchorX": 0,
                     "anchorY": 0
                   }
+                }
+              ]
+            },
+            {
+              "id": "connectors-sf",
+              "type": "group",
+              "name": "Connectors — QF to SF",
+              "transform": {
+                "x": 0,
+                "y": 0
+              },
+              "keyframes": {
+                "opacity": [
+                  {
+                    "t": 0,
+                    "v": 0,
+                    "ease": "none"
+                  },
+                  {
+                    "t": 3.4,
+                    "v": 0,
+                    "ease": "power2.out"
+                  },
+                  {
+                    "t": 3.75,
+                    "v": 1
+                  }
+                ]
+              },
+              "children": [
+                {
+                  "id": "c-25",
+                  "type": "shape",
+                  "shape": "rect",
+                  "fill": "rgba(120,150,180,0.45)",
+                  "size": {
+                    "width": 7,
+                    "height": 2
+                  },
+                  "transform": {
+                    "x": 634,
+                    "y": 307,
+                    "anchorX": 0,
+                    "anchorY": 0
+                  }
+                },
+                {
+                  "id": "c-26",
+                  "type": "shape",
+                  "shape": "rect",
+                  "fill": "rgba(120,150,180,0.45)",
+                  "size": {
+                    "width": 7,
+                    "height": 2
+                  },
+                  "transform": {
+                    "x": 634,
+                    "y": 755,
+                    "anchorX": 0,
+                    "anchorY": 0
+                  }
+                },
+                {
+                  "id": "c-27",
+                  "type": "shape",
+                  "shape": "rect",
+                  "fill": "rgba(120,150,180,0.45)",
+                  "size": {
+                    "width": 2,
+                    "height": 448
+                  },
+                  "transform": {
+                    "x": 640,
+                    "y": 308,
+                    "anchorX": 0,
+                    "anchorY": 0
+                  }
+                },
+                {
+                  "id": "c-28",
+                  "type": "shape",
+                  "shape": "rect",
+                  "fill": "rgba(120,150,180,0.45)",
+                  "size": {
+                    "width": 7,
+                    "height": 2
+                  },
+                  "transform": {
+                    "x": 641,
+                    "y": 531,
+                    "anchorX": 0,
+                    "anchorY": 0
+                  }
                 },
                 {
                   "id": "c-54",
@@ -1295,6 +1380,51 @@
                     "anchorX": 0,
                     "anchorY": 0
                   }
+                }
+              ]
+            },
+            {
+              "id": "connectors-final",
+              "type": "group",
+              "name": "Connectors — SF to final",
+              "transform": {
+                "x": 0,
+                "y": 0
+              },
+              "keyframes": {
+                "opacity": [
+                  {
+                    "t": 0,
+                    "v": 0,
+                    "ease": "none"
+                  },
+                  {
+                    "t": 4.8,
+                    "v": 0,
+                    "ease": "power2.out"
+                  },
+                  {
+                    "t": 5.15,
+                    "v": 1
+                  }
+                ]
+              },
+              "children": [
+                {
+                  "id": "c-29",
+                  "type": "shape",
+                  "shape": "rect",
+                  "fill": "rgba(120,150,180,0.45)",
+                  "size": {
+                    "width": 14,
+                    "height": 2
+                  },
+                  "transform": {
+                    "x": 824,
+                    "y": 531,
+                    "anchorX": 0,
+                    "anchorY": 0
+                  }
                 },
                 {
                   "id": "c-58",
@@ -1312,20 +1442,7 @@
                     "anchorY": 0
                   }
                 }
-              ],
-              "keyframes": {
-                "opacity": [
-                  {
-                    "t": 0,
-                    "v": 0,
-                    "ease": "power2.out"
-                  },
-                  {
-                    "t": 1.1,
-                    "v": 1
-                  }
-                ]
-              }
+              ]
             },
             {
               "id": "h-59",
@@ -1400,12 +1517,12 @@
                     "ease": "none"
                   },
                   {
-                    "t": 0.35,
+                    "t": 1.3,
                     "v": 0,
                     "ease": "power2.out"
                   },
                   {
-                    "t": 0.7,
+                    "t": 1.65,
                     "v": 1
                   }
                 ]
@@ -1442,12 +1559,12 @@
                     "ease": "none"
                   },
                   {
-                    "t": 0.35,
+                    "t": 2.4,
                     "v": 0,
                     "ease": "power2.out"
                   },
                   {
-                    "t": 0.7,
+                    "t": 2.75,
                     "v": 1
                   }
                 ]
@@ -1484,12 +1601,12 @@
                     "ease": "none"
                   },
                   {
-                    "t": 0.35,
+                    "t": 3.4,
                     "v": 0,
                     "ease": "power2.out"
                   },
                   {
-                    "t": 0.7,
+                    "t": 3.75,
                     "v": 1
                   }
                 ]
@@ -1526,12 +1643,12 @@
                     "ease": "none"
                   },
                   {
-                    "t": 0.35,
+                    "t": 4.8,
                     "v": 0,
                     "ease": "power2.out"
                   },
                   {
-                    "t": 0.7,
+                    "t": 5.15,
                     "v": 1
                   }
                 ]
@@ -1568,12 +1685,12 @@
                     "ease": "none"
                   },
                   {
-                    "t": 0.35,
+                    "t": 3.4,
                     "v": 0,
                     "ease": "power2.out"
                   },
                   {
-                    "t": 0.7,
+                    "t": 3.75,
                     "v": 1
                   }
                 ]
@@ -1610,12 +1727,12 @@
                     "ease": "none"
                   },
                   {
-                    "t": 0.35,
+                    "t": 2.4,
                     "v": 0,
                     "ease": "power2.out"
                   },
                   {
-                    "t": 0.7,
+                    "t": 2.75,
                     "v": 1
                   }
                 ]
@@ -1652,12 +1769,12 @@
                     "ease": "none"
                   },
                   {
-                    "t": 0.35,
+                    "t": 1.3,
                     "v": 0,
                     "ease": "power2.out"
                   },
                   {
-                    "t": 0.7,
+                    "t": 1.65,
                     "v": 1
                   }
                 ]
@@ -2867,7 +2984,7 @@
                 "anchorX": 0,
                 "anchorY": 0
               },
-              "in": 0.55,
+              "in": 1.4,
               "transforms": [
                 {
                   "op": "advance",
@@ -4014,7 +4131,7 @@
                 "anchorX": 0,
                 "anchorY": 0
               },
-              "in": 0.95,
+              "in": 2.5,
               "transforms": [
                 {
                   "op": "advance",
@@ -5161,7 +5278,7 @@
                 "anchorX": 0,
                 "anchorY": 0
               },
-              "in": 1.25,
+              "in": 3.5,
               "transforms": [
                 {
                   "op": "advance",
@@ -6308,7 +6425,7 @@
                 "anchorX": 0,
                 "anchorY": 0
               },
-              "in": 1.25,
+              "in": 3.5,
               "transforms": [
                 {
                   "op": "advance",
@@ -7455,7 +7572,7 @@
                 "anchorX": 0,
                 "anchorY": 0
               },
-              "in": 0.95,
+              "in": 2.5,
               "transforms": [
                 {
                   "op": "advance",
@@ -8602,7 +8719,7 @@
                 "anchorX": 0,
                 "anchorY": 0
               },
-              "in": 0.55,
+              "in": 1.4,
               "transforms": [
                 {
                   "op": "advance",
@@ -10896,7 +11013,7 @@
                 "anchorX": 0,
                 "anchorY": 0
               },
-              "in": 1.5,
+              "in": 4.9,
               "transforms": [
                 {
                   "op": "advance",
@@ -12043,7 +12160,7 @@
                 "anchorX": 0,
                 "anchorY": 0
               },
-              "in": 1.7,
+              "in": 4.2,
               "transforms": [
                 {
                   "op": "advance",

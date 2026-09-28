@@ -20,7 +20,7 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import Moveable, { type OnDrag, type OnResize, type OnRotate } from 'react-moveable';
 import { BreezeRuntime } from '@breeze/runtime';
-import { DATA_UPDATE_KEY, type Composition, type Layer } from '@breeze/schema';
+import { DATA_UPDATE_KEY, MODE_UPDATE_KEY, type Composition, type Layer } from '@breeze/schema';
 
 import { useEditor } from '../state/store.js';
 import { findLayer, isCell } from '../state/commands.js';
@@ -59,6 +59,10 @@ const SAFE_AREAS = [
   { id: 'title-safe', inset: 0.1 },
 ];
 
+
+/** hls.js for a media layer playing HLS on the stage — served from /public, like GSAP. */
+const HLS_SCRIPT_URL = '/public/vendor/hls/hls.light.min.js';
+
 export function StageViewport(): JSX.Element {
   const t = useT();
   const composition = useEditor((s) => s.composition);
@@ -74,6 +78,7 @@ export function StageViewport(): JSX.Element {
    * store only advances this when the rows genuinely differ.
    */
   const datasetRevision = useEditor((s) => s.datasetRevision);
+  const previewMode = useEditor((s) => s.previewMode);
 
   const hostRef = useRef<HTMLDivElement>(null);
   const runtimeRef = useRef<BreezeRuntime | null>(null);
@@ -332,8 +337,15 @@ export function StageViewport(): JSX.Element {
           /^(https?:)?\/\//.test(src) || src.startsWith('data:')
             ? src
             : `/assets/${useEditor.getState().projectId ?? ''}/${src.replace(/^assets\//, '')}`,
+        // The staged copy the output page uses too (Wave 8) — see scripts/vendor-hls.mjs.
+        hlsScript: HLS_SCRIPT_URL,
+        // The picture while authoring, not only once previewed on air.
+        mediaWhenIdle: true,
         autoPlay: false,
-        ...(Object.keys(datasets).length ? { data: { [DATA_UPDATE_KEY]: datasets } } : {}),
+        data: {
+          ...(Object.keys(datasets).length ? { [DATA_UPDATE_KEY]: datasets } : {}),
+          [MODE_UPDATE_KEY]: useEditor.getState().previewMode,
+        },
       });
 
       runtimeRef.current = runtime;
@@ -382,6 +394,12 @@ export function StageViewport(): JSX.Element {
   }, [composition, resolveComposition, gestureNonce, datasetRevision]);
 
   useEffect(() => () => runtimeRef.current?.destroy(), []);
+
+  // The preview mode changes rule results only, so it is set on the runtime
+  // rather than rebuilding it — a rebuild would reset the playhead's state.
+  useEffect(() => {
+    runtimeRef.current?.setMode(previewMode);
+  }, [previewMode, runtimeVersion]);
 
   /* ---------------------------------------------------------- playback */
 
@@ -813,6 +831,16 @@ export function StageViewport(): JSX.Element {
               { layer: selectedLayer.name ?? selectedLayer.id },
             )}
           </span>
+        )}
+
+        {previewMode && (
+          <button
+            className="stage-mode"
+            title={t('editor.stage.previewModeClear')}
+            onClick={() => useEditor.getState().setPreviewMode('')}
+          >
+            {t('editor.stage.previewMode', { mode: previewMode })}
+          </button>
         )}
 
         <span className="stage-size">{composition.stage.width}×{composition.stage.height} @ {composition.stage.fps}fps</span>

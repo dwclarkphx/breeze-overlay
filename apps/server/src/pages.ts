@@ -19,14 +19,16 @@ import {
   sceneElements,
   type Composition,
   type DataSet,
+  type Layer,
   type SceneElement,
 } from '@breeze/schema';
 
 import { makeTranslator, type Translate } from '@breeze/i18n';
 
+import { FAVICON_LINK } from './favicon.js';
 import { messagesFor, serverI18n } from './i18n.js';
 import { formatDuration, type PeersReport } from './peers.js';
-import { GSAP_VENDOR_URL, GSAP_VERSION } from './vendor.js';
+import { GSAP_VENDOR_URL, GSAP_VERSION, HLS_SCRIPT } from './vendor.js';
 
 /**
  * The GSAP versions this build of the runtime is known to work against.
@@ -99,7 +101,7 @@ function gsapTags(): string {
 // i18n-ignore-end
 
 /** Source types whose rows come from a fetch rather than from an operator. */
-const FETCHED_SOURCE_TYPES = new Set(['http-json', 'http-csv', 'rss', 'xml', 'sheets', 'weather', 'ftp']);
+const FETCHED_SOURCE_TYPES = new Set(['http-json', 'http-csv', 'rss', 'xml', 'sheets', 'weather', 'ftp', 'cap', 'air-quality']);
 
 /**
  * Is this field driven by a feed?
@@ -146,6 +148,25 @@ function pageT(): Translate {
  * English (I18N.md §2), and a graphic does not mirror — the stage is a 1:1
  * preview of what goes to air, so a mirrored one would be lying.
  */
+/** The copy icon, and the tick that replaces it once copied. Markup, not text. */
+// i18n-ignore-next-line
+const COPY_ICONS = `<svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 3.5v-.5A1.5 1.5 0 0 0 9 1.5H4A1.5 1.5 0 0 0 2.5 3v5A1.5 1.5 0 0 0 4 9.5h.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg><svg class="done" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+/**
+ * A project or graphic key with a button that copies it.
+ *
+ * The key is what goes in every /play and /control URL, every API call and
+ * the Companion connection — typed by hand it is the one thing on this page
+ * most likely to be mistyped. The tooltip says where it goes.
+ */
+function keyChip(key: string, title: string, t: Translate, copyPath?: string): string {
+  const tip = escapeHtml(title);
+  // A graphic copies its output URL — what actually gets pasted into OBS or vMix.
+  const label = copyPath ? t('server.pages.copyUrl', { key }) : t('server.pages.copyKey', { key });
+  const url = copyPath ? ` data-copy-url="${escapeHtml(copyPath)}"` : '';
+  return `<span class="key" title="${tip}"><code>${escapeHtml(key)}</code><button type="button" class="copy-key" data-copy="${escapeHtml(key)}"${url} title="${tip}" aria-label="${escapeHtml(label)}">${COPY_ICONS}</button></span>`;
+}
+
 function htmlOpen(): string {
   const { locale, direction } = serverI18n();
   return `<html lang="${escapeHtml(locale)}" dir="${direction}">`;
@@ -177,6 +198,8 @@ export interface PlayPageOptions {
    * opens — since the page then still has the last data the server held.
    */
   datasets?: Record<string, DataSet>;
+  /** The project's mode, inlined for the same reason — first paint is already in it. */
+  mode?: string;
 }
 
 export function playPage(opts: PlayPageOptions): string {
@@ -210,7 +233,9 @@ window.__BREEZE__ = {
   assetBase: ${escapeJson(assetBase)},
   dataKey: ${escapeJson(DATA_UPDATE_KEY)},
   datasets: ${escapeJson(datasets)},
+  mode: ${escapeJson(opts.mode ?? '')},
   elements: ${escapeJson(elements)},
+  hlsScript: ${escapeJson(HLS_SCRIPT)},
   autoPlay: false
 };
 </script>
@@ -258,6 +283,32 @@ export interface ControlPageOptions {
    * websocket frame looks like a source that is not working.
    */
   datasets?: Record<string, DataSet>;
+  /** Fetched sources this graphic reads, with their backups — the Data block (Wave 5). */
+  sources?: Array<{ id: string; name: string; backup?: string; backupName?: string; media?: boolean; fed?: boolean }>;
+  /** The project's mode, and every mode its rules name — the Mode block (Wave 6). */
+  mode?: string;
+  modes?: string[];
+}
+
+/**
+ * Whether a composition has a table that can page — a `rowsPerPage` or a
+ * `cycle` — anywhere in its own layer tree.
+ *
+ * Decides whether the panel offers NEXT and PREV to a graphic with a single
+ * hold. Before this, NEXT was hidden unless there were two STOP markers, so a
+ * standings table that paged on NEXT could not be paged from its own panel.
+ * A table whose rows merely overflow its box also pages; that case needs the
+ * data to know about and is left to the page readout, which appears as soon
+ * as the output reports more than one page.
+ */
+export function hasPagedTables(composition: Composition): boolean {
+  const walk = (layers: Layer[]): boolean =>
+    layers.some((layer) => {
+      if (layer.type === 'table') return (layer.rowsPerPage ?? 0) > 0 || layer.cycle !== undefined;
+      if (layer.type === 'group') return walk(layer.children);
+      return false;
+    });
+  return walk(composition.layers);
 }
 
 /**
@@ -286,6 +337,7 @@ function sceneElementsBlock(elements: SceneElement[]): string {
       </div>
       <div class="verbs">
         <button class="go" data-el-verb="play">${t('server.pages.verbPlay')}</button>
+        <button data-el-verb="prev">${t('server.pages.verbPrev')}</button>
         <button data-el-verb="next">${t('server.pages.verbNext')}</button>
         <button class="stop" data-el-verb="stop">${t('server.pages.verbStop')}</button>
         <button data-el-verb="clear">${t('server.pages.verbClear')}</button>
@@ -320,11 +372,14 @@ export function controlPage(opts: ControlPageOptions): string {
   const datasets = opts.datasets ?? {};
   const elements = sceneElements(composition);
   const t = pageT();
+  // NEXT and PREV step holds and turn pages; either is reason enough to show them.
+  const stepping = stepCount > 1 || hasPagedTables(composition);
 
   return `<!doctype html>
 ${htmlOpen()}
 <head>
 <meta charset="utf-8">
+${FAVICON_LINK}
 <title>${escapeHtml(t('server.pages.controlTitle', { name: composition.name }))}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="dark">
@@ -400,6 +455,32 @@ ${htmlOpen()}
   .element-key{color:var(--muted);font:12px/1 ui-monospace,Consolas,monospace}
   .element-state{margin-inline-start:auto;font-size:13px}
   .element .hint a{color:var(--accent)}
+  /* Paged tables. One row per table the output reports: its name, which page
+     and why it will change, then the buttons that change it. The countdown bar
+     is a hairline, not a progress bar to watch — its job is to answer "about
+     to turn?" at a glance. */
+  .page-row{border:1px solid var(--border);border-radius:6px;padding:10px 12px;
+            margin-bottom:10px;background:var(--panel2)}
+  .page-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  .page-name{color:var(--muted);font:12px/1 ui-monospace,Consolas,monospace}
+  .page-at{font:600 18px/1.2 ui-monospace,Consolas,monospace;color:var(--key)}
+  .page-when{margin-inline-start:auto;color:var(--muted);font-size:12px}
+  .page-follows{color:var(--muted);font-size:12px}
+  .src-row{padding:8px 0;border-top:1px solid var(--border)}
+  .src-row:first-child{border-top:0}
+  .src-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .src-name{font-weight:600}
+  .src-state{font-size:13px;color:var(--fed)}
+  .src-state.warn{color:var(--key)}
+  .src-state.bad{color:#f85149}
+  .src-row .verbs{margin-top:8px}
+  .src-row button[aria-pressed="true"]{background:#1f6feb;border-color:#388bfd;color:#fff}
+  #mode-list button[aria-pressed="true"]{background:var(--stop);border-color:#c9313f;color:#fff}
+  #mode-list button[data-mode=""][aria-pressed="true"]{background:#1f6feb;border-color:#388bfd}
+  .page-bar{height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:8px}
+  .page-bar i{display:block;height:100%;width:0;background:var(--accent)}
+  .page-row .verbs button{min-height:44px;padding:10px 8px;font-size:15px}
+  .page-row button[aria-pressed="true"]{outline:2px solid var(--key);outline-offset:-2px}
 
   /*
    * The panel becomes two columns once there is room for the preview beside the
@@ -480,7 +561,8 @@ ${sceneElementsBlock(elements)}
   <legend>${t(elements.length > 0 ? 'server.pages.sceneLayers' : 'server.pages.playback')}</legend>
   <div class="verbs">
     <button class="go" data-verb="play">${t('server.pages.verbPlay')}</button>
-    <button data-verb="next" ${stepCount > 1 ? '' : 'hidden'}>${t('server.pages.verbNext')}</button>
+    <button data-verb="prev" ${stepping ? '' : 'hidden'}>${t('server.pages.verbPrev')}</button>
+    <button data-verb="next" ${stepping ? '' : 'hidden'}>${t('server.pages.verbNext')}</button>
     <button class="stop" data-verb="stop">${t('server.pages.verbStop')}</button>
     <button data-verb="clear">${t('server.pages.verbClear')}</button>
   </div>
@@ -489,6 +571,24 @@ ${sceneElementsBlock(elements)}
     // A frozen playback state, like the enum the client writes over it.
     state: '<span class="playback" id="playback">idle</span>',
   })}</div>
+</fieldset>
+
+<fieldset id="pages" hidden>
+  <legend>${t('server.pages.pages')}</legend>
+  <div id="page-list"></div>
+  <div class="hint">${t('server.pages.pagesHint')}</div>
+</fieldset>
+
+<fieldset id="mode" hidden>
+  <legend>${t('server.pages.mode')}</legend>
+  <div class="verbs" id="mode-list"></div>
+  <div class="hint">${t('server.pages.modeHint')}</div>
+</fieldset>
+
+<fieldset id="sources" hidden>
+  <legend>${t('server.pages.sources')}</legend>
+  <div id="source-list"></div>
+  <div class="hint">${t('server.pages.sourcesHint')}</div>
 </fieldset>
 
 <fieldset ${bindings.length ? '' : 'hidden'}>
@@ -523,6 +623,9 @@ window.__BREEZE_CONTROL__ = {
   stepCount: ${stepCount},
   dataKey: ${escapeJson(DATA_UPDATE_KEY)},
   datasets: ${escapeJson(datasets)},
+  sources: ${escapeJson(opts.sources ?? [])},
+  mode: ${escapeJson(opts.mode ?? '')},
+  modes: ${escapeJson(opts.modes ?? [])},
   elements: ${escapeJson(elements)},
   locale: ${escapeJson(serverI18n().locale)},
   messages: ${escapeJson(messagesFor('control.'))}
@@ -593,8 +696,36 @@ export function portalPage(
   projects: Array<{ id: string; name: string; compositions: Array<{ id: string; name: string }> }>,
   /** Shown in the header; defaulted so callers in tests need not supply it. */
   version = '',
+  /** Whether the server has an API key, and whether this browser is signed in with it. */
+  auth: { keyRequired: boolean; signedIn: boolean } = { keyRequired: false, signedIn: false },
 ): string {
   const t = pageT();
+  /*
+   * The API key chip. Rendered in its real state so it is right before the
+   * script runs; the script only handles signing in and out. With no key set
+   * there is nothing to do, so it is a label, not a button.
+   */
+  const authChip = !auth.keyRequired
+    ? `<span class="auth-chip off" title="${escapeHtml(t('server.pages.apiKeyOffTitle'))}">${t('server.pages.apiKeyOff')}</span>`
+    : `<button type="button" class="auth-chip ${auth.signedIn ? 'in' : 'out'}" id="auth-chip" aria-expanded="false"
+        aria-controls="auth-panel" data-signed-in="${auth.signedIn ? '1' : '0'}">${
+          auth.signedIn ? t('server.pages.apiKeySignedIn') : t('server.pages.apiKeySignedOut')
+        }</button>`;
+  const authPanel = !auth.keyRequired
+    ? ''
+    : `<div class="auth-panel" id="auth-panel" hidden>
+  <form id="auth-form" ${auth.signedIn ? 'hidden' : ''}>
+    <label for="auth-key">${t('server.pages.apiKeyLabel')}</label>
+    <input id="auth-key" type="password" autocomplete="off" spellcheck="false" required>
+    <button type="submit" class="pill primary">${t('server.pages.signIn')}</button>
+    <span class="auth-error" id="auth-error" role="alert"></span>
+    <p class="hint">${t('server.pages.signInHint')}</p>
+  </form>
+  <div id="auth-out" ${auth.signedIn ? '' : 'hidden'}>
+    <button type="button" class="pill" id="auth-signout">${t('server.pages.signOut')}</button>
+    <p class="hint">${t('server.pages.signOutHint')}</p>
+  </div>
+</div>`;
   const tiles = projects
     .map((p) => {
       const pid = encodeURIComponent(p.id);
@@ -605,7 +736,7 @@ export function portalPage(
           return `<div class="scene" data-channel="${escapeHtml(`${p.id}/${c.id}`)}">
             <div class="scene-name">
               ${escapeHtml(c.name)}
-              <code>${escapeHtml(c.id)}</code>
+              ${keyChip(c.id, t('server.pages.graphicKeyTitle', { project: p.id, key: c.id }), t, `/play/${pid}/${cid}`)}
               <span class="viewers" data-role="viewers" hidden></span>
             </div>
             <div class="scene-links">
@@ -623,7 +754,7 @@ export function portalPage(
       return `<details class="tile" data-project="${escapeHtml(p.id)}">
         <summary>
           <span class="tile-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
-          <code>${escapeHtml(p.id)}</code>
+          ${keyChip(p.id, t('server.pages.projectKeyTitle', { key: p.id }), t)}
           <span class="tile-count">${t('server.pages.sceneCount', { count })}</span>
           <span class="viewers" data-role="project-viewers" hidden></span>
         </summary>
@@ -638,6 +769,7 @@ export function portalPage(
 ${htmlOpen()}
 <head>
 <meta charset="utf-8">
+${FAVICON_LINK}
 <title>${escapeHtml(t('server.pages.portalTitle'))}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
@@ -685,7 +817,20 @@ ${htmlOpen()}
      being read for a reason — it is what appears in every /play URL — and a
      clipped "wc26-d..." is useless where a clipped "World Cup 2026 Bracket..."
      is still perfectly identifiable. */
-  summary > code{flex:0 0 auto;white-space:nowrap}
+  summary > .key{flex:0 0 auto;white-space:nowrap}
+  /* A key and the button that copies it, one unit — the tooltip on either
+     says what the key is for. */
+  .key{display:inline-flex;align-items:center;gap:2px;white-space:nowrap}
+  .copy-key{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;
+            padding:0;border:1px solid transparent;border-radius:4px;background:none;
+            color:var(--muted);cursor:pointer}
+  .copy-key:hover,.copy-key:focus-visible{border-color:var(--border);background:var(--panel2);
+                                          color:var(--text);outline:none}
+  .copy-key svg{width:13px;height:13px;display:block}
+  .copy-key .done{display:none}
+  .copy-key.copied{color:var(--live)}
+  .copy-key.copied .icon{display:none}
+  .copy-key.copied .done{display:block}
   .tile-count{color:var(--muted);font-size:12px;margin-inline-start:auto;flex:0 0 auto;
               white-space:nowrap}
   .tile-body{border-top:1px solid var(--border);padding:6px 16px 14px}
@@ -708,12 +853,27 @@ ${htmlOpen()}
      eye to the wrong thing. */
   .tile .viewers{margin-inline-start:0}
   footer{margin-top:36px;color:var(--muted);font-size:12px;max-width:820px}
+  .auth{margin-inline-start:auto}
+  .auth-chip{border:1px solid var(--border);border-radius:999px;padding:5px 12px;font:inherit;font-size:12px;
+             background:var(--panel);color:var(--muted);white-space:nowrap}
+  button.auth-chip{cursor:pointer}
+  .auth-chip.out{color:#ffcf7a;border-color:#6e5a2a}
+  .auth-chip.in{color:var(--live);border-color:#2f5f3a}
+  .auth-panel{border:1px solid var(--border);border-radius:10px;background:var(--panel);padding:12px 16px;
+              margin:8px 0 4px;max-width:520px}
+  .auth-panel form{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .auth-panel input{flex:1;min-width:180px;padding:7px 10px;border-radius:6px;border:1px solid var(--border);
+                    background:var(--panel2);color:var(--text);font:inherit}
+  .auth-panel .hint{flex-basis:100%;margin:6px 0 0}
+  .auth-error{color:#f85149;font-size:12px}
 </style>
 </head>
 <body>
 <header>
   <h1>${t('server.pages.portalTitle')} ${version ? `<span class="version">${escapeHtml(version)}</span>` : ''}</h1>
+  <span class="auth">${authChip}</span>
 </header>
+${authPanel}
 
 <div class="actions">
   <a class="pill primary" href="/editor/" target="_blank" rel="noreferrer">${t('server.pages.openEditor')}</a>
@@ -821,6 +981,7 @@ export function backupPage(
 ${htmlOpen()}
 <head>
 <meta charset="utf-8">
+${FAVICON_LINK}
 <title>${escapeHtml(t('server.pages.backupTitle'))}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
@@ -898,6 +1059,7 @@ export function activityPage(
     project?: string;
     scene?: string;
     name?: string;
+    detail?: Record<string, string | number | boolean>;
   }>,
   /** `describeAgent`, injected so the page stays a pure function of its input. */
   describe: (agent: string) => string,
@@ -912,6 +1074,9 @@ export function activityPage(
     ['project', 'server.pages.filterProjects'],
     ['scene', 'server.pages.filterScenes'],
     ['panel', 'server.pages.filterPanels'],
+    ['source', 'server.pages.filterSources'],
+    ['session', 'server.pages.filterSessions'],
+    ['mode', 'server.pages.filterModes'],
   ];
 
   const tabs = filters
@@ -926,9 +1091,19 @@ export function activityPage(
   const rows = shown
     .map((e) => {
       const [, verb = ''] = e.action.split('.');
-      const target = e.name
+      const where = e.name
         ? `${escapeHtml(e.name)} <code>${escapeHtml(e.scene ?? e.project ?? '')}</code>`
         : `<code>${escapeHtml([e.project, e.scene].filter(Boolean).join('/') || '—')}</code>`;
+      // What was done, where the action alone does not say — a source switched
+      // to its backup and one handed back to automatic are both `source.use`.
+      const detail = e.detail
+        ? ` <code class="detail">${escapeHtml(
+            Object.entries(e.detail)
+              .map(([k, v]) => `${k}=${String(v)}`)
+              .join(' '),
+          )}</code>`
+        : '';
+      const target = where + detail;
 
       return `<tr>
         <td class="when"><time datetime="${escapeHtml(e.at)}">${escapeHtml(
@@ -947,6 +1122,7 @@ export function activityPage(
 ${htmlOpen()}
 <head>
 <meta charset="utf-8">
+${FAVICON_LINK}
 <title>${escapeHtml(t('server.pages.activityTitle'))}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
@@ -1062,6 +1238,11 @@ export function peersPage(
      scene would otherwise be five rows for one open panel. */
   const monitors = report.sockets.filter((p) => p.kind === 'monitor').length;
   const previews = report.sockets.filter((p) => p.kind === 'preview').length;
+  /* Companion holds a socket per channel its buttons watch, so it is counted
+     by machine, not listed by socket: one Stream Deck is not twelve panels. */
+  const companions = new Set(
+    report.sockets.filter((p) => p.kind === 'companion').map((p) => p.ip),
+  ).size;
 
   const sourcesSection = `<section>
   <h2>${t('server.pages.peersSources')} <span class="count">${sources.length}</span></h2>
@@ -1106,6 +1287,7 @@ export function peersPage(
   }
   ${monitors > 0 ? `<p class="hint">${t('server.pages.peersMonitors', { count: monitors })}</p>` : ''}
   ${previews > 0 ? `<p class="hint">${t('server.pages.peersPreviews', { count: previews })}</p>` : ''}
+  ${companions > 0 ? `<p class="hint">${t('server.pages.peersCompanion', { count: companions })}</p>` : ''}
 </section>`;
 
   const apiSection = `<section>
@@ -1144,6 +1326,7 @@ export function peersPage(
 ${htmlOpen()}
 <head>
 <meta charset="utf-8">
+${FAVICON_LINK}
 <title>${escapeHtml(t('server.pages.connectionsTitle'))}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
@@ -1199,6 +1382,7 @@ export function docsPage(body: string): string {
 ${htmlOpen()}
 <head>
 <meta charset="utf-8">
+${FAVICON_LINK}
 <title>${escapeHtml(t('server.pages.docsTitle'))}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">

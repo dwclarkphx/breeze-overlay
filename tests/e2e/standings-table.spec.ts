@@ -226,12 +226,23 @@ test('NEXT pages the table while the graphic holds', async ({ page }) => {
   expect((await rows(page))[0]!.team).toBe('Mesa Marlins');
 
   await page.evaluate(() => (window as any).breeze.next());
-  await page.waitForTimeout(100);
 
-  // Page two: the sixth team, alone.
-  const second = await rows(page);
-  expect(second).toHaveLength(1);
-  expect(second[0]!.team).toBe('Peoria Pioneers');
+  // The page turns at once: the runtime is on page two before anything moves.
+  const state = await page.evaluate(
+    () => (window as any).breeze.runtime.tableStates[0] as { page: number; pageCount: number },
+  );
+  expect(state).toMatchObject({ page: 1, pageCount: 2 });
+
+  /*
+   * On screen it animates (0.74): the old page plays its row reveal in reverse,
+   * then the new page reveals — about three quarters of a second out for five
+   * rows at this preset. Reading the rows 100 ms after NEXT, as this test did
+   * when a turn was a hard cut, catches the outgoing page mid-exit. So wait for
+   * the turn to land rather than guessing how long it takes.
+   */
+  await expect.poll(async () => (await rows(page)).map((r) => r.team), { timeout: 5_000 }).toEqual([
+    'Peoria Pioneers',
+  ]);
 
   // Pages are not steps — a step is a STOP marker, so paging leaves the count
   // alone and the control panel still reads one hold.

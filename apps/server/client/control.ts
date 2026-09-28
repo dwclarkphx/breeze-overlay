@@ -45,6 +45,11 @@ declare global {
       datasets: Record<string, DatasetValue & { fetchedAt?: string }>;
       /** Independently triggered elements, when this composition is a scene. */
       elements?: Array<{ layerId: string; name: string; ref: string; channel: string }>;
+      /** Fetched sources this graphic reads, with their backups (Wave 5). */
+      sources?: Array<{ id: string; name: string; backup?: string; backupName?: string; media?: boolean; fed?: boolean }>;
+      /** The project's mode, and the modes its rules name (Wave 6). */
+      mode?: string;
+      modes?: string[];
       /** The installation's locale, and this panel's slice of the catalogue. */
       locale?: string;
       messages?: Record<string, string>;
@@ -445,6 +450,462 @@ function wireSceneElements(boot: NonNullable<Window['__BREEZE_CONTROL__']>, key:
   });
 }
 
+/** One paged table, as the output page reports it (hub `TableReport`). */
+interface TableReport {
+  table: string;
+  page: number;
+  pageCount: number;
+  key: string | null;
+  hasCycle: boolean;
+  cycling: boolean;
+  held: boolean;
+  secondsLeft: number | null;
+  group?: string;
+  follows?: string;
+}
+
+/**
+ * The POST body the REST fallback sends for a command.
+ *
+ * `update` and `play` carry field values; the table verbs carry their own
+ * parameters under the names the REST routes read — `name`, not `key`, for a
+ * page key, because `key` on a control URL is the API key.
+ */
+function restBody(command: Record<string, unknown>): Record<string, unknown> {
+  const verb = command['verb'];
+  if (verb === 'update' || verb === 'play') return (command['data'] as Record<string, unknown>) ?? {};
+  const body: Record<string, unknown> = {};
+  if (typeof command['table'] === 'string') body['table'] = command['table'];
+  if (verb === 'page') {
+    if (typeof command['key'] === 'string') body['name'] = command['key'];
+    else if (typeof command['page'] === 'number') body['n'] = command['page'];
+  }
+  if (verb === 'cycle') body['state'] = command['cycle'];
+  return body;
+}
+
+/**
+ * The paged-tables block: which page each table is on, when it will turn, and
+ * the buttons to turn it.
+ *
+ * Built from what the output page *reports*, never from the composition: a
+ * table's page count depends on the data it holds, which only the output knows.
+ * The countdown ticks locally between reports — a report arrives when a page
+ * turns, not every second, and the panel should not have to ask.
+ */
+function makePageList(
+  section: HTMLElement | null,
+  list: HTMLElement | null,
+  send: (command: Record<string, unknown>) => void,
+): { render(tables: TableReport[] | undefined): void } {
+  if (!section || !list) return { render: () => {} };
+
+  interface RowState {
+    el: HTMLElement;
+    at: HTMLElement;
+    when: HTMLElement;
+    follows: HTMLElement;
+    bar: HTMLElement;
+    hold: HTMLButtonElement | null;
+    report: TableReport;
+    /** When the next turn is due, locally — null when not cycling. */
+    deadline: number | null;
+    /** Seconds the current page was given, for the bar. */
+    total: number;
+  }
+
+  const rows = new Map<string, RowState>();
+
+  const button = (label: string, command: Record<string, unknown>): HTMLButtonElement => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.addEventListener('click', () => send(command));
+    return b;
+  };
+
+  const build = (report: TableReport): RowState => {
+    const el = document.createElement('div');
+    el.className = 'page-row';
+    const head = document.createElement('div');
+    head.className = 'page-head';
+    const at = document.createElement('span');
+    at.className = 'page-at';
+    const name = document.createElement('code');
+    name.className = 'page-name';
+    name.textContent = report.table;
+    // A follower turns with its leader; saying so explains a page the
+    // operator did not ask for.
+    const follows = document.createElement('span');
+    follows.className = 'page-follows';
+    const when = document.createElement('span');
+    when.className = 'page-when';
+    head.append(at, name, follows, when);
+
+    const barWrap = document.createElement('div');
+    barWrap.className = 'page-bar';
+    const bar = document.createElement('i');
+    barWrap.appendChild(bar);
+
+    const verbs = document.createElement('div');
+    verbs.className = 'verbs';
+    verbs.append(
+      button(t('control.pagePrev'), { verb: 'prev', table: report.table }),
+      button(t('control.pageNext'), { verb: 'next', table: report.table }),
+    );
+    let hold: HTMLButtonElement | null = null;
+    if (report.hasCycle) {
+      hold = document.createElement('button');
+      hold.type = 'button';
+      const target = hold;
+      hold.addEventListener('click', () => {
+        const held = target.getAttribute('aria-pressed') === 'true';
+        send({ verb: 'cycle', cycle: held ? 'resume' : 'hold', table: report.table });
+      });
+      verbs.appendChild(hold);
+    }
+
+    el.append(head, barWrap, verbs);
+    return { el, at, when, follows, bar, hold, report, deadline: null, total: 0 };
+  };
+
+  const paint = (row: RowState): void => {
+    const r = row.report;
+    row.at.textContent = r.key
+      ? t('control.pageAt', { key: r.key, page: r.page + 1, pageCount: r.pageCount })
+      : t('control.pageAtNoKey', { page: r.page + 1, pageCount: r.pageCount });
+    row.follows.textContent = r.follows ? t('control.pageFollows', { table: r.follows }) : '';
+    if (row.hold) {
+      row.hold.setAttribute('aria-pressed', String(r.held));
+      row.hold.textContent = t(r.held ? 'control.cycleResume' : 'control.cycleHold');
+    }
+    if (r.held) {
+      row.when.textContent = t('control.pageHeld');
+      row.bar.style.width = '0';
+      return;
+    }
+    if (row.deadline === null) {
+      row.when.textContent = '';
+      row.bar.style.width = '0';
+      return;
+    }
+    const left = Math.max(0, (row.deadline - Date.now()) / 1000);
+    row.when.textContent = t('control.pageNextIn', { seconds: Math.ceil(left) });
+    const done = row.total > 0 ? 1 - left / row.total : 0;
+    row.bar.style.width = `${Math.round(Math.min(1, Math.max(0, done)) * 100)}%`;
+  };
+
+  // One ticker for every row, running only while something is counting down.
+  let ticker: ReturnType<typeof setInterval> | null = null;
+  const tick = (): void => {
+    let counting = false;
+    for (const row of rows.values()) {
+      paint(row);
+      if (row.deadline !== null && !row.report.held) counting = true;
+    }
+    if (!counting && ticker) {
+      clearInterval(ticker);
+      ticker = null;
+    }
+  };
+
+  return {
+    render(tables) {
+      if (!tables || tables.length === 0) {
+        section.hidden = true;
+        list.textContent = '';
+        rows.clear();
+        return;
+      }
+      section.hidden = false;
+
+      const seen = new Set<string>();
+      for (const report of tables) {
+        seen.add(report.table);
+        let row = rows.get(report.table);
+        if (!row || row.report.hasCycle !== report.hasCycle) {
+          row?.el.remove();
+          row = build(report);
+          rows.set(report.table, row);
+        }
+        const turned = row.report.page !== report.page || row.deadline === null;
+        row.report = report;
+        if (report.cycling && report.secondsLeft !== null) {
+          row.deadline = Date.now() + report.secondsLeft * 1000;
+          // The page's full time is only known when it arrives; a report in
+          // the middle of a page must not shrink the bar's scale.
+          if (turned || report.secondsLeft > row.total) row.total = report.secondsLeft;
+        } else {
+          row.deadline = null;
+        }
+        list.appendChild(row.el);
+      }
+      for (const [name, row] of rows) {
+        if (seen.has(name)) continue;
+        row.el.remove();
+        rows.delete(name);
+      }
+
+      tick();
+      if (!ticker && [...rows.values()].some((r) => r.deadline !== null)) {
+        ticker = setInterval(tick, 250);
+      }
+    },
+  };
+}
+
+/** A source's health, as `/api/projects/:id/datasources` reports it. */
+interface SourceHealth {
+  media?: { ok: number; failed: number; frozen: number; unchecked: number };
+  failures?: number;
+  lastSuccess?: string;
+  lastError?: string;
+  expired?: boolean;
+  stuck?: boolean;
+  serving?: string;
+  use?: 'primary' | 'backup';
+}
+
+/**
+ * The Data block (CYCLE.md, Wave 5): what each feed this graphic reads is
+ * doing, and — where it has a backup — the switch to put the backup on air.
+ *
+ * Polled, not pushed: source health lives in the data registry, which has no
+ * socket to panels, and a feed's state changes on the scale of its poll
+ * interval, not of a button press. The switch answers with the new status, so
+ * a press shows at once. Stopped while the tab is hidden, like the fed fields.
+ */
+function wireSources(boot: NonNullable<Window['__BREEZE_CONTROL__']>, key: string): void {
+  const sources = boot.sources ?? [];
+  const section = document.getElementById('sources');
+  const list = document.getElementById('source-list');
+  if (!section || !list || sources.length === 0) return;
+  section.hidden = false;
+
+  const auth = key ? `?key=${encodeURIComponent(key)}` : '';
+  // i18n-ignore-next-line — an API path, frozen per I18N.md §2
+  const base = `/api/projects/${encodeURIComponent(boot.projectId)}/datasources`;
+
+  const rows = new Map<string, { state: HTMLElement; media: HTMLElement | null; buttons: Map<string, HTMLButtonElement> }>();
+  const render = (id: string, status: SourceHealth): void => {
+    const row = rows.get(id);
+    const source = sources.find((s) => s.id === id);
+    if (!row || !source) return;
+    let text: string;
+    let tone = '';
+    if (status.serving !== undefined) {
+      text = t('control.sourceBackup', { name: source.backupName ?? status.serving });
+      tone = 'warn';
+    } else if (status.expired) {
+      text = t('control.sourceExpired');
+      tone = 'bad';
+    } else if (status.stuck) {
+      text = t('control.sourceStuck');
+      tone = 'bad';
+    } else if ((status.failures ?? 0) > 0) {
+      text = t('control.sourceFailing');
+      tone = 'warn';
+    } else if (!status.lastSuccess) {
+      text = t('control.sourceWaiting');
+    } else {
+      text = t('control.sourceLive');
+    }
+    if (status.use) text = t('control.sourceOverride', { state: text });
+    /*
+     * A camera list (Wave 8): how many cameras are up. For a typed list that
+     * is the whole story — it has no fetch of its own to report on.
+     */
+    if (row.media) {
+      const m = status.media;
+      const down = m ? m.failed + m.frozen : 0;
+      row.media.textContent = m ? t('control.sourceMedia', { ok: m.ok + m.unchecked, down }) : '';
+      row.media.classList.toggle('bad', down > 0);
+      if (source.fed === false) {
+        text = '';
+        tone = '';
+      }
+    }
+    row.state.textContent = text;
+    row.state.classList.toggle('warn', tone === 'warn');
+    row.state.classList.toggle('bad', tone === 'bad');
+    row.state.title = status.lastError ?? '';
+    const mode = status.use ?? 'auto';
+    for (const [value, button] of row.buttons) button.setAttribute('aria-pressed', String(value === mode));
+  };
+
+  const MODES: Array<[string, string]> = [
+    ['auto', 'control.useAuto'],
+    ['primary', 'control.usePrimary'],
+    ['backup', 'control.useBackup'],
+  ];
+
+  for (const source of sources) {
+    const el = document.createElement('div');
+    el.className = 'src-row';
+    const head = document.createElement('div');
+    head.className = 'src-head';
+    const name = document.createElement('span');
+    name.className = 'src-name';
+    name.textContent = source.name;
+    const state = document.createElement('span');
+    state.className = 'src-state';
+    head.append(name, state);
+    let media: HTMLElement | null = null;
+    if (source.media) {
+      media = document.createElement('span');
+      media.className = 'src-state src-media';
+      head.appendChild(media);
+    }
+    el.appendChild(head);
+
+    const buttons = new Map<string, HTMLButtonElement>();
+    if (source.backup !== undefined) {
+      const verbs = document.createElement('div');
+      verbs.className = 'verbs';
+      for (const [mode, labelKey] of MODES) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = t(labelKey);
+        b.addEventListener('click', () => {
+          void fetch(`${base}/${encodeURIComponent(source.id)}/use${auth}`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ mode }),
+          })
+            .then(async (res) => {
+              if (!res.ok) return;
+              const body = (await res.json()) as { status?: SourceHealth };
+              if (body.status) render(source.id, body.status);
+            })
+            .catch(() => {
+              /* The next poll shows whatever actually happened. */
+            });
+        });
+        buttons.set(mode, b);
+        verbs.appendChild(b);
+      }
+      el.appendChild(verbs);
+    }
+    if (source.media) {
+      // Check every camera now — after one has been fixed, or before air.
+      const verbs = document.createElement('div');
+      verbs.className = 'verbs';
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = t('control.mediaCheck');
+      b.addEventListener('click', () => {
+        b.disabled = true;
+        void fetch(`${base}/${encodeURIComponent(source.id)}/media/check${auth}`, { method: 'POST' })
+          .then(() => poll())
+          .catch(() => undefined)
+          .finally(() => {
+            b.disabled = false;
+          });
+      });
+      verbs.appendChild(b);
+      el.appendChild(verbs);
+    }
+    list.appendChild(el);
+    rows.set(source.id, { state, media, buttons });
+  }
+
+  async function poll(): Promise<void> {
+    try {
+      // An open read: no key in the URL of a request made every ten seconds.
+      const res = await fetch(base);
+      if (!res.ok) return;
+      const body = (await res.json()) as { sources?: Array<{ def: { id: string }; status: SourceHealth }> };
+      for (const entry of body.sources ?? []) render(entry.def.id, entry.status);
+    } catch {
+      // Offline: leave the last state up rather than blanking it.
+    }
+  }
+
+  let timer: ReturnType<typeof setInterval> | null = null;
+  const startPolling = (): void => {
+    if (timer) return;
+    void poll();
+    timer = setInterval(() => void poll(), 10_000);
+  };
+  const stopPolling = (): void => {
+    if (timer) clearInterval(timer);
+    timer = null;
+  };
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopPolling();
+    else startPolling();
+  });
+  startPolling();
+}
+
+/**
+ * The Mode block (CYCLE.md, Wave 6): a button per mode the project's rules
+ * name, and one to clear it. The mode is project-wide — every graphic with a
+ * rule for it follows — so the block says so rather than pretending it
+ * belongs to this panel's graphic. Polled like the Data block, and answered
+ * at once when pressed.
+ */
+function wireMode(boot: NonNullable<Window['__BREEZE_CONTROL__']>, key: string): void {
+  const modes = boot.modes ?? [];
+  const section = document.getElementById('mode');
+  const list = document.getElementById('mode-list');
+  if (!section || !list || modes.length === 0) return;
+  section.hidden = false;
+
+  const auth = key ? `?key=${encodeURIComponent(key)}` : '';
+  // i18n-ignore-next-line — an API path, frozen per I18N.md §2
+  const base = `/api/projects/${encodeURIComponent(boot.projectId)}/mode`;
+  const buttons = new Map<string, HTMLButtonElement>();
+
+  const paint = (mode: string): void => {
+    for (const [value, button] of buttons) button.setAttribute('aria-pressed', String(value === mode));
+  };
+
+  for (const mode of ['', ...modes]) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset['mode'] = mode;
+    const none = t('control.modeNone');
+    b.textContent = mode || none;
+    b.addEventListener('click', () => {
+      void fetch(`${base}/set${auth}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ value: mode }),
+      })
+        .then(async (res) => {
+          if (!res.ok) return;
+          const body = (await res.json()) as { mode?: string };
+          paint(body.mode ?? '');
+        })
+        .catch(() => {
+          /* The next poll shows whatever actually happened. */
+        });
+    });
+    buttons.set(mode, b);
+    list.appendChild(b);
+  }
+  paint(boot.mode ?? '');
+
+  async function poll(): Promise<void> {
+    try {
+      const res = await fetch(base);
+      if (res.ok) paint(((await res.json()) as { mode?: string }).mode ?? '');
+    } catch {
+      // Offline: leave the last state lit.
+    }
+  }
+
+  let timer: ReturnType<typeof setInterval> | null = setInterval(() => void poll(), 10_000);
+  document.addEventListener('visibilitychange', () => {
+    if (timer) clearInterval(timer);
+    timer = null;
+    if (document.hidden) return;
+    void poll();
+    timer = setInterval(() => void poll(), 10_000);
+  });
+}
+
 const boot = window.__BREEZE_CONTROL__;
 if (boot) start(boot);
 
@@ -453,6 +914,8 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
   const key = new URLSearchParams(location.search).get('key') ?? '';
 
   wireSceneElements(boot, key);
+  wireSources(boot, key);
+  wireMode(boot, key);
 
   const dot = document.getElementById('dot')!;
   const status = document.getElementById('status')!;
@@ -609,7 +1072,10 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
 
   function connect(): void {
     const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
-    socket = new WebSocket(`${scheme}://${location.host}/ws/control`);
+    // The key, when the panel was opened with one, so commands over the socket
+    // are allowed; a signed-in browser needs nothing — its session goes along.
+    const auth = key ? `?key=${encodeURIComponent(key)}` : '';
+    socket = new WebSocket(`${scheme}://${location.host}/ws/control${auth}`);
 
     socket.addEventListener('open', () => {
       retry = 0;
@@ -625,6 +1091,7 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
     socket.addEventListener('message', (event) => {
       let message: {
         type: string;
+        code?: string;
         state?: { renderers: number; playback?: unknown; data?: Record<string, unknown> };
       };
       try {
@@ -635,6 +1102,11 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
       if (message.type === 'welcome' || message.type === 'state') {
         render(message.state);
         renderFed(message.state?.data);
+      }
+      // A command refused for want of the key: say how to fix it, where the
+      // operator is looking, rather than a button that silently does nothing.
+      if (message.type === 'error' && message.code === 'error.apiKeyRequired') {
+        setStatus(t('control.signInNeeded'), 'off');
       }
     });
 
@@ -652,7 +1124,7 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
   function render(state?: { renderers: number; playback?: unknown }): void {
     if (!state) return;
     const playback = state.playback as
-      | { state: string; step: number; stepCount: number }
+      | { state: string; step: number; stepCount: number; tables?: TableReport[] }
       | null
       | undefined;
 
@@ -664,6 +1136,8 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
 
     playbackEl.textContent = playback?.state ?? 'idle';
     stepEl.textContent = playback ? `${playback.step}/${playback.stepCount}` : '–';
+    // With no output there is no page to show; an old report would be a lie.
+    pages.render(state.renderers > 0 ? playback?.tables : undefined);
   }
 
   /**
@@ -700,7 +1174,7 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
     void fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(command['data'] ?? {}),
+      body: JSON.stringify(restBody(command)),
     }).catch(() => {
       if (command['verb'] === 'update') queued.push(command['data'] as Record<string, unknown>);
     });
@@ -709,6 +1183,10 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
   function sendUpdate(): void {
     send({ verb: 'update', data: currentData() });
   }
+
+  /* -------------------------------------------------------------- pages */
+
+  const pages = makePageList(document.getElementById('pages'), document.getElementById('page-list'), send);
 
   /* ------------------------------------------------------------ actions */
 

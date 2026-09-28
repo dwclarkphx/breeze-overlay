@@ -23,7 +23,7 @@
  */
 
 import { BreezeRuntime, installGlobals, OUTPUT_PAGE_CSS } from '@breeze/runtime';
-import { DATA_UPDATE_KEY, type Composition, type DataSet, type SceneElement } from '@breeze/schema';
+import { DATA_UPDATE_KEY, MODE_UPDATE_KEY, type Composition, type DataSet, type SceneElement } from '@breeze/schema';
 
 declare global {
   interface Window {
@@ -36,8 +36,12 @@ declare global {
       assetBase: string;
       /** Current DataSets by source id, inlined so tables paint with real rows. */
       datasets?: Record<string, DataSet>;
+      /** The project's mode (Wave 6), inlined so layer rules paint in it. */
+      mode?: string;
       /** Independently triggered elements, in paint order. Empty for a plain graphic. */
       elements?: SceneElement[];
+      /** Where hls.js is, for a media layer playing HLS (Wave 8). */
+      hlsScript?: string;
       autoPlay?: boolean;
       debug?: boolean;
     };
@@ -240,6 +244,25 @@ function connectToHub(
 
   const report = () => {
     if (socket?.readyState !== WebSocket.OPEN) return;
+    /*
+     * Only tables that page are reported. A table that shows every row it has
+     * is nothing a control surface can act on, and listing it would give the
+     * operator a row of buttons that do nothing.
+     */
+    const tables = runtime.tableStates
+      .filter((s) => s.pageCount > 1 || s.cycling || s.held)
+      .map((s) => ({
+        table: s.table,
+        page: s.page,
+        pageCount: s.pageCount,
+        key: s.key,
+        hasCycle: s.hasCycle,
+        cycling: s.cycling,
+        held: s.held,
+        secondsLeft: s.secondsLeft,
+        ...(s.group ? { group: s.group } : {}),
+        ...(s.follows ? { follows: s.follows } : {}),
+      }));
     socket.send(
       JSON.stringify({
         type: 'state',
@@ -248,19 +271,37 @@ function connectToHub(
           time: runtime.currentTime,
           step: runtime.currentStep,
           stepCount: runtime.stepCount,
+          tables,
         },
       }),
     );
   };
 
-  const apply = (command: { verb: string; data?: Record<string, unknown>; time?: number }) => {
+  const apply = (command: {
+    verb: string;
+    data?: Record<string, unknown>;
+    time?: number;
+    table?: string;
+    page?: number;
+    key?: string;
+    cycle?: string;
+  }) => {
+    const table = typeof command.table === 'string' && command.table !== '' ? command.table : undefined;
     switch (command.verb) {
       case 'play':
         if (command.data) runtime.update(command.data);
         runtime.play();
         break;
       case 'stop': runtime.stop(); break;
-      case 'next': runtime.next(); break;
+      case 'next': runtime.next(table); break;
+      case 'prev': runtime.prev(table); break;
+      case 'page':
+        if (typeof command.key === 'string') runtime.goToPage({ key: command.key }, table);
+        else if (typeof command.page === 'number') runtime.goToPage({ n: command.page }, table);
+        break;
+      case 'cycle':
+        if (command.cycle === 'hold' || command.cycle === 'resume') runtime.setCycle(command.cycle, table);
+        break;
       case 'clear': runtime.clear(); break;
       case 'seek': runtime.seek(command.time ?? 0); break;
       case 'update': if (command.data) runtime.update(command.data); break;
@@ -321,7 +362,9 @@ function connectToHub(
 
   // Keep controllers' status readouts honest as the graphic moves through its
   // own lifecycle, not only when commanded.
-  for (const event of ['play', 'hold', 'stop', 'finished'] as const) {
+  // `page` too: a cycle turns pages with nobody pressing anything, and the
+  // panel's page readout is only as current as the last report.
+  for (const event of ['play', 'hold', 'stop', 'finished', 'page'] as const) {
     runtime.on(event, () => report());
   }
 
@@ -394,7 +437,12 @@ async function main(): Promise<void> {
       resolveComposition: (id) => byId.get(id),
       resolveAsset: (src) =>
         /^(https?:)?\/\//.test(src) || src.startsWith('data:') ? src : `${boot.assetBase}/${src.replace(/^assets\//, '')}`,
-      data: datasets ? { ...seed, [DATA_UPDATE_KEY]: datasets } : { ...seed },
+      data: {
+        ...seed,
+        ...(datasets ? { [DATA_UPDATE_KEY]: datasets } : {}),
+        ...(boot.mode ? { [MODE_UPDATE_KEY]: boot.mode } : {}),
+      },
+      ...(boot.hlsScript ? { hlsScript: boot.hlsScript } : {}),
       scaleMode,
       injectStyles: true,
     });
@@ -492,6 +540,7 @@ async function main(): Promise<void> {
     if (e.key === ' ') { e.preventDefault(); all((r) => r.play()); }
     else if (e.key === 'Escape') all((r) => r.stop());
     else if (e.key === 'ArrowRight') all((r) => r.next());
+    else if (e.key === 'ArrowLeft') all((r) => r.prev());
     else if (e.key === 'Backspace') all((r) => r.clear());
   });
 }

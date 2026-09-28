@@ -43,6 +43,17 @@ const check = process.argv.includes('--check');
 
 const gsapRequire = createRequire(path.join(repoRoot, 'packages', 'runtime', 'package.json'));
 
+// hls.js (Wave 8) is declared by apps/server and staged the same way as GSAP.
+const hlsRequire = createRequire(path.join(repoRoot, 'apps', 'server', 'package.json'));
+
+function hlsVersion() {
+  try {
+    return hlsRequire('hls.js/package.json').version;
+  } catch {
+    return null;
+  }
+}
+
 function gsapVersion() {
   try {
     return gsapRequire('gsap/package.json').version;
@@ -162,6 +173,7 @@ function escapeCell(value) {
 
 function render(rows) {
   const gsap = gsapVersion();
+  const hls = hlsVersion();
   const byLicense = new Map();
   for (const row of rows) byLicense.set(row.license, (byLicense.get(row.license) ?? 0) + 1);
   const summary = [...byLicense.entries()]
@@ -203,6 +215,20 @@ function render(rows) {
     '> Copyright (c) 2008-2026, GreenSock. All rights reserved.',
     '> Subject to the terms of the GreenSock Standard License:',
     '> <https://gsap.com/standard-license>',
+    '',
+    '## hls.js — staged, not bundled',
+    '',
+    hls
+      ? `Media layers play HLS streams with **hls.js ${hls}**, licensed under the`
+      : 'Media layers play HLS streams with **hls.js**, licensed under the',
+    'Apache License 2.0. Like GSAP it is not compiled into any Breeze bundle: the',
+    'unmodified `hls.light.min.js` and the package’s own `LICENSE` are copied into',
+    '`apps/server/public/vendor/hls/` at build time by `scripts/vendor-hls.mjs`,',
+    'and loaded only by a graphic that plays an HLS stream.',
+    '',
+    '> Copyright (c) 2017 Dailymotion (http://www.dailymotion.com)',
+    '> Licensed under the Apache License, Version 2.0:',
+    '> <https://www.apache.org/licenses/LICENSE-2.0>',
     '',
     '## Bundled and installed dependencies',
     '',

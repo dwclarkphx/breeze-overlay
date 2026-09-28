@@ -23,6 +23,9 @@
 
 import type { DataColumn, DataRow, DataTransform } from './data.js';
 
+import type { MediaKind, MediaOnError } from './media.js';
+import type { LayerRule } from './rules.js';
+
 export const FORMAT_VERSION = 1 as const;
 
 /* ------------------------------------------------------------------ easing */
@@ -106,6 +109,7 @@ export type LayerType =
   | 'image'
   | 'video'
   | 'sprite'
+  | 'media'
   | 'crawl'
   | 'table'
   | 'composition'
@@ -187,6 +191,8 @@ export interface LayerBase {
    * future conditional.
    */
   cell?: string;
+  /** Rules that show, hide, recolour or re-source the layer from data (Wave 6, `rules.ts`). */
+  rules?: LayerRule[];
 }
 
 export interface LayerEffects {
@@ -410,6 +416,39 @@ export interface ImageLayer extends LayerBase {
   src: string;
   binding?: string;
   fit?: 'contain' | 'cover' | 'fill';
+}
+
+/**
+ * Live media from a URL (CYCLE.md, Wave 8) — a webcam snapshot re-fetched on a
+ * timer, a motion-JPEG camera, a video file, a YouTube stream, an HLS stream.
+ *
+ * Not a `video` layer: that plays an asset on the graphic's own timeline and
+ * scrubs with it. This plays whatever is live when it is shown and does not
+ * seek. As a table cell it plays each row's URL, and a cycling table with one
+ * row a page is a camera rotation.
+ */
+export interface MediaLayer extends LayerBase {
+  type: 'media';
+  /** A URL, or an asset path. As a cell with a `cell` column: unused. */
+  src: string;
+  binding?: string;
+  /** Absent: worked out from each URL (`mediaKindOf`). */
+  kind?: MediaKind;
+  /** As a table cell: a column naming each row's kind. Blank on a row falls back to `kind`, then the URL. */
+  kindColumn?: string;
+  /** For snapshots: seconds between re-fetches. Absent or 0 loads once. */
+  refresh?: number;
+  fit?: 'contain' | 'cover' | 'fill';
+  /** Seconds a source gets to show a first frame. Default `DEFAULT_MEDIA_TIMEOUT`. */
+  timeout?: number;
+  /**
+   * When the source fails or stalls: `hide` (default) clears the layer,
+   * `hold` keeps the last picture, `skip` — as a cell of a cycling table —
+   * turns straight to the next page.
+   */
+  onError?: MediaOnError;
+  /** Sound for video, YouTube and HLS. Default false: a graphic is not a sound source. */
+  audio?: boolean;
 }
 
 export interface VideoLayer extends LayerBase {
@@ -675,6 +714,95 @@ export interface TableLayer extends LayerBase {
   layout?: 'rows';
   rowAnim?: RowAnimPreset;
   flip?: RowFlipOptions;
+  /**
+   * Turn pages on a timer while the graphic holds (CYCLE.md, Wave 1).
+   *
+   * Absent means the table pages only when told to — the behaviour every table
+   * had before this existed. Needs more rows than one page holds to do
+   * anything, so it pairs with `rowsPerPage` or a layer box that overflows.
+   */
+  cycle?: TableCycle;
+  /**
+   * Show only the rows that belong to another table's current page (CYCLE.md,
+   * Wave 4) — the tiles that change with the city a rotation is on.
+   */
+  follow?: TableFollow;
+}
+
+/**
+ * Follow another table's page.
+ *
+ * The leader is named the way commands aim at a table: its binding, a
+ * `<mount>.<binding>` address, or its layer id. Where the same nested
+ * composition is mounted several times and the name matches more than one,
+ * the table nearest the follower wins — a tile follows the rotation in its
+ * own graphic, not a namesake in a sibling.
+ *
+ * On each page turn the leader's page key is read, and the follower keeps the
+ * rows whose `column` holds it (trimmed, case-insensitive, like `page?name=`).
+ * No match shows no rows: a tile blank for a city its feed lacks is honest; a
+ * tile still showing the previous city is wrong on air.
+ */
+export interface TableFollow {
+  /** The leader. */
+  table: string;
+  /** Column in this table that must equal the leader's page key. */
+  column: string;
+  /**
+   * Column on the leader that names its page. Defaults to the leader's cycle
+   * key column, then to `column` — the common case where both tables carry a
+   * `place` — then to its first string column.
+   */
+  leaderColumn?: string;
+}
+
+export const TABLE_CYCLE_ENDS = ['loop', 'hold', 'continue'] as const;
+
+export type TableCycleEnd = (typeof TABLE_CYCLE_ENDS)[number];
+
+/**
+ * Automatic page advance.
+ *
+ * The page on screen is solved from an anchor — "page N started at instant T"
+ * — rather than counted up tick by tick, the same rule the sprite layer
+ * follows for its frames. A counter drifts and falls a page behind when a
+ * timer fires late; an anchor cannot, and two outputs anchored together stay
+ * together.
+ */
+export interface TableCycle {
+  /** Seconds each page stays up. 0 disables cycling without losing the rest. */
+  dwell: number;
+  /**
+   * Column holding a per-row time. A page stays up for the longest row on it,
+   * falling back to `dwell` for rows with no usable value — a playlist where
+   * one camera needs longer than the rest.
+   */
+  durationColumn?: string;
+  /**
+   * Unit of `durationColumn`. Seconds by default; `ms` because feeds that
+   * carry a duration very often carry it in milliseconds, and silently reading
+   * 8000 as seconds would park a page for two hours.
+   */
+  durationUnit?: 's' | 'ms';
+  /**
+   * After the last page: start again (`loop`, the default), stay on it
+   * (`hold`), or carry the graphic on to its next STOP marker or its outro
+   * (`continue`) — the round-up that pages through once and leaves on its own.
+   */
+  end?: TableCycleEnd;
+  /**
+   * Tables naming the same group turn together and obey the same hold and
+   * resume. Two halves of one readout — conference East and West — must never
+   * show page 2 beside page 1.
+   */
+  group?: string;
+  /**
+   * Column whose value on a page's first row names that page — `C` for a page
+   * of Group C. What a control surface shows as the page, and what
+   * `page?key=C` looks for. Defaults to the first string column, the same
+   * convention a row's identity uses.
+   */
+  keyColumn?: string;
 }
 
 export interface CompositionLayer extends LayerBase {
@@ -724,6 +852,7 @@ export type Layer =
   | ImageLayer
   | VideoLayer
   | SpriteLayer
+  | MediaLayer
   | CrawlLayer
   | TableLayer
   | CompositionLayer

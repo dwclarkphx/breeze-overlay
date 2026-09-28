@@ -267,6 +267,8 @@ export default defineConfig({
       '/api': 'http://127.0.0.1:7331',
       '/assets': 'http://127.0.0.1:7331',
       '/play': 'http://127.0.0.1:7331',
+      // The camera proxy (Wave 8): a media cell on the stage plays `mediaSrc` from here.
+      '/media': 'http://127.0.0.1:7331',
       /*
        * The vendored GSAP files. The editor deliberately does not stage its own
        * copy: one staged set under `apps/server/public/vendor/gsap/` serves both
@@ -276,6 +278,8 @@ export default defineConfig({
        * this proxy is the only place the arrangement needs stating twice.
        */
       '/public': 'http://127.0.0.1:7331',
+      // The tab icon lives on the server (src/favicon.ts), shared with the portal.
+      '/favicon.svg': 'http://127.0.0.1:7331',
       /*
        * The control hub. Needs `ws: true` and a `ws://` target — without it
        * Vite proxies the upgrade request as plain HTTP and the socket fails to

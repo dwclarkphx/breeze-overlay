@@ -46,6 +46,7 @@ export const TYPE_GLYPH: Record<Layer['type'], string> = {
   image: '▣',
   video: '▶',
   sprite: '⊞',
+  media: '◉',
   crawl: '⇄',
   table: '▦',
   composition: '⧉',
@@ -94,6 +95,13 @@ export function layerThumb(layer: Layer): LayerThumb {
       return layer.src
         ? { kind: 'sprite', src: layer.src, cols: layer.cols, rows: layer.rows }
         : { kind: 'glyph', glyph: TYPE_GLYPH.sprite };
+
+    /*
+     * Live media stays a glyph. A thumbnail that opened the camera would be a
+     * stream per row of the layers panel, re-opened on every edit.
+     */
+    case 'media':
+      return { kind: 'glyph', glyph: TYPE_GLYPH.media };
 
     case 'shape':
       if (layer.shape === 'path') {

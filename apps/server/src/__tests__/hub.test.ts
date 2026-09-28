@@ -290,4 +290,78 @@ describe('counting what a person has open', () => {
     const listed = hub.peers().filter((p) => p.kind === 'panel' || p.kind === 'editor');
     expect(listed).toHaveLength(hub.state(CHANNEL).controllers);
   });
+
+  it('does not count Companion as a panel, but lists it as what it is', () => {
+    // One Stream Deck watching twelve channels is twelve sockets and no person.
+    const hub = new ControlHub();
+    hub.addClient('co', () => {});
+    hub.handle('co', { type: 'subscribe', channel: CHANNEL, role: 'controller', client: 'companion' });
+    expect(hub.state(CHANNEL).controllers).toBe(0);
+    expect(hub.peers()[0]?.kind).toBe('companion');
+  });
+});
+
+describe('data-less subscriptions', () => {
+  it('sends a controller that asked for data: false its state without the data', () => {
+    const hub = new ControlHub();
+    const lean = fakeClient(hub, 'lean');
+    const full = fakeClient(hub, 'full');
+    hub.dispatch(CHANNEL, { verb: 'update', data: { name: 'Jane', $data: { wx: { rows: [] } } } });
+
+    hub.handle('lean', { type: 'subscribe', channel: CHANNEL, role: 'controller', client: 'companion', data: false });
+    subscribe(hub, 'full', 'controller');
+
+    const welcome = lean.received.find((m) => m.type === 'welcome');
+    expect(welcome && 'state' in welcome ? welcome.state.data : null).toEqual({});
+
+    hub.dispatch(CHANNEL, { verb: 'update', data: { name: 'Joan' } });
+    const leanState = lean.states().at(-1);
+    const fullState = full.states().at(-1);
+    expect(leanState && 'state' in leanState ? leanState.state.data : null).toEqual({});
+    expect(fullState && 'state' in fullState ? fullState.state.data : {}).toMatchObject({ name: 'Joan' });
+  });
+
+  it('ignores data: false from a renderer — it would come back blank after a drop', () => {
+    const hub = new ControlHub();
+    const out = fakeClient(hub, 'out');
+    hub.dispatch(CHANNEL, { verb: 'update', data: { name: 'Jane' } });
+    hub.handle('out', { type: 'subscribe', channel: CHANNEL, role: 'renderer', data: false });
+    const welcome = out.received.find((m) => m.type === 'welcome');
+    expect(welcome && 'state' in welcome ? welcome.state.data : null).toEqual({ name: 'Jane' });
+  });
+});
+
+describe('table commands', () => {
+  it('relays the table verbs to renderers with their parameters intact', () => {
+    // The hub has no idea what a table is; it only has to not lose the fields.
+    const hub = new ControlHub();
+    const out = fakeClient(hub, 'out');
+    subscribe(hub, 'out', 'renderer');
+
+    hub.dispatch(CHANNEL, { verb: 'prev', table: 'standings' });
+    hub.dispatch(CHANNEL, { verb: 'page', key: 'C', table: 'standings' });
+    hub.dispatch(CHANNEL, { verb: 'cycle', cycle: 'hold' });
+
+    expect(out.commands().map((m) => ('command' in m ? m.command : null))).toEqual([
+      { verb: 'prev', table: 'standings' },
+      { verb: 'page', key: 'C', table: 'standings' },
+      { verb: 'cycle', cycle: 'hold' },
+    ]);
+  });
+
+  it('passes a renderer’s table report through to controllers', () => {
+    const hub = new ControlHub();
+    fakeClient(hub, 'out');
+    const panel = fakeClient(hub, 'panel');
+    subscribe(hub, 'out', 'renderer');
+    subscribe(hub, 'panel', 'controller');
+
+    const tables = [
+      { table: 'standings', page: 2, pageCount: 8, key: 'C', hasCycle: true, cycling: true, held: false, secondsLeft: 4.2 },
+    ];
+    hub.handle('out', { type: 'state', playback: { state: 'holding', time: 1, step: 1, stepCount: 1, tables } });
+
+    const last = panel.states().at(-1);
+    expect(last && 'state' in last ? last.state.playback?.tables : null).toEqual(tables);
+  });
 });

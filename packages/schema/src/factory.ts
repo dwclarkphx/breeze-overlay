@@ -130,6 +130,7 @@ function baseOptionals(init: Partial<LayerBase>): BaseOptionals {
     ...(init.visible !== undefined ? { visible: init.visible } : {}),
     ...(init.locked !== undefined ? { locked: init.locked } : {}),
     ...(init.cell ? { cell: init.cell } : {}),
+    ...(init.rules?.length ? { rules: init.rules } : {}),
   };
 }
 
@@ -266,6 +267,8 @@ export function createTableLayer(init: Partial<TableLayer> = {}): TableLayer {
     ...(init.transforms ? { transforms: init.transforms } : {}),
     ...(init.rowsPerPage !== undefined ? { rowsPerPage: init.rowsPerPage } : {}),
     ...(init.layout ? { layout: init.layout } : {}),
+    ...(init.cycle ? { cycle: init.cycle } : {}),
+    ...(init.follow ? { follow: init.follow } : {}),
   };
 }
 
@@ -281,6 +284,10 @@ export function createLayer(type: LayerType): Layer {
       // `onEnd: 'hold'` stated rather than left to the runtime default, so the
       // choice is visible in the JSON the moment a video layer is created.
       return { id: makeId('vid'), type: 'video', name: 'Video', src: '', size: { width: 640, height: 360 }, transform: { x: 0, y: 0 }, opacity: 1, loop: false, muted: true, onEnd: 'hold' };
+    case 'media':
+      // Hidden on failure by default: a dead camera leaves the space empty
+      // rather than a broken-image icon on air.
+      return { id: makeId('med'), type: 'media', name: 'Media', src: '', size: { width: 640, height: 360 }, transform: { x: 0, y: 0 }, opacity: 1, fit: 'cover', onError: 'hide' };
     case 'sprite':
       // 1×1 is the only grid that is meaningful before a sheet has been picked:
       // it renders the whole image as a single frame, so a fresh sprite layer

@@ -73,6 +73,8 @@ export function collectBindings(comp: Composition): BindingDescriptor[] {
     // on a multi-frame sprite, since the replacement sheet would be stepped
     // through the outgoing sheet's geometry.
     else if (layer.type === 'sprite') { kind = 'image'; defaultValue = layer.src; }
+    // A media layer takes a URL — a camera, a stream — typed in, not an asset picked.
+    else if (layer.type === 'media') defaultValue = layer.src;
     else if (layer.type === 'crawl') {
       kind = 'stringList';
       defaultValue = layer.items;

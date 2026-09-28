@@ -20,6 +20,8 @@
 import fs from 'node:fs/promises';
 
 import {
+  DEFAULT_AIR_QUALITY_EXPIRY,
+  DEFAULT_AIR_QUALITY_POLL_INTERVAL,
   DEFAULT_POLL_INTERVAL,
   DEFAULT_WEATHER_POLL_INTERVAL,
   FORMAT_VERSION,
@@ -52,9 +54,28 @@ export function assertSafeSourceId(id: string): void {
  */
 export function effectiveInterval(def: DataSourceDef): number {
   if (def.type === 'manual') return 0;
-  const fallback = def.type === 'weather' ? DEFAULT_WEATHER_POLL_INTERVAL : DEFAULT_POLL_INTERVAL;
+  const fallback =
+    def.type === 'weather' ? DEFAULT_WEATHER_POLL_INTERVAL
+    : def.type === 'air-quality' ? DEFAULT_AIR_QUALITY_POLL_INTERVAL
+    : DEFAULT_POLL_INTERVAL;
   const requested = def.pollInterval ?? fallback;
   return Math.max(pollFloor(def), requested);
+}
+
+/**
+ * Seconds after the last success at which rows are emptied, or undefined for
+ * "keep last-good for ever".
+ *
+ * AirNow sources default to three hours when the def does not say: their
+ * terms require current data, and an operator who never opened the setting
+ * should not be the one who breaks them. A manual table never expires — its
+ * rows are the definition, not a fetch.
+ */
+export function effectiveExpiry(def: DataSourceDef): number | undefined {
+  if (def.type === 'manual') return undefined;
+  if (def.expireAfter !== undefined) return def.expireAfter;
+  if (def.type === 'air-quality' && def.provider === 'airnow-feed') return DEFAULT_AIR_QUALITY_EXPIRY;
+  return undefined;
 }
 
 async function writeAtomic(file: string, contents: string): Promise<void> {
@@ -170,6 +191,7 @@ export function redact(def: DataSourceDef): DataSourceDef {
     def.type === 'manual' ||
     def.type === 'sheets' ||
     def.type === 'weather' ||
+    def.type === 'air-quality' ||
     def.type === 'ftp'
   ) {
     return def;

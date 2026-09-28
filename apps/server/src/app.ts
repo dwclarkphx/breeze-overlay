@@ -19,15 +19,22 @@ import { ControlHub } from './hub.js';
 import { ApiClients, isExternalApiCall } from './peers.js';
 import { TranscodeQueue } from './media/transcode.js';
 import { registerAssetRoutes } from './routes/assets.js';
+import { authState, registerAuthRoutes } from './routes/auth.js';
 import { registerBackupRoutes } from './routes/backup.js';
 import { registerControlRoutes } from './routes/control.js';
 import { registerDataSourceRoutes } from './routes/datasources.js';
 import { registerDocsRoutes } from './routes/docs.js';
+import { registerModeRoutes } from './routes/mode.js';
+import { registerMediaRoutes } from './routes/media.js';
+import { MediaMonitor } from './media/monitor.js';
 import { registerEditorRoutes } from './routes/editor.js';
 import { registerPlayRoutes } from './routes/play.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerStatusRoutes } from './routes/status.js';
 import { seedDemos } from './seed.js';
+import { SESSION_COOKIE, Sessions, keyMatches, readCookie, redactKey, sameOrigin } from './session.js';
+import { fail } from './errors.js';
+import { FAVICON_SVG } from './favicon.js';
 import { NotFoundError, ensureDataDirs, listProjects } from './store.js';
 import { APP_VERSION, FORMAT_VERSION } from './version.js';
 
@@ -50,10 +57,23 @@ declare module 'fastify' {
 }
 
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
+  /*
+   * Request lines are logged with the key taken out of the URL. The shape is
+   * Fastify's own default request serializer, with only `url` changed.
+   */
+  const serializers = {
+    req: (req: { method: string; url: string; host?: string; ip?: string; socket?: { remotePort?: number } }) => ({
+      method: req.method,
+      url: redactKey(req.url),
+      host: req.host,
+      remoteAddress: req.ip,
+      remotePort: req.socket?.remotePort,
+    }),
+  };
   const app = Fastify({
     logger: options.logStream
-      ? { level: config.logLevel, stream: options.logStream }
-      : { level: config.logLevel },
+      ? { level: config.logLevel, stream: options.logStream, serializers }
+      : { level: config.logLevel, serializers },
     // Compositions with embedded base64 assets get large.
     bodyLimit: 64 * 1024 * 1024,
   });
@@ -71,9 +91,24 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
    * browser source never needs credentials; only mutating and control calls
    * are gated. LAN-first by design.
    */
+  const sessions = new Sessions();
+
+  /** Sign-in, sign-out and the status read — each checks what it needs itself. */
+  const AUTH_ROUTES = new Set(['/api/auth', '/api/auth/login', '/api/auth/logout']);
+
   app.addHook('onRequest', async (req, reply) => {
     if (!config.apiKey) return;
-    if (!req.url.startsWith('/api/')) return;
+    /*
+     * Everything is decided on the route the request resolved to, never on
+     * the raw URL. The router decodes escapes before matching, so a raw-URL
+     * test is walked round by spelling the same path differently: `/%61pi/…`
+     * reached every API route while skipping this gate entirely, until this
+     * was changed. A request that matched no route has no route here and falls
+     * through to its 404.
+     */
+    const route = req.routeOptions?.url;
+    if (!route || !route.startsWith('/api/')) return;
+    if (AUTH_ROUTES.has(route)) return;
 
     /*
      * Reads stay open so output pages and the editor need no credentials —
@@ -81,15 +116,52 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
      * A GET that fires a graphic to air is a write in every sense that matters,
      * and those exist because Stream Deck and Companion presets often can only
      * open a URL.
+     *
+     * Everything under a channel except `state` is an action. Written as the
+     * one exception rather than a list of verbs: the list this replaced named
+     * five, and the three verbs added after it (`prev`, `page`, `cycle`) would
+     * have been open to any GET. A new verb is gated by default now; making one
+     * public has to be done on purpose.
      */
     const isControlAction =
-      /^\/api\/control\/[^/]+\/[^/]+\/(play|stop|next|clear|update)\b/.test(req.url);
+      (route.startsWith('/api/control/:id/:compId/') && route !== '/api/control/:id/:compId/state') ||
+      // Choosing a source's backup puts different rows on air (Wave 5), and
+      // setting the mode changes what every graphic shows (Wave 6).
+      route === '/api/projects/:id/datasources/:sourceId/use' ||
+      // Checking every camera now makes a request to each of them (Wave 8).
+      route === '/api/projects/:id/datasources/:sourceId/media/check' ||
+      route === '/api/projects/:id/mode/set';
     if (!isControlAction && req.method === 'GET') return;
 
-    // Header or query parameter, for the same header-less devices.
+    /*
+     * Header or query parameter, for the same header-less devices. Compared in
+     * constant time, and counted: a wrong key here costs the same as one
+     * typed on the portal, so the sign-in limit cannot be walked round by
+     * guessing through any other route.
+     */
     const header = req.headers['x-breeze-key'];
-    const query = (req.query as { key?: string } | undefined)?.key;
-    if (header === config.apiKey || query === config.apiKey) return;
+    const presented = [Array.isArray(header) ? header[0] : header, (req.query as { key?: unknown } | undefined)?.key]
+      .filter((k) => k !== undefined);
+    if (presented.length > 0) {
+      if (!sessions.mayTry(req.ip)) return reply.code(429).send(fail('error.tooManyAttempts'));
+      if (presented.some((k) => keyMatches(k, config.apiKey))) return;
+      sessions.failed(req.ip);
+    }
+
+    /*
+     * A browser signed in on the portal (session.ts). Never for a GET — no
+     * page of ours makes a side-effecting GET, and a GET from an `<img>` on
+     * another port of this machine would carry the cookie — and only with an
+     * Origin that is this server.
+     */
+    if (
+      req.method !== 'GET' &&
+      req.method !== 'HEAD' &&
+      sameOrigin(req.headers.origin, req.headers.host) &&
+      sessions.expiry(readCookie(req.headers.cookie, SESSION_COOKIE)) !== undefined
+    ) {
+      return;
+    }
 
     /*
      * Sent directly rather than thrown. The error handler derives its status
@@ -97,7 +169,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
      * here surfaced every auth failure as a 500 — misleading for anyone wiring
      * up a control surface, and it hid the real cause.
      */
-    return reply.code(401).send({ error: 'invalid or missing API key' });
+    return reply.code(401).send(fail('error.apiKeyRequired'));
   });
 
   app.setErrorHandler((error: unknown, _req, reply) => {
@@ -128,9 +200,25 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     formatVersion: FORMAT_VERSION,
   }));
 
-  app.get('/', async (_req, reply) => {
+  /*
+   * The tab icon. `/favicon.ico` too, because a browser asks for it on any
+   * page without a `<link rel="icon">` — the output page among them — and a
+   * 404 in the log on every browser-source load is noise. Browsers go by the
+   * content type, not the extension.
+   */
+  const favicon = async (_req: unknown, reply: { type(t: string): unknown; header(k: string, v: string): unknown }) => {
+    reply.type('image/svg+xml');
+    reply.header('cache-control', 'public, max-age=86400');
+    return FAVICON_SVG;
+  };
+  app.get('/favicon.svg', favicon);
+  app.get('/favicon.ico', favicon);
+
+  app.get('/', async (req, reply) => {
     reply.type('text/html; charset=utf-8');
-    return portalPage(await listProjects(), APP_VERSION);
+    // Says whether this browser is signed in, so it is never served from a cache.
+    reply.header('cache-control', 'no-store');
+    return portalPage(await listProjects(), APP_VERSION, authState(sessions, req));
   });
 
   await app.register(websocket);
@@ -150,6 +238,14 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
 
   const data = new DataRegistry();
+  // Before any source registers, so a camera list is checked from its first publish.
+  const media = new MediaMonitor();
+  data.attachMedia(media);
+  // Before the server closes, not after: an open camera stream is a response
+  // that never ends, and would hold the close until its cut-off.
+  app.addHook('preClose', async () => {
+    media.stop();
+  });
   app.decorate('data', data);
 
   /*
@@ -200,12 +296,15 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     transcodes.stop();
   });
 
+  await registerAuthRoutes(app, sessions);
   await registerProjectRoutes(app);
   await registerAssetRoutes(app, transcodes);
   await registerBackupRoutes(app);
   await registerPlayRoutes(app, data);
-  await registerControlRoutes(app, hub, data);
+  await registerControlRoutes(app, hub, data, sessions);
   await registerDataSourceRoutes(app, data);
+  await registerModeRoutes(app, hub);
+  await registerMediaRoutes(app, data, media);
   await registerStatusRoutes(app, hub, apiClients);
   await registerDocsRoutes(app);
   await registerEditorRoutes(app);

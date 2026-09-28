@@ -12,20 +12,32 @@
  */
 
 import {
+  AIR_QUALITY_MODES,
+  AIR_QUALITY_PROVIDERS,
+  AQI_SCALES,
+  CAP_SEVERITIES,
+  CAP_TIME_MODES,
   COLUMN_TYPES,
   DATA_SOURCE_TYPES,
+  DATE_KEEPS,
+  FALLBACK_TRIGGERS,
   FILTER_OPS,
   FTP_FORMATS,
   FTP_PROTOCOLS,
+  GUARD_BAD_ROWS,
+  MAX_PLACES,
   WEATHER_MODES,
   WEATHER_PROVIDERS,
   WEATHER_UNITS,
 } from './data.js';
 import { LEGACY_KEY_PATTERN } from './keys.js';
+import { MEDIA_CHECK_DEFAULTS, MEDIA_KINDS, MEDIA_ON_ERROR } from './media.js';
+import { RULE_OPS } from './rules.js';
 import {
   ANIMATABLE_PROPS,
   FORMAT_VERSION,
   ROW_ANIM_PRESET_IDS,
+  TABLE_CYCLE_ENDS,
   TEXT_ANIM_PRESET_IDS,
 } from './types.js';
 
@@ -159,6 +171,55 @@ const dataTransformSchema = {
       },
       additionalProperties: false,
     },
+    {
+      // Wide to long (CYCLE.md, Wave 4). Name the columns to fold, or the
+      // columns to keep; with neither, every column is folded.
+      type: 'object',
+      required: ['op'],
+      properties: {
+        op: { const: 'unpivot' },
+        columns: { type: 'array', minItems: 1, items: { type: 'string', minLength: 1 } },
+        keep: { type: 'array', items: { type: 'string', minLength: 1 } },
+        key: { type: 'string', minLength: 1 },
+        value: { type: 'string', minLength: 1 },
+      },
+      additionalProperties: false,
+    },
+    /* ------------------------------------------------------------ Wave 7 */
+    {
+      type: 'object',
+      required: ['op', 'column', 'keep'],
+      properties: {
+        op: { const: 'date' },
+        column: { type: 'string', minLength: 1 },
+        keep: { enum: [...DATE_KEEPS] },
+        from: { type: 'integer', minimum: -366, maximum: 366 },
+        days: { type: 'integer', minimum: 1, maximum: 366 },
+        timezone: { type: 'string', pattern: '^[A-Za-z0-9_/+-]+$' },
+      },
+      additionalProperties: false,
+    },
+    {
+      type: 'object',
+      required: ['op', 'source', 'key'],
+      properties: {
+        op: { const: 'lookup' },
+        source: { type: 'string', minLength: 1 },
+        key: { type: 'string', minLength: 1 },
+        on: { type: 'string', minLength: 1 },
+        columns: { type: 'array', minItems: 1, items: { type: 'string', minLength: 1 } },
+      },
+      additionalProperties: false,
+    },
+    {
+      type: 'object',
+      required: ['op', 'source'],
+      properties: {
+        op: { const: 'union' },
+        source: { type: 'string', minLength: 1 },
+      },
+      additionalProperties: false,
+    },
   ],
 } as const;
 
@@ -282,9 +343,46 @@ const textStyleSchema = {
   additionalProperties: false,
 } as const;
 
+/** `LayerBase.rules` — CYCLE.md, Wave 6 (`rules.ts`). */
+const ruleConditionSchema = {
+  type: 'object',
+  required: ['cmp'],
+  properties: {
+    column: { type: 'string', minLength: 1 },
+    source: { type: 'string', minLength: 1 },
+    where: {
+      type: 'object',
+      required: ['column', 'value'],
+      properties: { column: { type: 'string', minLength: 1 }, value: dataValueSchema },
+      additionalProperties: false,
+    },
+    binding: { type: 'string', minLength: 1 },
+    mode: { const: true },
+    cmp: { enum: [...RULE_OPS] },
+    value: { anyOf: [...dataValueSchema.anyOf, { type: 'array', items: dataValueSchema }] },
+  },
+  additionalProperties: false,
+} as const;
+
+const rulesSchema = {
+  type: 'array',
+  items: {
+    type: 'object',
+    required: ['when'],
+    properties: {
+      when: { type: 'array', minItems: 1, items: ruleConditionSchema },
+      show: { type: 'boolean' },
+      color: { type: 'string', minLength: 1 },
+      src: { type: 'string', minLength: 1 },
+    },
+    additionalProperties: false,
+  },
+} as const;
+
 /** Properties shared by every layer type. Spread into each concrete layer. */
 const layerBaseProps = {
   id: { type: 'string', minLength: 1 },
+  rules: rulesSchema,
   name: { type: 'string' },
   visible: { type: 'boolean' },
   locked: { type: 'boolean' },
@@ -441,6 +539,23 @@ const layerSchema = {
     {
       properties: {
         ...layerBaseProps,
+        type: { const: 'media' },
+        src: { type: 'string' },
+        binding: { type: 'string' },
+        kind: { enum: [...MEDIA_KINDS] },
+        kindColumn: { type: 'string', minLength: 1 },
+        refresh: { type: 'number', minimum: 0 },
+        fit: { enum: ['contain', 'cover', 'fill'] },
+        timeout: { type: 'number', minimum: 1, maximum: 120 },
+        onError: { enum: [...MEDIA_ON_ERROR] },
+        audio: { type: 'boolean' },
+      },
+      required: ['src'],
+      additionalProperties: false,
+    },
+    {
+      properties: {
+        ...layerBaseProps,
         type: { const: 'video' },
         src: { type: 'string' },
         binding: { type: 'string' },
@@ -546,6 +661,29 @@ const layerSchema = {
           },
           additionalProperties: false,
         },
+        cycle: {
+          type: 'object',
+          required: ['dwell'],
+          properties: {
+            dwell: { type: 'number', minimum: 0 },
+            durationColumn: { type: 'string', minLength: 1 },
+            durationUnit: { enum: ['s', 'ms'] },
+            end: { enum: [...TABLE_CYCLE_ENDS] },
+            group: { type: 'string', minLength: 1 },
+            keyColumn: { type: 'string', minLength: 1 },
+          },
+          additionalProperties: false,
+        },
+        follow: {
+          type: 'object',
+          required: ['table', 'column'],
+          properties: {
+            table: { type: 'string', minLength: 1 },
+            column: { type: 'string', minLength: 1 },
+            leaderColumn: { type: 'string', minLength: 1 },
+          },
+          additionalProperties: false,
+        },
       },
       required: ['row'],
       additionalProperties: false,
@@ -648,6 +786,94 @@ export const compositionSchema = {
   },
 } as const;
 
+/*
+ * Shared pieces of the data-source branches (Phase 8.6 Wave 3).
+ *
+ * `contact` goes into a header: free text, length-capped, and refused rather
+ * than stripped if it holds a newline, which is the one thing that would make a
+ * header value dangerous.
+ */
+const contactSchema = { type: 'string', maxLength: 200, pattern: '^[^\\r\\n]*$' } as const;
+
+/** An AirNow reporting-area id is a number, but typed as text — `111`. */
+const areaSchema = { type: 'string', pattern: '^[0-9]{1,6}$' } as const;
+
+/** Station identifiers are four-ish letters and digits: `KPHX`, `AZ023`. */
+const stationSchema = { type: 'string', pattern: '^[A-Za-z0-9]{3,8}$' } as const;
+
+const placeSchema = {
+  type: 'object',
+  required: ['name'],
+  properties: {
+    name: { type: 'string', minLength: 1 },
+    key: { type: 'string' },
+    latitude: { type: 'number', minimum: -90, maximum: 90 },
+    longitude: { type: 'number', minimum: -180, maximum: 180 },
+    area: areaSchema,
+    station: stationSchema,
+  },
+  additionalProperties: false,
+} as const;
+
+const placesSchema = { type: 'array', maxItems: MAX_PLACES, items: placeSchema } as const;
+
+/** Column names in the source table; each optional, with fallbacks (PLACE_COLUMN_ALIASES). */
+const placesFromSchema = {
+  type: 'object',
+  required: ['source'],
+  properties: {
+    source: { type: 'string', minLength: 1 },
+    name: { type: 'string', minLength: 1 },
+    key: { type: 'string', minLength: 1 },
+    latitude: { type: 'string', minLength: 1 },
+    longitude: { type: 'string', minLength: 1 },
+    area: { type: 'string', minLength: 1 },
+    station: { type: 'string', minLength: 1 },
+  },
+  additionalProperties: false,
+} as const;
+
+/** `DataSourceBase.media` — CYCLE.md, Wave 8. */
+const mediaCheckSchema = {
+  type: 'object',
+  required: ['column'],
+  properties: {
+    column: { type: 'string', minLength: 1 },
+    kindColumn: { type: 'string', minLength: 1 },
+    every: { type: 'number', minimum: MEDIA_CHECK_DEFAULTS.minEvery },
+    frozenAfter: { type: 'number', minimum: 0 },
+    proxy: { type: 'boolean' },
+  },
+  additionalProperties: false,
+} as const;
+
+/** `DataSourceBase.guard` — CYCLE.md, Wave 5. */
+const guardSchema = {
+  type: 'object',
+  properties: {
+    minRows: { type: 'integer', minimum: 1 },
+    maxDropPercent: { type: 'number', exclusiveMinimum: 0, exclusiveMaximum: 100 },
+    required: { type: 'array', minItems: 1, items: { type: 'string', minLength: 1 } },
+    ranges: {
+      type: 'array',
+      minItems: 1,
+      items: {
+        type: 'object',
+        required: ['column'],
+        properties: {
+          column: { type: 'string', minLength: 1 },
+          min: { type: 'number' },
+          max: { type: 'number' },
+        },
+        additionalProperties: false,
+      },
+    },
+    badRows: { enum: [...GUARD_BAD_ROWS] },
+    maxUnchanged: { type: 'number', minimum: 60 },
+  },
+  additionalProperties: false,
+} as const;
+
 /**
  * Data-source definitions — `projects/<id>/datasources.json`.
  *
@@ -677,6 +903,8 @@ export const dataSourcesSchema = {
               type: { const: 'manual' },
               pollInterval: { type: 'number', minimum: 0 },
               enabled: { type: 'boolean' },
+              expireAfter: { type: 'number', minimum: 60 },
+              media: mediaCheckSchema,
               columns: { type: 'array', items: { $ref: '#/$defs/dataColumn' } },
               rows: { type: 'array', items: { $ref: '#/$defs/dataRow' } },
             },
@@ -690,6 +918,11 @@ export const dataSourcesSchema = {
               type: { const: 'http-json' },
               pollInterval: { type: 'number', minimum: 0 },
               enabled: { type: 'boolean' },
+              expireAfter: { type: 'number', minimum: 60 },
+              media: mediaCheckSchema,
+              guard: guardSchema,
+              fallback: { type: 'string', minLength: 1 },
+              fallbackOn: { enum: [...FALLBACK_TRIGGERS] },
               url: { type: 'string', minLength: 1 },
               // `secretId` only — a literal credential in a shareable file is
               // the failure mode this whole split exists to prevent.
@@ -708,6 +941,11 @@ export const dataSourcesSchema = {
               type: { const: 'http-csv' },
               pollInterval: { type: 'number', minimum: 0 },
               enabled: { type: 'boolean' },
+              expireAfter: { type: 'number', minimum: 60 },
+              media: mediaCheckSchema,
+              guard: guardSchema,
+              fallback: { type: 'string', minLength: 1 },
+              fallbackOn: { enum: [...FALLBACK_TRIGGERS] },
               url: { type: 'string', minLength: 1 },
               secretId: { type: 'string' },
               headers: { type: 'object', additionalProperties: { type: 'string' } },
@@ -725,6 +963,11 @@ export const dataSourcesSchema = {
               type: { const: 'rss' },
               pollInterval: { type: 'number', minimum: 0 },
               enabled: { type: 'boolean' },
+              expireAfter: { type: 'number', minimum: 60 },
+              media: mediaCheckSchema,
+              guard: guardSchema,
+              fallback: { type: 'string', minLength: 1 },
+              fallbackOn: { enum: [...FALLBACK_TRIGGERS] },
               url: { type: 'string', minLength: 1 },
               secretId: { type: 'string' },
               headers: { type: 'object', additionalProperties: { type: 'string' } },
@@ -742,6 +985,11 @@ export const dataSourcesSchema = {
               type: { const: 'xml' },
               pollInterval: { type: 'number', minimum: 0 },
               enabled: { type: 'boolean' },
+              expireAfter: { type: 'number', minimum: 60 },
+              media: mediaCheckSchema,
+              guard: guardSchema,
+              fallback: { type: 'string', minLength: 1 },
+              fallbackOn: { enum: [...FALLBACK_TRIGGERS] },
               url: { type: 'string', minLength: 1 },
               secretId: { type: 'string' },
               headers: { type: 'object', additionalProperties: { type: 'string' } },
@@ -759,6 +1007,11 @@ export const dataSourcesSchema = {
               type: { const: 'sheets' },
               pollInterval: { type: 'number', minimum: 0 },
               enabled: { type: 'boolean' },
+              expireAfter: { type: 'number', minimum: 60 },
+              media: mediaCheckSchema,
+              guard: guardSchema,
+              fallback: { type: 'string', minLength: 1 },
+              fallbackOn: { enum: [...FALLBACK_TRIGGERS] },
               // A spreadsheet id, not a URL: this source does not address an
               // arbitrary origin, and accepting a URL would let a def point a
               // server-held credential at something that is not Sheets.
@@ -779,6 +1032,11 @@ export const dataSourcesSchema = {
               type: { const: 'weather' },
               pollInterval: { type: 'number', minimum: 0 },
               enabled: { type: 'boolean' },
+              expireAfter: { type: 'number', minimum: 60 },
+              media: mediaCheckSchema,
+              guard: guardSchema,
+              fallback: { type: 'string', minLength: 1 },
+              fallbackOn: { enum: [...FALLBACK_TRIGGERS] },
               provider: { enum: [...WEATHER_PROVIDERS] },
               // Only meaningful for `open-meteo-self`; the semantic check in
               // validateDataSources is what enforces that, because JSON Schema
@@ -788,9 +1046,14 @@ export const dataSourcesSchema = {
               latitude: { type: 'number', minimum: -90, maximum: 90 },
               longitude: { type: 'number', minimum: -180, maximum: 180 },
               place: { type: 'string' },
+              places: placesSchema,
+              placesFrom: placesFromSchema,
+              station: stationSchema,
               units: { enum: [...WEATHER_UNITS] },
               mode: { enum: [...WEATHER_MODES] },
               count: { type: 'number', minimum: 1, maximum: 240 },
+              pairDayNight: { type: 'boolean' },
+              startTomorrowAfter: { type: 'integer', minimum: 0, maximum: 23 },
               // Constrained by shape, not by an enum of model ids: the list
               // grows, and an enum would reject a valid new model until the
               // schema caught up. The pattern's job is to catch a pasted URL or
@@ -802,9 +1065,11 @@ export const dataSourcesSchema = {
               // a header value is the one thing here that a typo can make
               // enormous. Newlines are what would make it dangerous, and are
               // refused rather than stripped.
-              contact: { type: 'string', maxLength: 200, pattern: '^[^\\r\\n]*$' },
+              contact: contactSchema,
             },
-            required: ['provider', 'latitude', 'longitude'],
+            // Where is checked in validateDataSources: one place, a list, or a
+            // table — and "none of three" deserves a sentence, not a oneOf index.
+            required: ['provider'],
             additionalProperties: false,
           },
           {
@@ -814,6 +1079,11 @@ export const dataSourcesSchema = {
               type: { const: 'ftp' },
               pollInterval: { type: 'number', minimum: 0 },
               enabled: { type: 'boolean' },
+              expireAfter: { type: 'number', minimum: 60 },
+              media: mediaCheckSchema,
+              guard: guardSchema,
+              fallback: { type: 'string', minLength: 1 },
+              fallbackOn: { enum: [...FALLBACK_TRIGGERS] },
               protocol: { enum: [...FTP_PROTOCOLS] },
               host: { type: 'string', minLength: 1 },
               port: { type: 'number', minimum: 1, maximum: 65535 },
@@ -829,6 +1099,62 @@ export const dataSourcesSchema = {
               columns: { type: 'array', items: { $ref: '#/$defs/dataColumn' } },
             },
             required: ['protocol', 'host', 'pattern', 'format'],
+            additionalProperties: false,
+          },
+          /* -------------------------------------- Phase 8.6 Wave 3 */
+          {
+            properties: {
+              id: { type: 'string', minLength: 1 },
+              name: { type: 'string' },
+              type: { const: 'cap' },
+              pollInterval: { type: 'number', minimum: 0 },
+              enabled: { type: 'boolean' },
+              expireAfter: { type: 'number', minimum: 60 },
+              media: mediaCheckSchema,
+              guard: guardSchema,
+              fallback: { type: 'string', minLength: 1 },
+              fallbackOn: { enum: [...FALLBACK_TRIGGERS] },
+              url: { type: 'string', minLength: 1 },
+              secretId: { type: 'string' },
+              headers: { type: 'object', additionalProperties: { type: 'string' } },
+              area: { type: 'string' },
+              codes: { type: 'string' },
+              events: { type: 'string' },
+              minSeverity: { enum: [...CAP_SEVERITIES] },
+              times: { enum: [...CAP_TIME_MODES] },
+              timezone: { type: 'string', pattern: '^[A-Za-z0-9_/+-]+$' },
+              contact: contactSchema,
+            },
+            required: ['url'],
+            additionalProperties: false,
+          },
+          {
+            properties: {
+              id: { type: 'string', minLength: 1 },
+              name: { type: 'string' },
+              type: { const: 'air-quality' },
+              pollInterval: { type: 'number', minimum: 0 },
+              enabled: { type: 'boolean' },
+              expireAfter: { type: 'number', minimum: 60 },
+              media: mediaCheckSchema,
+              guard: guardSchema,
+              fallback: { type: 'string', minLength: 1 },
+              fallbackOn: { enum: [...FALLBACK_TRIGGERS] },
+              provider: { enum: [...AIR_QUALITY_PROVIDERS] },
+              baseUrl: { type: 'string', minLength: 1 },
+              area: areaSchema,
+              latitude: { type: 'number', minimum: -90, maximum: 90 },
+              longitude: { type: 'number', minimum: -180, maximum: 180 },
+              place: { type: 'string' },
+              places: placesSchema,
+              placesFrom: placesFromSchema,
+              mode: { enum: [...AIR_QUALITY_MODES] },
+              scale: { enum: [...AQI_SCALES] },
+              count: { type: 'number', minimum: 1, maximum: 7 },
+              timezone: { type: 'string', pattern: '^[A-Za-z0-9_/+-]+$' },
+              contact: contactSchema,
+            },
+            required: ['provider'],
             additionalProperties: false,
           },
         ],

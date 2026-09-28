@@ -202,6 +202,7 @@ export function LayersPanel(): JSX.Element {
             <option value="image">{t('editor.layers.typeImage')}</option>
             <option value="video">{t('editor.layers.typeVideo')}</option>
             <option value="sprite">{t('editor.layers.typeSprite')}</option>
+            <option value="media">{t('editor.layers.typeMedia')}</option>
             <option value="crawl">{t('editor.layers.typeCrawl')}</option>
             {/*
               Import sits in the add menu rather than beside it, because from
@@ -225,6 +226,7 @@ export function LayersPanel(): JSX.Element {
               >
                 <option value="cell:text">{t('editor.layers.cellText')}</option>
                 <option value="cell:image">{t('editor.layers.cellImage')}</option>
+                <option value="cell:media">{t('editor.layers.cellMedia')}</option>
                 <option value="cell:shape">{t('editor.layers.cellShape')}</option>
               </optgroup>
             )}

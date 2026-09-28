@@ -110,6 +110,26 @@ const ONE_OF_EACH: Record<DataSourceDef['type'], DataSourceDef> = {
     secretId: 'results-drop',
     header: true,
   },
+  cap: {
+    id: 'cap-src',
+    name: 'Alerts',
+    type: 'cap',
+    url: 'https://api.weather.gov/alerts/active?area=AZ',
+    area: 'Maricopa',
+    minSeverity: 'Moderate',
+    times: 'exact',
+    pollInterval: 60,
+  },
+  'air-quality': {
+    id: 'aq-src',
+    name: 'Air quality',
+    type: 'air-quality',
+    provider: 'airnow-feed',
+    places: [{ name: 'Phoenix', key: 'PHX', area: '111' }],
+    mode: 'current',
+    expireAfter: 10800,
+    pollInterval: 900,
+  },
 };
 
 describe('data sources schema', () => {

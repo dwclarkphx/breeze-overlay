@@ -28,7 +28,25 @@ import type { BreezeRuntime } from './runtime.js';
 export interface BreezeGlobals {
   play: () => void;
   stop: () => void;
-  next: () => void;
+  /** With a table name, turns only that table's page (CYCLE.md). */
+  next: (table?: string) => void;
+  /** Back a page while holding, otherwise back to the previous hold. */
+  prev: (table?: string) => void;
+  /**
+   * Go to a page: a 1-based number, or a page key such as `'C'`.
+   *
+   * One argument rather than two verbs because a host script is handed
+   * whatever the operator typed, and a number-looking key is still a key only
+   * when it is not a whole number — `page(3)` and `page('3')` both mean page 3.
+   */
+  page: (target: number | string, table?: string) => boolean;
+  /** Freeze self-paging tables, or set them going again. */
+  cycle: (state: 'hold' | 'resume', table?: string) => boolean;
+  /**
+   * The mode layer rules read (Wave 6): with a value, set it on this page;
+   * without, read it. `''` clears it. On air the server sets it project-wide.
+   */
+  mode: (value?: string) => string;
   update: (payload: string | Record<string, unknown>) => void;
   /** Non-standard but universally useful for debugging in a browser source. */
   seek: (time: number) => void;
@@ -53,7 +71,18 @@ export function makeGlobals(runtime: BreezeRuntime): BreezeGlobals {
   return {
     play: () => runtime.play(),
     stop: () => runtime.stop(),
-    next: () => runtime.next(),
+    next: (table) => runtime.next(table),
+    prev: (table) => runtime.prev(table),
+    page: (target, table) => runtime.goToPage(pageTarget(target), table),
+    cycle: (state, table) => runtime.setCycle(state, table),
+    mode: (value) => {
+      if (value !== undefined) {
+        // The mode is the page's, like the project's: a scene's elements follow it too.
+        runtime.setMode(String(value));
+        for (const element of elements.values()) element.runtime.setMode(String(value));
+      }
+      return runtime.mode;
+    },
     update: (payload) => {
       const data = typeof payload === 'string' ? safeParse(payload) : payload;
       if (data) runtime.update(data);
@@ -90,6 +119,7 @@ export function installGlobals(
     host['play'] = globals.play;
     host['stop'] = globals.stop;
     host['next'] = globals.next;
+    host['prev'] = globals.prev;
     host['update'] = globals.update;
     host['seek'] = globals.seek;
   }
@@ -97,6 +127,16 @@ export function installGlobals(
   host['breeze'] = globals;
 
   return globals;
+}
+
+/**
+ * A page argument from a host script: a whole number (or a string of one) is a
+ * 1-based page, anything else is a page key.
+ */
+export function pageTarget(target: number | string): { n: number } | { key: string } {
+  if (typeof target === 'number') return { n: target };
+  const trimmed = target.trim();
+  return /^\d+$/.test(trimmed) ? { n: Number(trimmed) } : { key: trimmed };
 }
 
 function safeParse(raw: string): Record<string, unknown> | null {

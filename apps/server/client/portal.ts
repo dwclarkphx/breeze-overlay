@@ -194,3 +194,114 @@ document.addEventListener('visibilitychange', () => {
   void poll();
   timer = window.setInterval(() => void poll(), POLL_MS);
 });
+
+/* ----------------------------------------------------------------- API key */
+
+/**
+ * Signing this browser in with the server's API key (see `src/session.ts`).
+ *
+ * The key goes to the server once, in a POST body, and is dropped from the
+ * field straight after — the browser keeps only the session cookie the server
+ * answers with, which no script can read. A sign-in or sign-out reloads the
+ * page, so the chip is always drawn by the server from the real state.
+ */
+function wireAuth(): void {
+  const chip = el('auth-chip');
+  const panel = el('auth-panel');
+  const form = el('auth-form') as HTMLFormElement | null;
+  const input = el('auth-key') as HTMLInputElement | null;
+  const error = el('auth-error');
+  const signOut = el('auth-signout');
+  if (!chip || !panel) return;
+
+  chip.addEventListener('click', () => {
+    panel.hidden = !panel.hidden;
+    chip.setAttribute('aria-expanded', String(!panel.hidden));
+    if (!panel.hidden) input?.focus();
+  });
+
+  form?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (!input || !error) return;
+    const key = input.value;
+    input.value = '';
+    error.textContent = '';
+    void fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ key }),
+    })
+      .then((res) => {
+        if (res.ok) {
+          location.reload();
+          return;
+        }
+        error.textContent = t(res.status === 429 ? 'portal.authWait' : res.status === 401 ? 'portal.authWrong' : 'portal.authFailed');
+        input.focus();
+      })
+      .catch(() => {
+        error.textContent = t('portal.authFailed');
+      });
+  });
+
+  signOut?.addEventListener('click', () => {
+    void fetch('/api/auth/logout', { method: 'POST' }).finally(() => location.reload());
+  });
+}
+
+wireAuth();
+
+/*
+ * Copy a project or graphic key (the icon beside each).
+ *
+ * `navigator.clipboard` only exists in a secure context — localhost, or
+ * HTTPS — and this portal is usually opened as http://<lan-ip>:7331 from
+ * another machine, where it is undefined. The old selection-and-execCommand
+ * route still works there, so it is the fallback rather than an error.
+ */
+function copyText(value: string): Promise<void> {
+  if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(value);
+  return new Promise((resolve, reject) => {
+    const area = document.createElement('textarea');
+    area.value = value;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    area.remove();
+    if (ok) resolve();
+    else reject(new Error());
+  });
+}
+
+function wireCopyKeys(): void {
+  document.addEventListener('click', (event) => {
+    const button = (event.target as Element | null)?.closest<HTMLButtonElement>('.copy-key');
+    if (!button) return;
+    // The project key sits in a <summary>: copying must not also open or close the tile.
+    event.preventDefault();
+    event.stopPropagation();
+    const path = button.dataset['copyUrl'];
+    // A graphic's full output URL, as the portal was reached — the LAN address from another machine.
+    const key = path ? new URL(path, location.href).href : button.dataset['copy'] ?? '';
+    const tip = button.title;
+    void copyText(key)
+      .then(() => {
+        button.classList.add('copied');
+        button.title = t('portal.copied', { key });
+      })
+      .catch(() => {
+        button.title = t('portal.copyFailed');
+      })
+      .finally(() => {
+        setTimeout(() => {
+          button.classList.remove('copied');
+          button.title = tip;
+        }, 1500);
+      });
+  });
+}
+
+wireCopyKeys();

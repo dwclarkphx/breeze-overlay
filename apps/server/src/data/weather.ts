@@ -31,6 +31,7 @@ import {
   conform,
   type DataRow,
   type DataSet,
+  type PlaceRef,
   type WeatherDataSource,
   type WeatherIcon,
   type WeatherMode,
@@ -39,6 +40,31 @@ import {
 } from '@breeze/schema';
 
 import { fetchText, userAgent } from './fetch.js';
+import {
+  eachPlace,
+  localParts,
+  placesOf,
+  rowDate,
+  startTomorrow,
+  tagRows,
+  type LoadResult,
+  type PlaceContext,
+} from './places.js';
+
+/**
+ * A def's coordinates, formatted for a request.
+ *
+ * Four decimals is ~11 m. More is noise, and MET Norway 403s on five —
+ * truncating everywhere keeps one habit rather than one per provider. Throws
+ * for a def with no coordinates, which since Phase 8.6 is a many-place def
+ * that reached a one-place code path — a bug, and worth a clear message.
+ */
+function coords(def: WeatherDataSource): { lat: string; lon: string } {
+  if (def.latitude === undefined || def.longitude === undefined) {
+    throw new Error(`no latitude/longitude for ${def.place?.trim() || def.id}`);
+  }
+  return { lat: def.latitude.toFixed(4), lon: def.longitude.toFixed(4) };
+}
 
 /** Rows returned in forecast mode when the def does not say. */
 const DEFAULT_COUNT = 7;
@@ -253,11 +279,10 @@ export function openMeteoUrl(def: WeatherDataSource, opts: { lean?: boolean } = 
   const keep = (vars: string[]): string =>
     (opts.lean ? vars.filter((v) => !OPTIONAL_VARS.includes(v)) : vars).join(',');
 
+  const at = coords(def);
   const params = new URLSearchParams({
-    // Four decimals is ~11 m. More is noise, and MET Norway 403s on five —
-    // truncating everywhere keeps one habit rather than one per provider.
-    latitude: def.latitude.toFixed(4),
-    longitude: def.longitude.toFixed(4),
+    latitude: at.lat,
+    longitude: at.lon,
     /*
      * `auto` resolves the zone from the coordinates, which is what a weather bug
      * wants — the times on screen should be the times at the place being
@@ -330,6 +355,8 @@ interface OpenMeteoPayload {
   current?: Record<string, unknown>;
   hourly?: Record<string, unknown[]>;
   daily?: Record<string, unknown[]>;
+  /** The zone `timezone=auto` resolved to — what "today" means at the place. */
+  timezone?: string;
 }
 
 export function openMeteoToDataSet(
@@ -440,78 +467,148 @@ export function parseNwsWind(text: string | null | undefined): number | null {
   return Math.max(...numbers.map(Number));
 }
 
+/** One period's temperature in the requested units — see the note on `temperatureUnit`. */
+function nwsTemp(p: NwsPeriod, units: WeatherUnits): number | null {
+  /*
+   * `temperatureUnit` is authoritative and is not always F: the gridpoint
+   * endpoint answers in C for some offices and for all of the Pacific
+   * territories. Converting on the assumption of F silently cools Guam by
+   * about thirty degrees.
+   */
+  const rawTemp = num(p.temperature);
+  const nativeF = (p.temperatureUnit ?? 'F').toUpperCase() === 'F';
+  if (rawTemp === null) return null;
+  if (units === 'imperial' && !nativeF) return cToF(rawTemp);
+  if (units === 'metric' && nativeF) return (rawTemp - 32) * 5 / 9;
+  return rawTemp;
+}
+
+/** Wind prose is always mph from the forecast endpoints. */
+function nwsWind(p: NwsPeriod, units: WeatherUnits): number | null {
+  const windMph = parseNwsWind(p.windSpeed);
+  if (windMph === null) return null;
+  return units === 'metric' ? windMph / 0.621371 : windMph;
+}
+
+function nwsPeriodRow(p: NwsPeriod, units: WeatherUnits): DataRow {
+  const temp = nwsTemp(p, units);
+  return {
+    ...blankRow(),
+    time: p.startTime ?? null,
+    period: p.name ?? null,
+    temp: round(temp),
+    // A daytime period's temperature is the high, a night period's is the low.
+    // Filling the matching column too means a `tempMax`-bound graphic works
+    // against NWS without the designer knowing which endpoint fed it.
+    tempMax: p.isDaytime === true ? round(temp) : null,
+    tempMin: p.isDaytime === false ? round(temp) : null,
+    condition: p.shortForecast ?? null,
+    icon: nwsToIcon(p.icon ?? null, p.shortForecast ?? null),
+    precipProb: round(num(p.probabilityOfPrecipitation?.value)),
+    humidity: round(num(p.relativeHumidity?.value)),
+    windSpeed: round(nwsWind(p, units)),
+    windDir: p.windDirection ?? null,
+    isDay: typeof p.isDaytime === 'boolean' ? p.isDaytime : null,
+  } satisfies DataRow;
+}
+
+/**
+ * Pair each day period with the night that follows it — one row per date.
+ *
+ * The date is read off `startTime`, which NWS writes in the place's own offset
+ * (`2026-09-27T18:00:00-07:00`), so its first ten characters are the local
+ * date with no zone arithmetic. A night starting that evening belongs to that
+ * date. The first row of an evening fetch is therefore a night with no day —
+ * "Tonight" — and it keeps its own name, low and conditions rather than being
+ * dropped: that is the forecast that is still to come.
+ *
+ * The day leads wherever there is one: its name ("Tuesday"), its conditions
+ * and icon, its high. The night adds the low, and the wetter of the two
+ * precipitation chances, because a day that is dry until a storm at 9 pm is
+ * not a 0% day.
+ */
+export function pairNwsPeriods(periods: NwsPeriod[], units: WeatherUnits): DataRow[] {
+  const byDate = new Map<string, { day?: NwsPeriod; night?: NwsPeriod }>();
+  for (const p of periods) {
+    const date = typeof p.startTime === 'string' ? p.startTime.slice(0, 10) : null;
+    if (!date) continue;
+    const slot = byDate.get(date) ?? {};
+    if (p.isDaytime === true && !slot.day) slot.day = p;
+    else if (p.isDaytime === false && !slot.night) slot.night = p;
+    byDate.set(date, slot);
+  }
+
+  const rows: DataRow[] = [];
+  for (const [date, { day, night }] of byDate) {
+    const lead = day ?? night;
+    if (!lead) continue;
+    const high = day ? nwsTemp(day, units) : null;
+    const low = night ? nwsTemp(night, units) : null;
+    const chances = [day, night]
+      .map((p) => num(p?.probabilityOfPrecipitation?.value))
+      .filter((v): v is number => v !== null);
+    const winds = [day, night].map((p) => (p ? nwsWind(p, units) : null)).filter((v): v is number => v !== null);
+    rows.push({
+      ...blankRow(),
+      time: date,
+      period: lead.name ?? null,
+      temp: round(high ?? low),
+      tempMax: round(high),
+      tempMin: round(low),
+      condition: lead.shortForecast ?? null,
+      icon: nwsToIcon(lead.icon ?? null, lead.shortForecast ?? null),
+      precipProb: chances.length ? round(Math.max(...chances)) : null,
+      humidity: round(num(lead.relativeHumidity?.value)),
+      windSpeed: winds.length ? round(Math.max(...winds)) : null,
+      windDir: lead.windDirection ?? null,
+      isDay: Boolean(day),
+    } satisfies DataRow);
+  }
+  return rows;
+}
+
 export function nwsToDataSet(def: WeatherDataSource, periods: NwsPeriod[]): DataSet {
   const info = WEATHER_PROVIDER_INFO[def.provider];
   const units: WeatherUnits = def.units ?? 'metric';
   const mode: WeatherMode = def.mode ?? 'current';
   const wanted = mode === 'current' ? 1 : clampCount(def.count, DEFAULT_COUNT);
 
-  const rows: DataRow[] = periods.slice(0, wanted).map((p) => {
-    /*
-     * `temperatureUnit` is authoritative and is not always F: the gridpoint
-     * endpoint answers in C for some offices and for all of the Pacific
-     * territories. Converting on the assumption of F silently cools Guam by
-     * about thirty degrees.
-     */
-    const rawTemp = num(p.temperature);
-    const nativeF = (p.temperatureUnit ?? 'F').toUpperCase() === 'F';
-    let temp: number | null = rawTemp;
-    if (rawTemp !== null) {
-      if (units === 'imperial' && !nativeF) temp = cToF(rawTemp);
-      if (units === 'metric' && nativeF) temp = (rawTemp - 32) * 5 / 9;
-    }
-
-    // Wind prose is always mph from this endpoint.
-    const windMph = parseNwsWind(p.windSpeed);
-    const wind = windMph === null
-      ? null
-      : units === 'metric' ? windMph / 0.621371 : windMph;
-
-    return {
-      ...blankRow(),
-      time: p.startTime ?? null,
-      temp: round(temp),
-      // A daytime period's temperature is the high, a night period's is the low.
-      // Filling the matching column too means a `tempMax`-bound graphic works
-      // against NWS without the designer knowing which endpoint fed it.
-      tempMax: p.isDaytime === true ? round(temp) : null,
-      tempMin: p.isDaytime === false ? round(temp) : null,
-      condition: p.shortForecast ?? null,
-      icon: nwsToIcon(p.icon ?? null, p.shortForecast ?? null),
-      precipProb: round(num(p.probabilityOfPrecipitation?.value)),
-      humidity: round(num(p.relativeHumidity?.value)),
-      windSpeed: round(wind),
-      windDir: p.windDirection ?? null,
-      isDay: typeof p.isDaytime === 'boolean' ? p.isDaytime : null,
-    } satisfies DataRow;
-  });
+  const rows = mode === 'daily' && def.pairDayNight
+    ? pairNwsPeriods(periods, units).slice(0, wanted)
+    : periods.slice(0, wanted).map((p) => nwsPeriodRow(p, units));
 
   return finish(def.id, rows, info.attribution);
 }
 
+interface NwsPoint {
+  forecast?: string;
+  forecastHourly?: string;
+  observationStations?: string;
+  /** IANA zone of the gridpoint — what "today" means at the place. */
+  timeZone?: string;
+}
+
 /**
- * NWS point → forecast URL.
+ * The gridpoint metadata for a lat/lon: forecast URLs, the stations list and
+ * the zone.
  *
- * Two requests, and the first one's answer is cacheable forever in practice: a
- * lat/lon does not change grid cell. It is fetched every poll anyway because
- * caching it correctly means invalidating it when NWS re-grids — which they do,
- * rarely, and which would otherwise strand a source pointing at a dead cell
- * until someone restarted the server. One extra request every fifteen minutes
- * is the cheaper end of that trade.
+ * Fetched every poll although it is cacheable forever in practice: a lat/lon
+ * does not change grid cell. Caching it correctly means invalidating it when
+ * NWS re-grids — which they do, rarely, and which would otherwise strand a
+ * source pointing at a dead cell until someone restarted the server. One extra
+ * request every few minutes is the cheaper end of that trade.
  */
-async function nwsFetch(def: WeatherDataSource): Promise<NwsPeriod[]> {
-  const point = `${NWS_BASE}/points/${def.latitude.toFixed(4)},${def.longitude.toFixed(4)}`;
-  const pointBody = await fetchText(point, { headers: nwsHeaders(def) });
+async function nwsPoint(def: WeatherDataSource): Promise<NwsPoint> {
+  const at = coords(def);
+  const pointBody = await fetchText(`${NWS_BASE}/points/${at.lat},${at.lon}`, { headers: nwsHeaders(def) });
   if (pointBody.body === null) throw new Error('NWS point lookup returned no body');
+  const parsed = JSON.parse(pointBody.body) as { properties?: NwsPoint };
+  return parsed.properties ?? {};
+}
 
-  const parsed = JSON.parse(pointBody.body) as {
-    properties?: { forecast?: string; forecastHourly?: string };
-  };
+async function nwsPeriods(def: WeatherDataSource, point: NwsPoint): Promise<NwsPeriod[]> {
   const mode: WeatherMode = def.mode ?? 'current';
-  const url = mode === 'hourly'
-    ? parsed.properties?.forecastHourly
-    : parsed.properties?.forecast;
-
+  const url = mode === 'hourly' ? point.forecastHourly : point.forecast;
   if (!url) {
     throw new Error(
       `api.weather.gov has no forecast for ${def.latitude},${def.longitude} — NWS covers the US and its territories only`,
@@ -522,6 +619,188 @@ async function nwsFetch(def: WeatherDataSource): Promise<NwsPeriod[]> {
   if (body.body === null) throw new Error('NWS forecast returned no body');
   const forecast = JSON.parse(body.body) as { properties?: { periods?: NwsPeriod[] } };
   return forecast.properties?.periods ?? [];
+}
+
+/* ------------------------------------------------------- NWS observed */
+
+/** A quantity as the observations API reports it: a value and a WMO unit code. */
+interface NwsQuantity {
+  value?: number | null;
+  unitCode?: string;
+}
+
+/** `observations/latest` properties — only the fields read here. */
+export interface NwsObservation {
+  timestamp?: string;
+  stationId?: string;
+  station?: string;
+  textDescription?: string;
+  icon?: string | null;
+  temperature?: NwsQuantity;
+  dewpoint?: NwsQuantity;
+  windDirection?: NwsQuantity;
+  windSpeed?: NwsQuantity;
+  windGust?: NwsQuantity;
+  barometricPressure?: NwsQuantity;
+  seaLevelPressure?: NwsQuantity;
+  visibility?: NwsQuantity;
+  relativeHumidity?: NwsQuantity;
+  windChill?: NwsQuantity;
+  heatIndex?: NwsQuantity;
+  precipitationLastHour?: NwsQuantity;
+}
+
+/** Stations tried when the nearest has no temperature — observations are patchy. */
+const OBSERVED_STATION_TRIES = 3;
+
+/** Older than this, a station's latest reading loses to a fresher station's. */
+const OBSERVED_MAX_AGE_MINUTES = 90;
+
+/**
+ * Read a quantity in a known unit, whatever unit it came in.
+ *
+ * The API documents its units per field but reports `unitCode` per value, and
+ * the value is authoritative: stations report wind in km/h or m/s depending on
+ * the platform, and a `wmoUnit:m_s-1` read as km/h is a 3.6× error.
+ */
+function quantity(q: NwsQuantity | undefined, want: 'degC' | 'km_h' | 'hPa' | 'm' | 'mm' | 'deg' | 'percent'): number | null {
+  const value = num(q?.value);
+  if (value === null) return null;
+  const unit = (q?.unitCode ?? '').replace(/^wmoUnit:|^unit:/, '');
+  switch (want) {
+    case 'degC':
+      return unit === 'degF' ? (value - 32) * 5 / 9 : value;
+    case 'km_h':
+      if (unit === 'm_s-1') return value * 3.6;
+      if (unit === 'kn' || unit === '[kn_i]') return value * 1.852;
+      return value;
+    case 'hPa':
+      return unit === 'Pa' ? value / 100 : value;
+    case 'm':
+      return unit === 'km' ? value * 1000 : value;
+    case 'mm':
+      return unit === 'm' ? value * 1000 : value;
+    default:
+      return value;
+  }
+}
+
+/**
+ * One observation → one row.
+ *
+ * `feelsLike` is the heat index or wind chill when NWS computed one, else the
+ * air temperature — the stations only report the index when it applies, which
+ * is exactly the rule a viewer expects. `ageMinutes` is as of `now`, the moment
+ * of the fetch: a reading that was forty minutes old when it arrived is worth
+ * showing as such, and the graphic can hide it past whatever age it likes.
+ */
+export function nwsObservationRow(
+  obs: NwsObservation,
+  units: WeatherUnits,
+  now: Date,
+  stationId: string | null,
+): DataRow {
+  const tempC = quantity(obs.temperature, 'degC');
+  const dewC = quantity(obs.dewpoint, 'degC');
+  const feelsC = quantity(obs.heatIndex, 'degC') ?? quantity(obs.windChill, 'degC') ?? tempC;
+  const t = (c: number | null): number | null => (c === null ? null : units === 'imperial' ? cToF(c) : c);
+  const w = (kmh: number | null): number | null =>
+    kmh === null ? null : units === 'imperial' ? kmh * 0.621371 : kmh;
+  const visM = quantity(obs.visibility, 'm');
+  const precipMm = quantity(obs.precipitationLastHour, 'mm');
+  const at = obs.timestamp ? new Date(obs.timestamp) : null;
+  const age = at && !Number.isNaN(at.getTime()) ? Math.max(0, Math.floor((now.getTime() - at.getTime()) / 60_000)) : null;
+  const icon = obs.icon ?? null;
+
+  return {
+    ...blankRow(),
+    time: obs.timestamp ?? null,
+    temp: round(t(tempC)),
+    feelsLike: round(t(feelsC)),
+    dewPoint: round(t(dewC)),
+    condition: obs.textDescription?.trim() || null,
+    icon: nwsToIcon(icon, obs.textDescription ?? null),
+    windSpeed: round(w(quantity(obs.windSpeed, 'km_h'))),
+    windGust: round(w(quantity(obs.windGust, 'km_h'))),
+    windDir: bearingToCompass(quantity(obs.windDirection, 'deg')),
+    humidity: round(quantity(obs.relativeHumidity, 'percent')),
+    pressure: toPressure(units, quantity(obs.seaLevelPressure, 'hPa') ?? quantity(obs.barometricPressure, 'hPa')),
+    // Miles to one decimal, kilometres likewise: "10 mi" and "0.5 mi" are both
+    // things a visibility graphic shows.
+    visibility: visM === null ? null : round(units === 'imperial' ? visM / 1609.344 : visM / 1000, 1),
+    precipAmount: precipMm === null ? null : round(units === 'imperial' ? precipMm / 25.4 : precipMm, 2),
+    isDay: icon ? (icon.includes('/day/') ? true : icon.includes('/night/') ? false : null) : null,
+    station: stationId ?? obs.stationId ?? (obs.station ? obs.station.split('/').pop() ?? null : null),
+    ageMinutes: age,
+  } satisfies DataRow;
+}
+
+/**
+ * The latest observation from the nearest station that has a temperature.
+ *
+ * The gridpoint's station list is ordered by distance. The nearest station is
+ * not always reporting — an AWOS with a failed sensor still publishes, with
+ * `temperature.value: null` — so up to three are tried in order. A pinned
+ * `station` is tried first and alone: an operator who named KPHX wants KPHX,
+ * and quietly substituting Deer Valley would be the wrong kind of helpful.
+ */
+async function nwsObserved(def: WeatherDataSource, point: NwsPoint, now: Date): Promise<DataRow[]> {
+  const units: WeatherUnits = def.units ?? 'metric';
+  let candidates: string[];
+
+  if (def.station) {
+    candidates = [def.station.toUpperCase()];
+  } else {
+    if (!point.observationStations) {
+      throw new Error(`api.weather.gov lists no observation stations near ${def.latitude},${def.longitude}`);
+    }
+    const list = await fetchText(point.observationStations, { headers: nwsHeaders(def) });
+    if (list.body === null) throw new Error('NWS station list returned no body');
+    const parsed = JSON.parse(list.body) as {
+      features?: Array<{ properties?: { stationIdentifier?: string } }>;
+    };
+    candidates = (parsed.features ?? [])
+      .map((f) => f.properties?.stationIdentifier)
+      .filter((id): id is string => typeof id === 'string' && id !== '')
+      .slice(0, OBSERVED_STATION_TRIES);
+    if (candidates.length === 0) throw new Error(`no observation stations near ${def.latitude},${def.longitude}`);
+  }
+
+  /*
+   * A usable reading has a temperature and is recent. A station that stopped
+   * reporting three hours ago still answers `latest` with its last reading,
+   * and taking it over a live station a few miles further away would put a
+   * morning temperature on an afternoon graphic. If nothing qualifies, the
+   * best available wins: one with a temperature over one without, then the
+   * freshest.
+   */
+  const usable = (row: DataRow): boolean =>
+    row['temp'] !== null && (row['ageMinutes'] === null || (row['ageMinutes'] as number) <= OBSERVED_MAX_AGE_MINUTES);
+  const better = (a: DataRow, b: DataRow | null): boolean => {
+    if (!b) return true;
+    if ((a['temp'] !== null) !== (b['temp'] !== null)) return a['temp'] !== null;
+    return ((a['ageMinutes'] as number | null) ?? Infinity) < ((b['ageMinutes'] as number | null) ?? Infinity);
+  };
+
+  let fallback: DataRow | null = null;
+  let lastError: unknown;
+  for (const station of candidates) {
+    try {
+      const url = `${NWS_BASE}/stations/${encodeURIComponent(station)}/observations/latest`;
+      const body = await fetchText(url, { headers: nwsHeaders(def) });
+      if (body.body === null) continue;
+      const obs = (JSON.parse(body.body) as { properties?: NwsObservation }).properties ?? {};
+      const row = nwsObservationRow(obs, units, now, station);
+      if (usable(row)) return [row];
+      if (better(row, fallback)) fallback = row;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  // Nothing current with a temperature: the least-bad row, which still has
+  // its age on it for the graphic to judge.
+  if (fallback) return [fallback];
+  throw lastError instanceof Error ? lastError : new Error(`no observation from ${candidates.join(', ')}`);
 }
 
 /**
@@ -740,12 +1019,12 @@ export function metToDataSet(def: WeatherDataSource, payload: MetPayload): DataS
  * From their terms: *"When using requests with latitude/longitude, truncate all
  * coordinates to max 4 decimals… For new products, requests with 5+ decimals
  * will return a 403 Forbidden."* A lat/lon pasted out of Google Maps has six,
- * so without the `toFixed(4)` below the source fails on the first poll and the
- * error says "Forbidden", which reads like an auth problem and is not one.
+ * so without the `toFixed(4)` in `coords` the source fails on the first poll and
+ * the error says "Forbidden", which reads like an auth problem and is not one.
  */
 async function metFetch(def: WeatherDataSource): Promise<MetPayload> {
-  const url =
-    `${MET_BASE}/complete?lat=${def.latitude.toFixed(4)}&lon=${def.longitude.toFixed(4)}`;
+  const at = coords(def);
+  const url = `${MET_BASE}/complete?lat=${at.lat}&lon=${at.lon}`;
 
   const result = await fetchText(url, {
     timeoutMs: 15_000,
@@ -841,12 +1120,17 @@ export function brightSkyIsDay(icon: string | null | undefined): boolean | null 
   return null;
 }
 
-export function brightSkyToDataSet(def: WeatherDataSource, records: BrightSkyRecord[]): DataSet {
+export function brightSkyToDataSet(
+  def: WeatherDataSource,
+  records: BrightSkyRecord[],
+  now: Date = new Date(),
+): DataSet {
   const info = WEATHER_PROVIDER_INFO[def.provider];
   const units: WeatherUnits = def.units ?? 'metric';
   const mode: WeatherMode = def.mode ?? 'current';
+  const single = mode === 'current' || mode === 'observed';
 
-  const wanted = mode === 'current' ? 1 : clampCount(def.count, DEFAULT_COUNT);
+  const wanted = single ? 1 : clampCount(def.count, DEFAULT_COUNT);
   // Daily mode samples one record per 24 hourly rows; Bright Sky has no daily
   // aggregate endpoint, and inventing a min/max here would be a forecast this
   // adapter is not qualified to make.
@@ -886,10 +1170,21 @@ export function brightSkyToDataSet(def: WeatherDataSource, records: BrightSkyRec
       humidity: round(num(r.relative_humidity)),
       pressure: toPressure(units, num(r.pressure_msl)),
       isDay: brightSkyIsDay(r.icon),
+      // Observed mode is the same station reading `current` already was; it
+      // just says how old it is.
+      ageMinutes: mode === 'observed' ? ageOf(r.timestamp, now) : null,
     } satisfies DataRow;
   });
 
   return finish(def.id, rows, info.attribution);
+}
+
+/** Whole minutes between a timestamp and `now`, or null when unreadable. */
+function ageOf(timestamp: string | null | undefined, now: Date): number | null {
+  if (!timestamp) return null;
+  const at = new Date(timestamp);
+  if (Number.isNaN(at.getTime())) return null;
+  return Math.max(0, Math.floor((now.getTime() - at.getTime()) / 60_000));
 }
 
 /**
@@ -902,10 +1197,11 @@ export function brightSkyToDataSet(def: WeatherDataSource, records: BrightSkyRec
  * way nobody notices until it disagrees with the window.
  */
 async function brightSkyFetch(def: WeatherDataSource): Promise<BrightSkyRecord[]> {
-  const at = `lat=${def.latitude.toFixed(4)}&lon=${def.longitude.toFixed(4)}`;
+  const where = coords(def);
+  const at = `lat=${where.lat}&lon=${where.lon}`;
   const mode: WeatherMode = def.mode ?? 'current';
 
-  if (mode === 'current') {
+  if (mode === 'current' || mode === 'observed') {
     const result = await fetchText(`${BRIGHTSKY_BASE}/current_weather?${at}`, {
       timeoutMs: 15_000,
       headers: { 'user-agent': userAgent(def.contact) },
@@ -953,21 +1249,132 @@ async function brightSkyFetch(def: WeatherDataSource): Promise<BrightSkyRecord[]
 
 /* ------------------------------------------------------------- dispatch */
 
-export async function weatherToDataSet(def: WeatherDataSource): Promise<DataSet> {
+/**
+ * A weather source → a DataSet, for one place or many.
+ *
+ * Kept for callers that want only the rows; `loadWeather` is the full answer,
+ * with the partial-failure warning a many-place source can carry.
+ */
+export async function weatherToDataSet(def: WeatherDataSource, ctx: PlaceContext = {}): Promise<DataSet> {
+  return (await loadWeather(def, ctx)).data;
+}
+
+export async function loadWeather(def: WeatherDataSource, ctx: PlaceContext = {}): Promise<LoadResult> {
+  const info = WEATHER_PROVIDER_INFO[def.provider];
+  const now = ctx.now ?? new Date();
+  const places = placesOf(def, ctx);
+
+  if (!places) {
+    const rows = await placeRows(def, now);
+    return { data: finish(def.id, tagRows(rows, def.place?.trim() || null, null), info.attribution) };
+  }
+
+  const { rows, warning } = await eachPlace(
+    places,
+    async (place) => placeRows(atPlace(def, place), now),
+    ctx.prior,
+    (row) => keepWeatherRow(def, row, now),
+  );
+  return { data: finish(def.id, rows, info.attribution), ...(warning ? { warning } : {}) };
+}
+
+/**
+ * Whether a failing place's last-good row may stay on air.
+ *
+ * Forecast rows for days that have already ended go — a strip leading with
+ * yesterday is wrong in a way a viewer notices. An observation past the
+ * source's `expireAfter` goes too: its age was true when it arrived and is a
+ * lie now.
+ */
+function keepWeatherRow(def: WeatherDataSource, row: DataRow, now: Date): boolean {
+  const mode: WeatherMode = def.mode ?? 'current';
+  const time = typeof row['time'] === 'string' ? row['time'] : null;
+  if (!time) return true;
+  if (mode === 'daily') {
+    const today = localParts(def.timezone?.trim() || undefined, now).date;
+    const date = rowDate(time, def.timezone?.trim() || undefined);
+    return date === null || date >= today;
+  }
+  if (mode === 'observed' && def.expireAfter !== undefined) {
+    const at = Date.parse(time);
+    return !Number.isFinite(at) || now.getTime() - at <= def.expireAfter * 1000;
+  }
+  return true;
+}
+
+/** A one-place def for one entry of a list. */
+function atPlace(def: WeatherDataSource, place: PlaceRef): WeatherDataSource {
+  const one: WeatherDataSource = {
+    ...def,
+    place: place.name,
+    ...(place.latitude !== undefined ? { latitude: place.latitude } : {}),
+    ...(place.longitude !== undefined ? { longitude: place.longitude } : {}),
+    ...(place.station ? { station: place.station } : {}),
+  };
+  delete one.places;
+  delete one.placesFrom;
+  // A station belongs to one place. The validator refuses a source-level one
+  // alongside a list, and this makes sure a hand-written def cannot give every
+  // city Phoenix's airport either.
+  if (!place.station) delete one.station;
+  return one;
+}
+
+/**
+ * One place's rows, with the daily start-tomorrow rule applied.
+ *
+ * When today may be dropped, one extra day is asked for, so a five-day strip
+ * built after 3 pm is still five days long. The zone that decides "today" is
+ * the place's own where the provider says it (NWS's gridpoint, Open-Meteo's
+ * resolved zone), else the def's `timezone`, else the server's.
+ */
+async function placeRows(def: WeatherDataSource, now: Date): Promise<DataRow[]> {
+  const info = WEATHER_PROVIDER_INFO[def.provider];
+  const mode: WeatherMode = def.mode ?? 'current';
+  if (!info.modes.includes(mode)) {
+    throw new Error(`${def.provider} has no ${mode} mode — it offers ${info.modes.join(', ')}`);
+  }
+
+  /*
+   * Today may be more than one row: NWS unpaired is two half-days, and MET's
+   * daily sampling takes several points from the hourly part of its series.
+   * Asking for eight spare rows covers every provider, and the list is cut
+   * back to `count` after today is dropped.
+   */
+  const dropToday = mode === 'daily' && def.startTomorrowAfter !== undefined;
+  const wanted = clampCount(def.count, DEFAULT_COUNT);
+  const asked: WeatherDataSource = dropToday ? { ...def, count: Math.min(MAX_COUNT, wanted + 8) } : def;
+  let zone = def.timezone?.trim() || undefined;
+  let rows: DataRow[];
+
   if (def.provider === 'nws') {
-    return nwsToDataSet(def, await nwsFetch(def));
+    const point = await nwsPoint(def);
+    zone = point.timeZone ?? zone;
+    rows = mode === 'observed'
+      ? await nwsObserved(def, point, now)
+      : nwsToDataSet(asked, await nwsPeriods(def, point)).rows;
+  } else if (def.provider === 'met-norway') {
+    rows = metToDataSet(asked, await metFetch(def)).rows;
+  } else if (def.provider === 'brightsky') {
+    rows = brightSkyToDataSet(asked, await brightSkyFetch(asked), now).rows;
+  } else {
+    const result = await openMeteoRows(asked);
+    zone = result.zone ?? zone;
+    rows = result.rows;
   }
 
-  if (def.provider === 'met-norway') {
-    return metToDataSet(def, await metFetch(def));
-  }
+  if (!dropToday) return rows;
+  return startTomorrow(rows, def.startTomorrowAfter, zone, now).slice(0, wanted);
+}
 
-  if (def.provider === 'brightsky') {
-    return brightSkyToDataSet(def, await brightSkyFetch(def));
-  }
+async function openMeteoRows(def: WeatherDataSource): Promise<{ rows: DataRow[]; zone: string | undefined }> {
+  const done = (payload: OpenMeteoPayload): { rows: DataRow[]; zone: string | undefined } => ({
+    rows: openMeteoToDataSet(def, payload).rows,
+    zone: typeof payload.timezone === 'string' ? payload.timezone : undefined,
+  });
 
   const first = await openMeteoFetch(def, false);
-  if (!('reason' in first)) return openMeteoToDataSet(def, first.payload);
+  if (!('reason' in first)) return done(first.payload);
 
   /*
    * One retry, without the optional variables. A self-hosted instance pinned to
@@ -986,7 +1393,7 @@ export async function weatherToDataSet(def: WeatherDataSource): Promise<DataSet>
       `Open-Meteo: ${second.reason} (retried without optional variables; the model may not cover this location)`,
     );
   }
-  return openMeteoToDataSet(def, second.payload);
+  return done(second.payload);
 }
 
 async function openMeteoFetch(

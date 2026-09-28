@@ -145,11 +145,18 @@ export interface AssetReference {
  * it, and it is the reference an operator deletes out from under a graphic
  * without ever seeing it listed.
  */
+/** Not a URL (`https://…`, `//…`, `data:…`) and not a server path (`/media/…`). */
+function isAssetPath(src: string): boolean {
+  return Boolean(src) && !/^(?:[a-z][a-z0-9+.-]*:|\/)/i.test(src);
+}
+
 export function assetReferences(layers: readonly Layer[]): AssetReference[] {
   const out: AssetReference[] = [];
 
   const visit = (layer: Layer): void => {
-    if ((layer.type === 'image' || layer.type === 'video' || layer.type === 'sprite') && layer.src) {
+    // A media layer usually plays a URL; only an asset path is a reference.
+    const mediaAsset = layer.type === 'media' && isAssetPath(layer.src);
+    if ((layer.type === 'image' || layer.type === 'video' || layer.type === 'sprite' || mediaAsset) && layer.src) {
       out.push({
         src: layer.src,
         layerId: layer.id,
@@ -223,7 +230,7 @@ export function rewriteAssetReferences(
 
     // `next === layer` until something actually changes, then a shallow copy
     // that later branches keep writing into. One copy per touched layer.
-    if ((next.type === 'image' || next.type === 'video' || next.type === 'sprite') && next.src === from) {
+    if ((next.type === 'image' || next.type === 'video' || next.type === 'sprite' || next.type === 'media') && next.src === from) {
       next = { ...next, src: to };
       count += 1;
     }

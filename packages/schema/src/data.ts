@@ -26,6 +26,9 @@
 
 /* ------------------------------------------------------------------ DataSet */
 
+import type { MediaCheck, MediaSummary } from './media.js';
+import { addDays, localParts, readTime } from './time.js';
+
 export const COLUMN_TYPES = ['string', 'number', 'boolean', 'date'] as const;
 export type ColumnType = (typeof COLUMN_TYPES)[number];
 
@@ -217,16 +220,208 @@ export interface AdvanceTransform {
   fields?: string[];
 }
 
+/**
+ * Wide rows to long ones (CYCLE.md, Wave 4).
+ *
+ * A sheet laid out for people — `City | Mon | Tue | Wed` — becomes one row per
+ * city and day: `City | key | value`. That is the shape a table, a follower or
+ * a Cycle wants, and the one a person typing into a spreadsheet never makes.
+ */
+export interface UnpivotTransform {
+  op: 'unpivot';
+  /** Columns to fold into rows. Absent: every column not in `keep`. */
+  columns?: string[];
+  /** Columns carried onto every folded row unchanged. Absent: every column not in `columns`. */
+  keep?: string[];
+  /** Column naming which folded column a row came from. Default `key`; holds that column's label. */
+  key?: string;
+  /** Column holding the folded value. Default `value`. */
+  value?: string;
+}
+
+/**
+ * Keep the rows whose date or time falls in a window of the clock (Wave 7):
+ * today, tomorrow, this week, still to come — in a named zone, so a graphics
+ * machine in UTC agrees with the station about what "today" is.
+ */
+export interface DateTransform {
+  op: 'date';
+  /** The column holding the date or time. See `readTime` for what it reads. */
+  column: string;
+  /**
+   * `days` — rows on the calendar days `from` … `from + days - 1` (0 today, 1
+   * tomorrow, -1 yesterday). `upcoming` — rows not yet past: a time at or after
+   * now, a date today or later. `past` — the rest.
+   */
+  keep: DateKeep;
+  from?: number;
+  days?: number;
+  /** IANA zone. Absent: the zone of the machine showing the graphic. */
+  timezone?: string;
+}
+
+export const DATE_KEEPS = ['days', 'upcoming', 'past'] as const;
+export type DateKeep = (typeof DATE_KEEPS)[number];
+
+/**
+ * Bring columns across from another source by a matching key (Wave 7) — the
+ * city's display name, region and background from a Cities table, onto each
+ * forecast row. Keys match trimmed and case-insensitively; the first match
+ * wins. A matched row takes the other source's values, empty ones included;
+ * a row with no match keeps a column it already had and gets null for the rest.
+ */
+export interface LookupTransform {
+  op: 'lookup';
+  source: string;
+  /** Column in these rows. */
+  key: string;
+  /** Column in the other source to match it with. Default: the same name. */
+  on?: string;
+  /** Columns to bring. Default: every column of the other source but `on`. */
+  columns?: string[];
+}
+
+/**
+ * Append another source's rows (Wave 7) — a feed's alerts and the station's
+ * own typed announcements in one crawl. Columns are the union of both; a value
+ * one side does not have is empty.
+ */
+export interface UnionTransform {
+  op: 'union';
+  source: string;
+}
+
 export type DataTransform =
   | { op: 'sort'; key: string; dir?: 'asc' | 'desc' }
   | { op: 'filter'; key: string; cmp: FilterOp; value?: DataValue }
   | { op: 'limit'; n: number }
   | { op: 'offset'; n: number }
   | { op: 'rank'; as?: string }
-  | AdvanceTransform;
+  | AdvanceTransform
+  | UnpivotTransform
+  | DateTransform
+  | LookupTransform
+  | UnionTransform;
+
+/**
+ * What a transform may read besides its own rows: the clock, for `date`, and
+ * other sources, for `lookup` and `union`. Both optional — without a clock it
+ * is now; without sources a lookup finds nothing and a union adds nothing.
+ */
+export interface TransformContext {
+  now?: Date;
+  source?: (id: string) => DataSet | undefined;
+}
+
+/** Whether a pipeline depends on the clock — a graphic showing it must re-run it as time passes. */
+export function transformsUseClock(transforms: readonly DataTransform[] | undefined): boolean {
+  return (transforms ?? []).some((t) => t.op === 'date');
+}
+
+/** The other sources a pipeline reads — it must re-run when any of them changes. */
+export function transformSources(transforms: readonly DataTransform[] | undefined): string[] {
+  const out = new Set<string>();
+  for (const t of transforms ?? []) if (t.op === 'lookup' || t.op === 'union') out.add(t.source);
+  return [...out];
+}
 
 /** Column `rank` writes into when no `as` is given. */
 export const DEFAULT_RANK_KEY = 'rank';
+
+/** Defaults for `unpivot`. */
+export const UNPIVOT_DEFAULTS = { key: 'key', value: 'value' } as const;
+
+/**
+ * Fold columns into rows.
+ *
+ * Exported apart from `applyTransforms` so the editor can preview the column
+ * list it produces. Rows are emitted row-major — every folded column of the
+ * first row, then the second — so "one city's week" stays together and a table
+ * paging five rows at a time shows one city per page.
+ *
+ * The value column's type is the folded columns' common type, or text when
+ * they disagree: `Mon` numeric and `Tue` holding "n/a" is a text column, not a
+ * number column with a hole in it.
+ */
+export function unpivot(data: DataSet, t: UnpivotTransform): DataSet {
+  const keyName = t.key ?? UNPIVOT_DEFAULTS.key;
+  const valueName = t.value ?? UNPIVOT_DEFAULTS.value;
+  const keep = new Set(t.keep ?? []);
+  const folded = t.columns
+    ? data.columns.filter((c) => t.columns!.includes(c.key))
+    : data.columns.filter((c) => !keep.has(c.key));
+  const foldedKeys = new Set(folded.map((c) => c.key));
+  const carried = data.columns.filter(
+    (c) => !foldedKeys.has(c.key) && (t.keep === undefined || keep.has(c.key)) && c.key !== keyName && c.key !== valueName,
+  );
+
+  const types = new Set(folded.map((c) => c.type));
+  const valueType: ColumnType = types.size === 1 ? [...types][0]! : 'string';
+
+  const rows: DataRow[] = [];
+  for (const row of data.rows) {
+    for (const col of folded) {
+      const out: DataRow = {};
+      for (const c of carried) out[c.key] = row[c.key] ?? null;
+      out[keyName] = col.label ?? col.key;
+      out[valueName] = row[col.key] ?? null;
+      rows.push(out);
+    }
+  }
+
+  return {
+    ...data,
+    columns: [...carried, { key: keyName, type: 'string' }, { key: valueName, type: valueType }],
+    rows,
+  };
+}
+
+/** A row test for `date`, bound to one moment so every row is judged by the same clock. */
+function dateKeeper(t: DateTransform, now: Date): (row: DataRow) => boolean {
+  const today = localParts(t.timezone, now).date;
+  const nowMs = now.getTime();
+  if (t.keep === 'days') {
+    const first = addDays(today, Math.trunc(t.from ?? 0));
+    const last = addDays(first, Math.max(1, Math.trunc(t.days ?? 1)) - 1);
+    return (row) => {
+      const at = readTime(row[t.column], t.timezone);
+      return at !== null && at.date >= first && at.date <= last;
+    };
+  }
+  const upcoming = t.keep === 'upcoming';
+  return (row) => {
+    const at = readTime(row[t.column], t.timezone);
+    if (at === null) return false;
+    // A date alone is upcoming for the whole of its day; a time until it passes.
+    const ahead = at.ms === undefined ? at.date >= today : at.ms >= nowMs;
+    return upcoming ? ahead : !ahead;
+  };
+}
+
+const lookupKey = (v: DataValue | undefined): string => String(v ?? '').trim().toLowerCase();
+
+/** `lookup`, apart from the pipeline so it is testable on its own. */
+export function lookup(data: DataSet, t: LookupTransform, other: DataSet | undefined): DataSet {
+  const on = t.on ?? t.key;
+  const wanted = t.columns ?? (other?.columns.map((c) => c.key).filter((k) => k !== on) ?? []);
+  const known = new Map(data.columns.map((c) => [c.key, c] as const));
+  const added: DataColumn[] = wanted
+    .filter((k) => !known.has(k))
+    .map((k) => other?.columns.find((c) => c.key === k) ?? { key: k, type: 'string' as const });
+
+  const index = new Map<string, DataRow>();
+  for (const row of other?.rows ?? []) {
+    const key = lookupKey(row[on]);
+    if (key && !index.has(key)) index.set(key, row);
+  }
+  const rows = data.rows.map((row) => {
+    const match = index.get(lookupKey(row[t.key]));
+    const out: DataRow = { ...row };
+    for (const k of wanted) out[k] = match?.[k] ?? (known.has(k) && !match ? row[k] ?? null : null);
+    return out;
+  });
+  return { ...data, columns: [...data.columns, ...added], rows };
+}
 
 /** Defaults for `advance`, exported so the editor's picker can seed a new one. */
 export const ADVANCE_DEFAULTS = {
@@ -270,7 +465,18 @@ function sortCompare(a: DataValue, b: DataValue, dir: 1 | -1): number {
   return compareValues(a, b) * dir;
 }
 
+/** The table filter's comparison — shared with layer rules (`rules.ts`). */
+export function matchesFilter(value: DataValue, cmp: FilterOp, against: DataValue | undefined): boolean {
+  return matches(value, cmp, against);
+}
+
 function matches(value: DataValue, cmp: FilterOp, against: DataValue | undefined): boolean {
+  /*
+   * An absent value is not greater or less than anything. Compared as text it
+   * was: "null" sorts after "100", so `gt 100` kept every row with no value
+   * and a rule on a field nobody had set yet fired at load.
+   */
+  if ((value === null || value === '') && (cmp === 'gt' || cmp === 'gte' || cmp === 'lt' || cmp === 'lte')) return false;
   switch (cmp) {
     case 'empty': return value === null || value === '';
     case 'notEmpty': return value !== null && value !== '';
@@ -458,7 +664,7 @@ function advance(rows: DataRow[], t: AdvanceTransform): DataRow[] {
  * resolves nothing, because the rounds it advances from were dropped before it
  * ran. The bracket demo's ten tables each run `advance` first and narrow after.
  */
-export function applyTransforms(data: DataSet, transforms: DataTransform[] = []): DataSet {
+export function applyTransforms(data: DataSet, transforms: DataTransform[] = [], ctx: TransformContext = {}): DataSet {
   let rows = data.rows;
   let columns = data.columns;
   let copied = false;
@@ -528,6 +734,40 @@ export function applyTransforms(data: DataSet, transforms: DataTransform[] = [])
         }
         break;
       }
+      case 'unpivot': {
+        const out = unpivot({ ...data, columns, rows }, t);
+        rows = out.rows;
+        columns = out.columns;
+        copied = true;
+        break;
+      }
+      case 'date':
+        rows = mutable().filter(dateKeeper(t, ctx.now ?? new Date()));
+        copied = true;
+        break;
+      case 'lookup': {
+        const out = lookup({ ...data, columns, rows }, t, ctx.source?.(t.source));
+        rows = out.rows;
+        columns = out.columns;
+        copied = true;
+        break;
+      }
+      case 'union': {
+        const other = ctx.source?.(t.source);
+        if (!other) break;
+        const known = new Set(columns.map((c) => c.key));
+        columns = [...columns, ...other.columns.filter((c) => !known.has(c.key))];
+        // Every row carries every column — empty where its side had none — so
+        // a filter or sort after the union sees null, never a missing key.
+        const fill = (row: DataRow): DataRow => {
+          const out: DataRow = { ...row };
+          for (const c of columns) out[c.key] = row[c.key] ?? null;
+          return out;
+        };
+        rows = [...rows.map(fill), ...other.rows.map(fill)];
+        copied = true;
+        break;
+      }
       default: {
         const exhaustive: never = t;
         throw new Error(`unknown transform ${JSON.stringify(exhaustive)}`);
@@ -552,6 +792,9 @@ export const DATA_SOURCE_TYPES = [
   // Wave 3.
   'weather',
   'ftp',
+  // Phase 8.6 Wave 3 (CYCLE.md).
+  'cap',
+  'air-quality',
 ] as const;
 export type DataSourceType = (typeof DATA_SOURCE_TYPES)[number];
 
@@ -567,6 +810,288 @@ export interface DataSourceBase {
   pollInterval?: number;
   /** A disabled source keeps its last-good rows and stops fetching. */
   enabled?: boolean;
+  /**
+   * Seconds after the last successful fetch at which cached rows stop being
+   * shown. Absent keeps last-good rows for ever — the rule every source has had
+   * since Phase 6, and still the right one for scores and schedules.
+   *
+   * Exists for data whose publisher forbids showing it stale: AirNow's terms
+   * require "the most current data", and an air-quality reading from yesterday
+   * morning presented as current is exactly what they rule out. When it
+   * expires the rows are emptied (the columns stay), so a bound cell renders
+   * blank rather than wrong.
+   */
+  expireAfter?: number;
+  /**
+   * Checks a fetch must pass before its rows replace last-good (CYCLE.md,
+   * Wave 5). A fetch that fails them is treated exactly like one that failed
+   * to connect: last-good stays on air, the status says why. Not offered on a
+   * manual source — its rows are typed, not fetched.
+   */
+  guard?: DataGuard;
+  /**
+   * Another source in this project whose rows go on air, under this source's
+   * id, when this one has nothing fit to show — the backup. See `fallbackOn`
+   * for when. A manual source makes a good one: a canned "temporarily
+   * unavailable" row is better on air than a blank.
+   */
+  fallback?: string;
+  /**
+   * When the backup takes over. `expired` (default): only when this source has
+   * nothing to show — `expireAfter` ran out, the guard's `maxUnchanged` says
+   * the content is frozen, or it never loaded at all. `failing`: as soon as a
+   * fetch fails or is refused, back again on the next good one — for a primary
+   * whose stale data is worse than a backup's fresh data.
+   */
+  fallbackOn?: FallbackTrigger;
+  /**
+   * Check every row's media — a list of cameras — and add the result as
+   * columns (`MEDIA_COLUMNS`), CYCLE.md Wave 8. See `MediaCheck`.
+   */
+  media?: MediaCheck;
+}
+
+/* ------------------------------------------------------------------ guard */
+
+/** When a backup source takes over. */
+export const FALLBACK_TRIGGERS = ['expired', 'failing'] as const;
+export type FallbackTrigger = (typeof FALLBACK_TRIGGERS)[number];
+
+/** What a row failing the guard does. */
+export const GUARD_BAD_ROWS = ['refuse', 'drop'] as const;
+export type GuardBadRows = (typeof GUARD_BAD_ROWS)[number];
+
+/** An operator's choice of rows: automatic, this source's own, or its backup. */
+export const SOURCE_USES = ['auto', 'primary', 'backup'] as const;
+export type SourceUse = (typeof SOURCE_USES)[number];
+
+/** Numeric bounds on one column. Either end may be left open. */
+export interface GuardRange {
+  column: string;
+  min?: number;
+  max?: number;
+}
+
+/**
+ * What a fetch has to look like to go on air.
+ *
+ * Written for feeds that answer 200 with the wrong thing: a sheet someone is
+ * halfway through editing, an API returning an empty list during a deploy, a
+ * sensor reporting 212° — data that loads perfectly and is wrong on air.
+ */
+export interface DataGuard {
+  /** Fewer rows than this (after any dropped) refuses the fetch. */
+  minRows?: number;
+  /**
+   * Losing more than this percentage of the last-good rows in one fetch
+   * refuses it — 50 refuses 40 rows falling to 19. A drop that holds for
+   * `GUARD_DROP_CONFIRMATIONS` fetches in a row is accepted as real.
+   */
+  maxDropPercent?: number;
+  /** Columns every row must have a value in. */
+  required?: string[];
+  /** Numeric bounds. A value outside — or one that is not a number — is a bad row; an empty cell is left to `required`. */
+  ranges?: GuardRange[];
+  /** A bad row refuses the whole fetch (default), or is dropped with the rest kept. */
+  badRows?: GuardBadRows;
+  /**
+   * Seconds the content may go without changing before it counts as frozen —
+   * a sheet whose updater died still answers, with the same rows for ever.
+   * Frozen content is treated as expired: blank, or the backup.
+   */
+  maxUnchanged?: number;
+}
+
+/** Consecutive identical fetches after which a refused row-count drop is believed. */
+export const GUARD_DROP_CONFIRMATIONS = 3;
+
+export type GuardResult =
+  | { ok: true; data: DataSet; dropped: number }
+  | { ok: false; kind: 'rows' | 'min'; reason: string }
+  /** A drop carries what would have gone on air, so a drop that holds can be accepted. */
+  | { ok: false; kind: 'drop'; reason: string; data: DataSet; dropped: number };
+
+function guardEmpty(value: DataValue | undefined): boolean {
+  return value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
+}
+
+/** Why a row fails the guard, or null when it passes. */
+function badRowReason(guard: DataGuard, row: DataRow): string | null {
+  for (const column of guard.required ?? []) {
+    if (guardEmpty(row[column])) return `"${column}" is empty`;
+  }
+  for (const range of guard.ranges ?? []) {
+    const raw = row[range.column];
+    if (guardEmpty(raw)) continue;
+    const value = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw.trim()) : NaN;
+    if (!Number.isFinite(value)) return `"${range.column}" is ${JSON.stringify(raw)}, not a number`;
+    if (range.min !== undefined && value < range.min) return `"${range.column}" is ${value}, below the minimum of ${range.min}`;
+    if (range.max !== undefined && value > range.max) return `"${range.column}" is ${value}, above the maximum of ${range.max}`;
+  }
+  return null;
+}
+
+/**
+ * Check a fetched DataSet against a guard.
+ *
+ * `prior` is the source's own last-good, for `maxDropPercent`. Pure, so the
+ * editor's preview and the registry apply the same rules. `maxUnchanged` is a
+ * matter of time, not content, and lives in the registry.
+ */
+export function applyGuard(guard: DataGuard | undefined, data: DataSet, prior?: DataSet): GuardResult {
+  if (!guard) return { ok: true, data, dropped: 0 };
+  let rows = data.rows;
+  let dropped = 0;
+
+  if (guard.required?.length || guard.ranges?.length) {
+    const kept: DataRow[] = [];
+    for (const [i, row] of rows.entries()) {
+      const reason = badRowReason(guard, row);
+      if (reason === null) {
+        kept.push(row);
+        continue;
+      }
+      if ((guard.badRows ?? 'refuse') === 'refuse') return { ok: false, kind: 'rows', reason: `row ${i + 1}: ${reason}` };
+      dropped += 1;
+    }
+    rows = kept;
+  }
+
+  if (guard.minRows !== undefined && rows.length < guard.minRows) {
+    return {
+      ok: false,
+      kind: 'min',
+      reason: `${rows.length} ${rows.length === 1 ? 'row' : 'rows'}${dropped ? ` after dropping ${dropped}` : ''}, fewer than the minimum of ${guard.minRows}`,
+    };
+  }
+
+  const before = prior?.rows.length ?? 0;
+  if (guard.maxDropPercent !== undefined && before > 0 && rows.length < before) {
+    const lost = ((before - rows.length) / before) * 100;
+    if (lost > guard.maxDropPercent) {
+      return {
+        ok: false,
+        kind: 'drop',
+        reason: `rows fell from ${before} to ${rows.length} (${Math.round(lost)}%), more than the ${guard.maxDropPercent}% allowed`,
+        data: dropped ? { ...data, rows } : data,
+        dropped,
+      };
+    }
+  }
+
+  return { ok: true, data: dropped ? { ...data, rows } : data, dropped };
+}
+
+/* ----------------------------------------------------------------- places */
+
+/**
+ * Upper bound on places in one source.
+ *
+ * Every place is its own request (two or three for NWS) on every poll, so the
+ * cap is a courtesy to the provider as much as a guard on the server. Fifty
+ * covers a statewide rotation with room to spare.
+ */
+export const MAX_PLACES = 50;
+
+/**
+ * One place a multi-place source reports on.
+ *
+ * Which fields matter depends on the provider: coordinate providers read
+ * `latitude`/`longitude`, AirNow's feeds read `area` (a reporting-area id —
+ * `111` is Phoenix), and NWS's observed mode takes an optional `station` to pin
+ * one instead of using the nearest.
+ */
+export interface PlaceRef {
+  /** Shown on the graphic, in the `place` column. */
+  name: string;
+  /** Short code for the `placeKey` column — `PHX`. A Cycle key column can use it. */
+  key?: string;
+  latitude?: number;
+  longitude?: number;
+  area?: string;
+  station?: string;
+}
+
+/**
+ * Places read from another source's rows — a Cities table.
+ *
+ * Each field names a column in that source. Unset fields fall back to the
+ * obvious header (`name`, `key`, `latitude`/`lat`, `longitude`/`lon`/`lng`,
+ * `area`, `station`), so a table typed with ordinary headers needs no mapping.
+ *
+ * The table is read from the registry's cache, and a change to it re-fetches
+ * this source at once: adding Flagstaff to the list is visible on the next
+ * page, not fifteen minutes later.
+ */
+export interface PlacesFrom {
+  /** Id of the source holding the places. */
+  source: string;
+  name?: string;
+  key?: string;
+  latitude?: string;
+  longitude?: string;
+  area?: string;
+  station?: string;
+}
+
+/** Column-name fallbacks for `PlacesFrom`, tried in order after the explicit one. */
+export const PLACE_COLUMN_ALIASES = {
+  name: ['name', 'place', 'city'],
+  key: ['key', 'code', 'id'],
+  latitude: ['latitude', 'lat'],
+  longitude: ['longitude', 'lon', 'lng', 'long'],
+  area: ['area', 'areaId', 'reportingArea'],
+  station: ['station', 'stationId', 'icao'],
+} as const;
+
+/**
+ * Read places out of a table's rows.
+ *
+ * Pure, so the server and the editor's preview agree on what a Cities table
+ * means. A row with no name is skipped — a blank line at the bottom of a sheet
+ * is the normal case, not an error — and numbers typed as text (`"33.45"`, as
+ * any CSV or Sheets range delivers them) are read as numbers.
+ */
+export function placesFromRows(rows: DataRow[], map: Omit<PlacesFrom, 'source'> = {}): PlaceRef[] {
+  const pick = (row: DataRow, field: keyof typeof PLACE_COLUMN_ALIASES): DataValue | undefined => {
+    const explicit = map[field];
+    if (explicit) return row[explicit];
+    for (const alias of PLACE_COLUMN_ALIASES[field]) {
+      if (row[alias] !== undefined && row[alias] !== null && row[alias] !== '') return row[alias];
+    }
+    return undefined;
+  };
+  const text = (v: DataValue | undefined): string | undefined => {
+    if (v === undefined || v === null) return undefined;
+    const s = String(v).trim();
+    return s === '' ? undefined : s;
+  };
+  const number = (v: DataValue | undefined): number | undefined => {
+    const s = text(v);
+    if (s === undefined) return undefined;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : undefined;
+  };
+
+  const places: PlaceRef[] = [];
+  for (const row of rows) {
+    const name = text(pick(row, 'name'));
+    if (!name) continue;
+    const place: PlaceRef = { name };
+    const key = text(pick(row, 'key'));
+    const latitude = number(pick(row, 'latitude'));
+    const longitude = number(pick(row, 'longitude'));
+    const area = text(pick(row, 'area'));
+    const station = text(pick(row, 'station'));
+    if (key !== undefined) place.key = key;
+    if (latitude !== undefined) place.latitude = latitude;
+    if (longitude !== undefined) place.longitude = longitude;
+    if (area !== undefined) place.area = area;
+    if (station !== undefined) place.station = station;
+    places.push(place);
+    if (places.length >= MAX_PLACES) break;
+  }
+  return places;
 }
 
 /**
@@ -729,6 +1254,15 @@ export interface WeatherProviderInfo {
    * there were three providers and wrong the moment there were five.
    */
   supportsModelSelection: boolean;
+  /**
+   * Modes the provider can answer.
+   *
+   * `observed` is the reason this exists: a measured value from a station is a
+   * different product from a model's idea of "now", and only NWS and Bright Sky
+   * publish one. Offering the mode for the rest would mean quietly serving a
+   * forecast under an observation's name.
+   */
+  modes: readonly WeatherMode[];
 }
 
 /**
@@ -760,6 +1294,7 @@ export const WEATHER_PROVIDER_INFO: Record<WeatherProvider, WeatherProviderInfo>
     needsBaseUrl: false,
     needsContact: true,
     supportsModelSelection: false,
+    modes: ['current', 'observed', 'hourly', 'daily'],
   },
   'open-meteo': {
     id: 'open-meteo',
@@ -774,6 +1309,7 @@ export const WEATHER_PROVIDER_INFO: Record<WeatherProvider, WeatherProviderInfo>
     needsBaseUrl: false,
     needsContact: false,
     supportsModelSelection: true,
+    modes: ['current', 'hourly', 'daily'],
   },
   'open-meteo-self': {
     id: 'open-meteo-self',
@@ -792,6 +1328,7 @@ export const WEATHER_PROVIDER_INFO: Record<WeatherProvider, WeatherProviderInfo>
     needsBaseUrl: true,
     needsContact: false,
     supportsModelSelection: true,
+    modes: ['current', 'hourly', 'daily'],
   },
   /*
    * Wave 4. Both exist to answer the same problem: before them, the only free
@@ -823,6 +1360,7 @@ export const WEATHER_PROVIDER_INFO: Record<WeatherProvider, WeatherProviderInfo>
     // without warning" — their terms, near enough verbatim.
     needsContact: true,
     supportsModelSelection: false,
+    modes: ['current', 'hourly', 'daily'],
   },
   brightsky: {
     id: 'brightsky',
@@ -844,6 +1382,9 @@ export const WEATHER_PROVIDER_INFO: Record<WeatherProvider, WeatherProviderInfo>
     needsBaseUrl: false,
     needsContact: false,
     supportsModelSelection: false,
+    // Its `current` already *is* a station observation (see weather.ts), so
+    // `observed` reads the same endpoint and says so honestly.
+    modes: ['current', 'observed', 'hourly', 'daily'],
   },
 };
 
@@ -857,7 +1398,13 @@ export const WEATHER_PROVIDER_INFO: Record<WeatherProvider, WeatherProviderInfo>
  * than absent, so a bound cell renders empty instead of throwing.
  */
 export const WEATHER_COLUMNS: DataColumn[] = [
+  // Which place the row is about. One-place sources fill it from `place`;
+  // many-place sources from each place's name, so a Cycle can key on it.
+  { key: 'place', label: 'Place', type: 'string' },
+  { key: 'placeKey', label: 'Place Key', type: 'string' },
   { key: 'time', label: 'Time', type: 'string' },
+  // The provider's own name for the period — NWS's "Tonight", "Tuesday".
+  { key: 'period', label: 'Period', type: 'string' },
   { key: 'temp', label: 'Temp', type: 'number' },
   { key: 'tempMin', label: 'Low', type: 'number' },
   { key: 'tempMax', label: 'High', type: 'number' },
@@ -873,6 +1420,12 @@ export const WEATHER_COLUMNS: DataColumn[] = [
   { key: 'pressure', label: 'Pressure', type: 'number' },
   { key: 'uvIndex', label: 'UV', type: 'number' },
   { key: 'isDay', label: 'Daytime', type: 'boolean' },
+  // Observed mode. `ageMinutes` is as of the fetch — how old the reading was
+  // when it arrived — and `station` names what measured it.
+  { key: 'dewPoint', label: 'Dew Point', type: 'number' },
+  { key: 'visibility', label: 'Visibility', type: 'number' },
+  { key: 'station', label: 'Station', type: 'string' },
+  { key: 'ageMinutes', label: 'Age (min)', type: 'number' },
   // Carried per row rather than held once on the DataSet so a graphic can bind
   // the credit line with no plumbing beyond the binding it already has. For the
   // one-row `current` mode — the common case for a weather bug — that is exactly
@@ -908,7 +1461,11 @@ export const WEATHER_ICONS = [
 ] as const;
 export type WeatherIcon = (typeof WEATHER_ICONS)[number];
 
-export const WEATHER_MODES = ['current', 'hourly', 'daily'] as const;
+/**
+ * `current` is the provider's "now" — for NWS, the first forecast period.
+ * `observed` is a measurement from a station, with its age (Phase 8.6 Wave 3).
+ */
+export const WEATHER_MODES = ['current', 'observed', 'hourly', 'daily'] as const;
 export type WeatherMode = (typeof WEATHER_MODES)[number];
 
 export const WEATHER_UNITS = ['metric', 'imperial'] as const;
@@ -931,15 +1488,45 @@ export interface WeatherDataSource extends DataSourceBase {
   provider: WeatherProvider;
   /** Self-hosted origin, e.g. `http://localhost:8282`. Only for `open-meteo-self`. */
   baseUrl?: string;
-  latitude: number;
-  longitude: number;
+  /**
+   * One place. Optional since Phase 8.6: a source may instead list `places` or
+   * read them from a table with `placesFrom` — the validator requires one of
+   * the three.
+   */
+  latitude?: number;
+  longitude?: number;
   /** Shown on the graphic; never sent to the provider. */
   place?: string;
+  /** Several places, one fetch each, rows tagged with `place`. */
+  places?: PlaceRef[];
+  /** Places read from another source's rows — a Cities table. */
+  placesFrom?: PlacesFrom;
+  /**
+   * NWS observed mode: pin a station (`KPHX`) instead of taking the nearest.
+   * For many places, `PlaceRef.station` does the same per place.
+   */
+  station?: string;
   units?: WeatherUnits;
-  /** `current` is a one-row DataSet; `hourly`/`daily` are forecast tables. */
+  /** `current` and `observed` are one row per place; `hourly`/`daily` are forecast tables. */
   mode?: WeatherMode;
-  /** Rows to return in `hourly`/`daily` mode. Ignored for `current`. */
+  /** Rows per place in `hourly`/`daily` mode. Ignored for `current`/`observed`. */
   count?: number;
+  /**
+   * NWS daily mode: pair each day with the night after it into one row —
+   * `tempMax` from the day, `tempMin` from the night — the way every other
+   * provider's daily mode already reads.
+   *
+   * Opt-in because NWS daily has always returned the half-day periods, and a
+   * graphic built on "Tonight" being row two would break if that changed under
+   * it. The editor turns it on for new sources.
+   */
+  pairDayNight?: boolean;
+  /**
+   * Daily mode: from this local hour (0–23) at the place, drop today's row and
+   * start at tomorrow. An evening forecast strip that still leads with today's
+   * high is showing a number that has already happened.
+   */
+  startTomorrowAfter?: number;
   /**
    * Open-Meteo model id(s), comma-separated — `ncep_gfs_seamless`.
    *
@@ -1017,6 +1604,288 @@ export interface FtpDataSource extends DataSourceBase {
   columns?: DataColumn[];
 }
 
+/* ------------------------------------------------------------------- CAP */
+
+/** CAP 1.2 severities, least to most. The order is the `severityRank` column. */
+export const CAP_SEVERITIES = ['Unknown', 'Minor', 'Moderate', 'Severe', 'Extreme'] as const;
+export type CapSeverity = (typeof CAP_SEVERITIES)[number];
+
+/**
+ * How to read an alert's times.
+ *
+ * `exact` believes the offsets as written. `local-day` keeps only the calendar
+ * date of `effective` and `expires` and treats the alert as running from the
+ * start of the first to the end of the last, in the place's own day — for
+ * publishers whose offsets are wrong. AirNow's CAP feed stamps a Texas action
+ * day `-06:00` in September, when Texas is on `-05:00`; read exactly, the alert
+ * would switch off at 11 pm.
+ */
+export const CAP_TIME_MODES = ['exact', 'local-day'] as const;
+export type CapTimeMode = (typeof CAP_TIME_MODES)[number];
+
+/**
+ * Alerts in the Common Alerting Protocol — NWS warnings, AirNow action days,
+ * any agency that publishes CAP.
+ *
+ * URL-addressed and fetched like any feed. The reader takes a single CAP
+ * `<alert>`, an Atom or RSS feed whose entries carry CAP fields (NWS and AirNow
+ * both publish that shape), or the NWS alerts API's GeoJSON — the three forms
+ * CAP actually arrives in. Expired, cancelled, test and exercise messages are
+ * dropped before anything else sees them: an alert strip must never show a
+ * warning that has ended.
+ */
+export interface CapDataSource extends HttpDataSourceBase {
+  type: 'cap';
+  /**
+   * Keep alerts whose area description contains any of these, comma-separated
+   * and case-insensitive — `Maricopa, Phoenix`. Blank keeps every area.
+   */
+  area?: string;
+  /** Keep alerts carrying any of these SAME or UGC codes — `004013, AZZ537`. */
+  codes?: string;
+  /** Keep alerts whose event contains any of these — `Heat, Dust, Ozone`. */
+  events?: string;
+  /** Drop anything less severe. */
+  minSeverity?: CapSeverity;
+  /** Default `exact`. */
+  times?: CapTimeMode;
+  /**
+   * IANA zone that `local-day` times are read in — `America/Phoenix`. Defaults
+   * to the server's zone.
+   */
+  timezone?: string;
+  /** Who to name in the User-Agent; NWS requires one. Overrides BREEZE_CONTACT. */
+  contact?: string;
+}
+
+/** One row per alert, most severe first. */
+export const CAP_COLUMNS: DataColumn[] = [
+  { key: 'id', label: 'Id', type: 'string' },
+  { key: 'event', label: 'Event', type: 'string' },
+  { key: 'headline', label: 'Headline', type: 'string' },
+  { key: 'description', label: 'Description', type: 'string' },
+  { key: 'instruction', label: 'Instruction', type: 'string' },
+  { key: 'severity', label: 'Severity', type: 'string' },
+  { key: 'severityRank', label: 'Severity Rank', type: 'number' },
+  { key: 'urgency', label: 'Urgency', type: 'string' },
+  { key: 'certainty', label: 'Certainty', type: 'string' },
+  { key: 'category', label: 'Category', type: 'string' },
+  { key: 'msgType', label: 'Message Type', type: 'string' },
+  { key: 'areaDesc', label: 'Area', type: 'string' },
+  { key: 'codes', label: 'Codes', type: 'string' },
+  { key: 'sender', label: 'Sender', type: 'string' },
+  { key: 'senderName', label: 'Sender Name', type: 'string' },
+  { key: 'effective', label: 'Effective', type: 'string' },
+  { key: 'onset', label: 'Onset', type: 'string' },
+  { key: 'expires', label: 'Expires', type: 'string' },
+  { key: 'ends', label: 'Ends', type: 'string' },
+  // True once the alert has started; a watch for tomorrow is listed but false.
+  { key: 'active', label: 'In Effect', type: 'boolean' },
+  { key: 'web', label: 'Link', type: 'string' },
+];
+
+/* ----------------------------------------------------------- air quality */
+
+export const AIR_QUALITY_PROVIDERS = ['airnow-feed', 'open-meteo', 'open-meteo-self'] as const;
+export type AirQualityProvider = (typeof AIR_QUALITY_PROVIDERS)[number];
+
+/**
+ * `current` is one row per place — the highest pollutant's index, which is how
+ * an overall AQI is defined. `pollutants` is one row per pollutant.
+ * `forecast` is one row per day.
+ */
+export const AIR_QUALITY_MODES = ['current', 'pollutants', 'forecast'] as const;
+export type AirQualityMode = (typeof AIR_QUALITY_MODES)[number];
+
+/** Index scale. AirNow is US only; Open-Meteo computes both from CAMS. */
+export const AQI_SCALES = ['us', 'eu'] as const;
+export type AqiScale = (typeof AQI_SCALES)[number];
+
+export interface AirQualityProviderInfo {
+  id: AirQualityProvider;
+  labelKey: string;
+  shortNameKey: string;
+  commercialUse: 'yes' | 'non-commercial-only';
+  /** Fixed credit, or null where the feed names its own agency per row. */
+  attribution: string | null;
+  attributionUrl: string | null;
+  licenseUrl: string;
+  pollFloor: number;
+  coverageKey: string;
+  needsBaseUrl: boolean;
+  /** `area` — AirNow reporting-area ids; `coordinates` — latitude/longitude. */
+  placeKind: 'area' | 'coordinates';
+  scales: readonly AqiScale[];
+}
+
+export const AIR_QUALITY_PROVIDER_INFO: Record<AirQualityProvider, AirQualityProviderInfo> = {
+  /*
+   * EnviroFlash's public RSS feeds — AirNow observations and forecasts per
+   * reporting area, no key. EPA-sponsored and run for it by Sonoma Technology.
+   *
+   * The feeds publish no terms of their own (checked 2026-09-27); the AirNow
+   * Data Exchange Guidelines cover "all AirNow data portals" and are what bind
+   * whoever shows this data:
+   *  - credit the reporting agency first, then AirNow → `agency`, `attribution`;
+   *  - observations are preliminary and must say so → `preliminary`;
+   *  - values, forecasts and advisory text go out as received → the adapter
+   *    passes the feed's own category and pollutant names through verbatim
+   *    and never recomputes or rounds them;
+   *  - show only the most current data → `expireAfter`;
+   *  - tell the agencies about products using it → the station's job, which
+   *    the user guide says next to the source.
+   */
+  'airnow-feed': {
+    id: 'airnow-feed',
+    labelKey: 'schema.airQuality.provider.airnow-feed.label',
+    shortNameKey: 'schema.airQuality.provider.airnow-feed.shortName',
+    commercialUse: 'yes',
+    attribution: null,
+    attributionUrl: 'https://www.airnow.gov/',
+    licenseUrl: 'https://docs.airnowapi.org/docs/DataUseGuidelines.pdf',
+    // Observations are hourly and published around half past; ten minutes is
+    // plenty to catch each one without asking again for the same hour.
+    pollFloor: 600,
+    coverageKey: 'schema.airQuality.provider.airnow-feed.coverage',
+    needsBaseUrl: false,
+    placeKind: 'area',
+    scales: ['us'],
+  },
+  'open-meteo': {
+    id: 'open-meteo',
+    labelKey: 'schema.airQuality.provider.open-meteo.label',
+    shortNameKey: 'schema.airQuality.provider.open-meteo.shortName',
+    // Same hosted-service terms as the weather API: non-commercial without a key.
+    commercialUse: 'non-commercial-only',
+    attribution: 'Air quality from CAMS (Copernicus Atmosphere Monitoring Service), via Open-Meteo.com',
+    attributionUrl: 'https://open-meteo.com/',
+    licenseUrl: 'https://open-meteo.com/en/licence',
+    pollFloor: 900,
+    coverageKey: 'schema.airQuality.provider.open-meteo.coverage',
+    needsBaseUrl: false,
+    placeKind: 'coordinates',
+    scales: ['us', 'eu'],
+  },
+  'open-meteo-self': {
+    id: 'open-meteo-self',
+    labelKey: 'schema.airQuality.provider.open-meteo-self.label',
+    shortNameKey: 'schema.airQuality.provider.open-meteo-self.shortName',
+    // CAMS data is free for commercial use with credit; the restriction was the
+    // hosted service's, so a self-hosted instance lifts it.
+    commercialUse: 'yes',
+    attribution: 'Air quality from CAMS (Copernicus Atmosphere Monitoring Service), via Open-Meteo.com',
+    attributionUrl: 'https://open-meteo.com/',
+    licenseUrl: 'https://open-meteo.com/en/licence',
+    pollFloor: 60,
+    coverageKey: 'schema.airQuality.provider.open-meteo-self.coverage',
+    needsBaseUrl: true,
+    placeKind: 'coordinates',
+    scales: ['us', 'eu'],
+  },
+};
+
+/** Default poll for a new air-quality source — observations are hourly. */
+export const DEFAULT_AIR_QUALITY_POLL_INTERVAL = 900;
+
+/**
+ * Three hours: an AirNow reading older than that is no longer "current" in any
+ * sense a viewer would accept, and the hourly feed has missed two updates.
+ */
+export const DEFAULT_AIR_QUALITY_EXPIRY = 3 * 60 * 60;
+
+export interface AqiCategory {
+  /** Highest index value in the band, inclusive. */
+  max: number;
+  /** 1-based band number — `categoryIndex`. */
+  index: number;
+  /** The band's published name. Data, not interface text: it is what the agency says. */
+  name: string;
+  /** The band's published colour. */
+  color: string;
+}
+
+/**
+ * Published bands and colours.
+ *
+ * US: EPA's AQI technical assistance document. EU: the European Environment
+ * Agency's index, with the bands Open-Meteo documents (0–20 good … over 100
+ * extremely poor).
+ */
+export const AQI_CATEGORIES: Record<AqiScale, readonly AqiCategory[]> = {
+  us: [
+    { max: 50, index: 1, name: 'Good', color: '#00E400' },
+    { max: 100, index: 2, name: 'Moderate', color: '#FFFF00' },
+    { max: 150, index: 3, name: 'Unhealthy for Sensitive Groups', color: '#FF7E00' },
+    { max: 200, index: 4, name: 'Unhealthy', color: '#FF0000' },
+    { max: 300, index: 5, name: 'Very Unhealthy', color: '#8F3F97' },
+    { max: Number.POSITIVE_INFINITY, index: 6, name: 'Hazardous', color: '#7E0023' },
+  ],
+  eu: [
+    { max: 20, index: 1, name: 'Good', color: '#50F0E6' },
+    { max: 40, index: 2, name: 'Fair', color: '#50CCAA' },
+    { max: 60, index: 3, name: 'Moderate', color: '#F0E641' },
+    { max: 80, index: 4, name: 'Poor', color: '#FF5050' },
+    { max: 100, index: 5, name: 'Very Poor', color: '#960032' },
+    { max: Number.POSITIVE_INFINITY, index: 6, name: 'Extremely Poor', color: '#7D2181' },
+  ],
+};
+
+/** The band an index value falls in, or null for no value. */
+export function aqiCategory(scale: AqiScale, aqi: number | null | undefined): AqiCategory | null {
+  if (aqi === null || aqi === undefined || !Number.isFinite(aqi) || aqi < 0) return null;
+  return AQI_CATEGORIES[scale].find((band) => aqi <= band.max) ?? null;
+}
+
+/** Display names of the scales, for the `scale` column. */
+export const AQI_SCALE_NAMES: Record<AqiScale, string> = { us: 'US AQI', eu: 'EU AQI' };
+
+export interface AirQualityDataSource extends DataSourceBase {
+  type: 'air-quality';
+  provider: AirQualityProvider;
+  /** Self-hosted Open-Meteo origin. Only for `open-meteo-self`. */
+  baseUrl?: string;
+  /** One AirNow reporting area — `111` is Phoenix. */
+  area?: string;
+  /** One place by coordinates, for Open-Meteo. */
+  latitude?: number;
+  longitude?: number;
+  /** Shown on the graphic for a one-place source. */
+  place?: string;
+  places?: PlaceRef[];
+  placesFrom?: PlacesFrom;
+  mode?: AirQualityMode;
+  /** Default `us`. AirNow publishes US AQI only. */
+  scale?: AqiScale;
+  /** Forecast days per place. */
+  count?: number;
+  /** IANA zone for Open-Meteo's timestamps; defaults to `auto`. */
+  timezone?: string;
+  contact?: string;
+}
+
+/**
+ * One fixed column set across providers, for the same reason as the weather
+ * columns: switching from AirNow to CAMS must not mean rebuilding the graphic.
+ */
+export const AIR_QUALITY_COLUMNS: DataColumn[] = [
+  { key: 'place', label: 'Place', type: 'string' },
+  { key: 'placeKey', label: 'Place Key', type: 'string' },
+  { key: 'time', label: 'Time', type: 'string' },
+  // Forecast rows: the publisher's own day name — "Today", "Tomorrow", "Tuesday".
+  { key: 'period', label: 'Period', type: 'string' },
+  { key: 'aqi', label: 'AQI', type: 'number' },
+  { key: 'category', label: 'Category', type: 'string' },
+  { key: 'categoryIndex', label: 'Category #', type: 'number' },
+  { key: 'color', label: 'Color', type: 'string' },
+  { key: 'pollutant', label: 'Pollutant', type: 'string' },
+  { key: 'scale', label: 'Scale', type: 'string' },
+  // AirNow's terms: observations are preliminary and must be shown as such.
+  { key: 'preliminary', label: 'Preliminary', type: 'boolean' },
+  { key: 'ageMinutes', label: 'Age (min)', type: 'number' },
+  { key: 'agency', label: 'Agency', type: 'string' },
+  { key: 'attribution', label: 'Attribution', type: 'string' },
+];
+
 export type DataSourceDef =
   | ManualDataSource
   | HttpJsonDataSource
@@ -1025,18 +1894,32 @@ export type DataSourceDef =
   | XmlDataSource
   | SheetsDataSource
   | WeatherDataSource
-  | FtpDataSource;
+  | FtpDataSource
+  | CapDataSource
+  | AirQualityDataSource;
 
 /** Defs that address an origin by URL — everything the shared fetcher can take. */
-export type UrlDataSource = HttpJsonDataSource | HttpCsvDataSource | RssDataSource | XmlDataSource;
+export type UrlDataSource =
+  | HttpJsonDataSource
+  | HttpCsvDataSource
+  | RssDataSource
+  | XmlDataSource
+  | CapDataSource;
 
 export function isUrlSource(def: DataSourceDef): def is UrlDataSource {
   return (
     def.type === 'http-json' ||
     def.type === 'http-csv' ||
     def.type === 'rss' ||
-    def.type === 'xml'
+    def.type === 'xml' ||
+    def.type === 'cap'
   );
+}
+
+/** Sources whose places can come from another source's rows. */
+export function placesSourceOf(def: DataSourceDef): string | undefined {
+  if (def.type === 'weather' || def.type === 'air-quality') return def.placesFrom?.source;
+  return undefined;
 }
 
 /**
@@ -1049,6 +1932,14 @@ export function pollFloor(def: DataSourceDef): number {
   if (def.type === 'weather') {
     return WEATHER_PROVIDER_INFO[def.provider]?.pollFloor ?? DEFAULT_WEATHER_POLL_INTERVAL;
   }
+  if (def.type === 'air-quality') {
+    return AIR_QUALITY_PROVIDER_INFO[def.provider]?.pollFloor ?? DEFAULT_AIR_QUALITY_POLL_INTERVAL;
+  }
+  /*
+   * NWS asks alert consumers not to poll faster than every thirty seconds, and
+   * nothing publishing CAP updates more often than that.
+   */
+  if (def.type === 'cap') return 30;
   return MIN_POLL_INTERVAL;
 }
 
@@ -1065,8 +1956,28 @@ export interface DataSourceStatus {
   /** Last fetch whose content hash differed — i.e. the last real change. */
   lastChange?: string;
   lastError?: string;
+  /**
+   * A fetch that succeeded in part — two of ten places failed and kept their
+   * last-good rows. Not an error: the source is working. Cleared by the next
+   * fetch that succeeds in full.
+   */
+  warning?: string;
+  /** Last fetch that succeeded, in full or in part. `expireAfter` counts from here. */
+  lastSuccess?: string;
+  /** True while `expireAfter` has emptied the rows. */
+  expired?: boolean;
+  /** True while the guard's `maxUnchanged` says the content has been frozen too long. */
+  stuck?: boolean;
+  /** Rows the guard dropped from the last fetch. */
+  dropped?: number;
+  /** The rows on air are this other source's — the backup is serving. */
+  serving?: string;
+  /** An operator's override. Absent is automatic. */
+  use?: 'primary' | 'backup';
   /** Consecutive failures; drives the backoff. */
   failures?: number;
+  /** The media checks, when the source has them. */
+  media?: MediaSummary;
   revision: number;
   rowCount: number;
 }

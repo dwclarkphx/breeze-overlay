@@ -201,6 +201,12 @@ export interface EditorState {
   datasets: Record<string, DataSet>;
   /** Bumped whenever `datasets` changes, so the preview can re-push cheaply. */
   datasetRevision: number;
+  /**
+   * The mode the stage previews in (Wave 6). The editor's own, not the air's:
+   * trying a First Alert rule here must not put the channel into it.
+   */
+  previewMode: string;
+  setPreviewMode: (mode: string) => void;
 
   /**
    * The project's uploaded assets, and any upload in flight.
@@ -558,6 +564,8 @@ export const useEditor = create<EditorState>((set, get) => ({
   dataSources: [],
   datasets: {},
   datasetRevision: 0,
+  previewMode: '',
+  setPreviewMode: (mode) => set({ previewMode: mode }),
   assets: [],
   uploads: {},
   uploadError: null,
@@ -895,6 +903,8 @@ export const useEditor = create<EditorState>((set, get) => ({
         issues: [],
         loadError: null,
         playhead: 0,
+        // A preview mode belongs to the project it was picked in.
+        previewMode: '',
         selectedLayerIds: [],
         selectedKeyframes: [],
       });

@@ -116,7 +116,7 @@ The page refreshes itself every five seconds. Like Activity it shows addresses a
 By default the server's terminal is a plain log. Set `BREEZE_CONSOLE=dashboard` and it becomes a status board instead:
 
 ```
- Breeze Overlay 0.73.0   up 2:14:05   CPU 3.1% of 8 cores   RSS 182 MB   heap 60 MB   RAM 32 GB
+ Breeze Overlay 0.74.0   up 2:14:05   CPU 3.1% of 8 cores   RSS 182 MB   heap 60 MB   RAM 32 GB
  Editor  http://localhost:7331/
  Output  http://192.168.1.40:7331/play/<project>/<composition>
 ── Browser sources (2) ──────────────────────────────────────────────────────
@@ -126,7 +126,7 @@ By default the server's terminal is a plain log. Set `BREEZE_CONSOLE=dashboard` 
 ── API callers, last 60s (1) ────────────────────────────────────────────────
   192.168.1.20    node                  41 req  200     2s ago  POST /api/control/…
 ── Log ──────────────────────────────────────────────────────────────────────
- 18:52:10 INFO  Breeze Overlay 0.73.0
+ 18:52:10 INFO  Breeze Overlay 0.74.0
  Press Ctrl+C to exit   ·   BREEZE_CONSOLE=dashboard   ·   /peers in a browser shows the same list
 ```
 
@@ -335,6 +335,8 @@ Select a layer and the panel fills out. The sections you see depend on the layer
 
 A stinger usually wants **Clear**: a transition that has finished should leave nothing behind, and a held final frame stays parked over your program feed.
 
+**Media** — live pictures from a URL: a webcam snapshot, an MJPEG camera, a video file, a YouTube stream, an HLS stream. See [Cameras and live media](#cameras-and-live-media).
+
 **Table** — see [section 12](#12-data-sources-and-tables).
 
 ### Fit width
@@ -461,7 +463,7 @@ Click the **▾ Data sources** heading to fold the panel away. Collapsed, it bec
 
 ![The data sources panel](images/data-panel.png)
 
-`+ Add…` offers eight kinds:
+`+ Add…` offers ten kinds:
 
 - **Manual table** — you type the rows. Good for standings, credits, anything you maintain by hand.
 - **HTTP CSV / Google Sheet** — a URL that returns CSV. A published Google Sheet works directly: use its **Publish to web → CSV** link. No API key.
@@ -469,12 +471,44 @@ Click the **▾ Data sources** heading to fold the panel away. Collapsed, it bec
 - **RSS / Atom feed** — a news or results feed URL. You get the same columns whichever flavour of feed it is: `title`, `link`, `date`, `description`, `author`, `category`, `image`, `guid`. Point a ticker at `title` and you have a headline crawl.
 - **XML** — any other XML. Give it the **row element** — the tag that repeats, written as a path like `results/game`. Press **find it** and the panel fetches the URL and offers the repeating elements it found, with how many of each; click one rather than typing it. Child tags become columns, and so do attributes: `<score home="4" away="2"/>` gives you `score_home` and `score_away`.
 - **Google Sheet — private (API v4)** — for a sheet you cannot publish. Paste the sheet's URL (or just its id) and a range like `Standings!A1:F30`. This one needs a credential set up on the server; see below.
-- **Weather** — pick a provider and a place. See [Weather](#weather) — read it before you put weather on air commercially.
+- **Weather** — pick a provider and a place, or many places. See [Weather](#weather) — read it before you put weather on air commercially.
+- **Air quality — AirNow or CAMS** — the AQI for one place or many, now or forecast. See [Air quality](#air-quality) — AirNow data comes with terms of use.
+- **Alerts (CAP)** — weather warnings, air-quality action days, anything published in the Common Alerting Protocol. See [Alerts](#alerts-cap).
 - **FTP / SFTP file drop** — watch a folder on another machine and use the newest file in it. See [File drops](#file-drops-ftp--sftp).
 
-Each source shows how many rows it holds, how often it refreshes, when it last fetched and when the data last *changed*. Sources that are failing are highlighted with the error.
+Each source shows how many rows it holds, how often it refreshes, when it last fetched and when the data last *changed*. Sources that are failing are highlighted with the error. A source that is *partly* working — say two of ten cities timed out — shows an amber note naming them; it is still updating the rest.
 
 A source that stops answering keeps its last good rows. A feed going down does not blank a graphic that is on air — it shows an error here instead, which is the point of this panel.
+
+The one exception is data that must not be shown stale. Air-quality sources have a **Blank the rows after** setting (three hours for AirNow): once a source has gone that long without a successful fetch, its rows are emptied — the columns stay, so the layout holds — and they come back with the next good fetch. Alerts work the same way on their own: a warning leaves the screen when its expiry passes, even if the feed is down.
+
+### When the data is bad
+
+A feed that goes down is the easy case. The hard one is a feed that answers perfectly and is wrong: a sheet someone is halfway through editing, an API that returns an empty list during a deploy, a sensor reporting 212°. Every fetched source has a folded **When the data is bad** section for that. Most sources never need it; set it up on the day a feed first misbehaves.
+
+**Checks a fetch has to pass.** A fetch that fails one is treated exactly like one that failed to connect: the last good rows stay on air, and the source shows *refused by guard* with the reason.
+
+| Setting | What it refuses |
+|---|---|
+| **Fewest rows** | A fetch with fewer rows than this — the empty list during a deploy |
+| **Largest drop (%)** | A fetch that loses more than this share of the rows at once — 50 refuses forty cities falling to nineteen. If the same smaller list comes back three fetches in a row it is believed, because some lists really do shrink |
+| **Columns that must be filled** | A row with nothing in one of these columns — a city with no name |
+| **Sensible values** | A value outside a range you give, or one that is not a number — `temp` between −40 and 130 |
+| **A row that fails** | Whether one bad row refuses the whole fetch (the default), or is left out while the rest go on air |
+| **Frozen after** | Content that has not changed for this many minutes. For feeds that should keep changing — observations, a sheet a script updates — a feed that answers with the same rows for ever is dead, and is treated as expired |
+
+**How long old data may stay up.** **Blank the rows after** (in hours) is here for every source — the same setting air quality has. Leave it empty to keep last good data for ever, which is right for scores and schedules.
+
+**A backup.** Pick another source as the **Backup source**, and when this one has nothing fit to show, the backup's rows go on air *under this source's name* — every table and ticker bound to it carries on without a change. Give the backup the same columns. **Backup takes over** decides when:
+
+- **When this has nothing to show** (the default) — its data expired, froze, or it never loaded at all. Until then, stale last-good data stays up.
+- **As soon as a fetch fails** — for a primary whose stale data is worse than a backup's fresh data. It switches back on the next good fetch.
+
+A backup that has nothing fit to show either is not used: stale rows from the primary beat blank rows from the backup. Backups can have backups. A **manual table** makes a good last one — a single row reading *Temporarily unavailable* is better on air than a blank.
+
+**The operator's switch.** Some wrong data passes every check — a feed that is up, plausible and wrong. A source with a backup shows a menu in its row: **Automatic**, **Own rows**, or **Backup**. **Own rows** keeps the source's own data on air even when it is stale or judged frozen — for a table that is simply quiet — but not once it has expired, since that limit may be a publisher's. The same switch is on the control panel's **Data** block, in Companion, and over the API (`…/datasources/<source>/use`, [section 14a](#14a-remote-control--the-http-api)). It lasts until it is changed or the server restarts; a restarted server is back to automatic. Every change is written to the activity log.
+
+While a backup is on air the source's row says *On air: the backup*, and the control panel's Data block says **On backup** in amber.
 
 ### Weather
 
@@ -510,6 +544,30 @@ Two things vary by provider and are worth knowing before you build against one:
 - **Not every provider fills every column.** MET Norway has no chance-of-rain or gust outside the Nordics, and Bright Sky's hourly forecast has no humidity. Those cells come back blank rather than breaking the graphic — but if a number matters to your design, check it is actually arriving before the show rather than during it.
 - **Bright Sky's current conditions are a real observation** from the nearest weather station, not a forecast for right now. That is the more accurate answer and occasionally the more surprising one: it is what the station measured, which can differ from what a model says it should be.
 
+#### Many places in one source
+
+Under **Where**, choose:
+
+- **One place** — a name, latitude and longitude, as before.
+- **A list of places** — one per line: `name, latitude, longitude`, then optionally a short key and (for NWS observations) a station. `Phoenix, AZ, 33.4484, -112.0740, PHX, KPHX`. Commas inside the name are fine; the name is everything before the first number.
+- **Places from a table** — pick another source that lists the places: a manual table, a sheet, a CSV. Columns called `name`, `key`, `latitude`/`lat`, `longitude`/`lon` (and `station`, `area`) are found by themselves; if yours are called something else, name them in the fields below. Add a city to that table and the weather source fetches again straight away.
+
+Every row then says which place it is about, in **`place`** and **`placeKey`**. That is what makes a rotating city graphic simple: give the table a [Cycle](#cycle--tables-that-page-themselves) with `place` (or `placeKey`) as its key column and set its rows per page to the rows per place, and it pages through the cities by itself. Go to page by key — `PHX` — works too.
+
+If one city's request fails, that city keeps showing its last good rows and the source shows an amber note naming it; the others carry on updating. Each place is its own request, so keep the list to the cities you actually show — the limit is fifty.
+
+#### Observed conditions
+
+**Observed — latest station reading** (NWS and Bright Sky) is a measurement, not a forecast: what the nearest weather station last reported. It adds `station`, `ageMinutes` (how old the reading was when it arrived), `dewPoint` and `visibility`. On NWS, if the nearest station has no temperature right now the next nearest is used, up to three; to always use one station, type it in **Station** (`KPHX`). NWS **Current conditions** is the first period of the forecast, which is why the two can differ.
+
+#### Daily forecasts
+
+NWS publishes its forecast in half days — "Tonight", "Monday", "Monday Night". Tick **One row per day** and each day is paired with the night after it: `tempMax` from the day, `tempMin` from the night, the day's name and conditions, and the wetter of the two rain chances. That is how every other provider's daily forecast already reads. New NWS sources start with it ticked; existing ones keep what they were built on until you tick it.
+
+**Start at tomorrow after** drops today's row once it is past that hour where the place is — an evening five-day strip then starts at tomorrow and still has five days.
+
+#### Your own Open-Meteo instance
+
 If your own Open-Meteo instance is on `localhost` or elsewhere on your own network, the server refuses to reach it until someone allows that address; ask whoever set up the server to add `BREEZE_DATA_ALLOW_HOSTS=localhost` to its settings.
 
 **Model** and **Time zone** are the two fields you can usually leave alone on the hosted service, and usually should not on your own instance.
@@ -526,6 +584,54 @@ If your instance has some of the data but not all of it, the source quietly asks
 This matters most on **NWS**, which requires it. Their documentation is explicit about why: a more distinctive string is less likely to be caught up in someone else's security event, and if they can contact you they will do that before blocking you. Left blank, Breeze sends a generic string that *every* Breeze installation shares — so your traffic gets judged alongside everyone else's, and if somebody else's server misbehaves, yours can be blocked with no warning and no way for anyone to reach you.
 
 Normally you set this **once for the whole server** rather than per source — whoever runs the Breeze server adds `BREEZE_CONTACT` to its settings and every source inherits it. The field here is for the unusual case of one server working on behalf of several stations. Anything you type here wins over the server setting.
+
+### Air quality
+
+An air-quality source reports the AQI for one place or many, from one of three providers:
+
+| Provider | Where it covers | Commercial use |
+|---|---|---|
+| **AirNow — EnviroFlash feeds** | United States, per AirNow reporting area | Yes, under AirNow's terms (below) |
+| **CAMS via Open-Meteo — hosted** | Worldwide (a model, not monitors) | **No.** Non-commercial only |
+| **CAMS via Open-Meteo — self-hosted** | Worldwide | Yes, with a credit |
+
+AirNow places are **reporting areas**, identified by a number: it is the number in the area's EnviroFlash feed address — `https://feeds.enviroflash.info/rss/realtime/111.xml` is Phoenix, so Phoenix is `111`. No key is needed.
+
+Pick what you want back:
+
+- **Current AQI** — one row per place: the highest pollutant's reading, which is how the overall AQI is defined.
+- **Current, one row per pollutant** — every pollutant the monitors report.
+- **Forecast by day** — the agency's own forecast, one row per day, with its day name (`Today`, `Tomorrow`, `Tuesday`) in `period`.
+
+The columns are the same for every provider: `place`, `placeKey`, `time`, `period`, `aqi`, `category`, `categoryIndex`, `color` (the official colour for the category, as a hex value — bind a shape's fill to it), `pollutant`, `scale`, `preliminary`, `ageMinutes`, `agency`, `attribution`.
+
+> **AirNow's terms of use.** EnviroFlash publishes no terms of its own for these feeds; they carry AirNow data, and AirNow's [Data Exchange Guidelines](https://docs.airnowapi.org/docs/DataUseGuidelines.pdf) apply to it. They ask five things of whoever shows the data:
+>
+> 1. **Credit the reporting agency first, then AirNow.** The `attribution` column holds the right line — for Phoenix, *Arizona Department of Environmental Quality and the EPA AirNow program*. Bind a text layer to it.
+> 2. **Say that observations are preliminary.** The `preliminary` column is true on observed rows (not on forecasts); show a "preliminary" label where it is.
+> 3. **Do not alter the data.** Breeze passes the feed's numbers, category names and pollutant names through exactly as published.
+> 4. **Show only current data.** **Blank the rows after** is set to three hours for AirNow; a reading that stops updating blanks rather than lingering. Leave it on.
+> 5. **Tell the agencies you are using it.** Breeze cannot do this one for you: contact the AirNow Data Management Center (dmc@airnowtech.org) and your state agency — for Arizona, ADEQ.
+>
+> The data is not for regulatory use or trend analysis; that does not affect putting it on air.
+
+AirNow's feeds print their times inconsistently. Breeze reads the time from the sentence with its named zone (`09/27/26 7:00 AM MST`), which is the one that is right, and treats a reading dated in the future as having no time at all.
+
+CAMS is a forecast model, so its rows are never marked preliminary; its category names and colours come from the published EPA and European index tables. Choose **US AQI** or **European AQI** under **Index**.
+
+### Alerts (CAP)
+
+An alerts source reads the Common Alerting Protocol — the format NWS warnings, AirNow action days and many other agencies publish in. Give it the address of any of:
+
+- a CAP feed, like AirNow's `https://feeds.enviroflash.info/cap/aggregate.xml` (action days and forecasts of "Unhealthy for Sensitive Groups" or worse, nationwide);
+- the NWS alerts API, like `https://api.weather.gov/alerts/active?area=AZ` for Arizona;
+- a single CAP alert document.
+
+Then narrow it down: **Area contains** (`Maricopa, Phoenix`), **SAME or UGC codes** (`004013, AZZ537`), **Event contains** (`Heat, Dust`), and a **Minimum severity**. You get one row per alert, most severe first, with `event`, `headline`, `description`, `instruction`, `severity`, `urgency`, `certainty`, `areaDesc`, `onset`, `expires` and more; `active` is false for an alert that has not started yet (a watch for tomorrow).
+
+Test messages, cancellations and alerts past their expiry are always dropped — there is no setting for that. An alert that expires while the feed is unreachable still leaves the screen on time.
+
+**Alert times: Whole local days** is for AirNow: its action days are meant as calendar days, but the offsets it prints are wrong for half the year (a Texas action day arrives stamped `-06:00` in September). Choose it, give the time zone (`America/Chicago`), and an action day runs for exactly that local day. For NWS, leave it on **As written**.
 
 ### File drops (FTP / SFTP)
 
@@ -576,10 +682,100 @@ Add a **Table** layer, then point its **Source** at a data source.
 | **Limit** | Keep the first N rows |
 | **Offset** | Skip the first N rows |
 | **Advance bracket** | Fill a knockout bracket's later rounds from its earlier ones |
+| **Unpivot** | Turn columns into rows — a sheet with a column a day becomes a row a day |
+| **Date** | Keep the rows for today, tomorrow, the next seven days, or everything still to come — in a time zone you name |
+| **Lookup** | Bring columns across from another data source by a matching value — a city's display name and region onto each forecast row |
+| **Union** | Add another data source's rows underneath — a feed's alerts and your own typed announcements in one crawl |
 
-**Rows** controls **Row height**, the **Gap** between rows, and **Rows per page**. Leave rows-per-page at `0` and the table shows every row that fits the layer box. Set it to, say, 5 and the graphic pages through the data — the operator's **NEXT** button steps to the next page while the graphic holds on air.
+**Unpivot** is for the sheet somebody built for people rather than for graphics: one row a city, then `Mon`, `Tue`, `Wed` across the top. A table repeats rows, not columns, so it folds those columns into rows:
 
-**Row reveal** animates rows on individually, with the same Preset / Stagger / Duration controls as text reveals. **Re-sort** is how long rows take to slide into a new order when the underlying data changes — set it to `0` for a hard snap.
+```
+place    Mon  Tue              place    key  value
+Phoenix  104  106      →       Phoenix  Mon  104
+Tucson    99  101              Phoenix  Tue  106
+                               Tucson   Mon   99
+                               Tucson   Tue  101
+```
+
+- **Fold** lists the columns to turn into rows; **Keep** lists the ones copied onto every new row. Fill in either — blank Fold means every column you are not keeping. Both take column keys separated by commas.
+- **Name column** (default `key`) holds which column a row came from — its label if it has one, so `Mon` rather than `mon`. **Value column** (default `value`) holds the value. Point your row cells at those.
+- Rows come out a city at a time: all of Phoenix's days, then all of Tucson's. With rows-per-page set to the number of days, each page is one city.
+- If the folded columns hold different kinds of value — numbers in most, `n/a` in one — the value column is text.
+
+**Date** keeps rows by the day in one of their columns — the forecast for today, this week's games, the events still to come:
+
+| Setting | What it does |
+|---|---|
+| **Column** | The column holding the date or time |
+| **Keep** | **Days** keeps a window of calendar days. **Still to come** keeps a time until it passes, and a date for the whole of its day. **Already past** keeps the rest |
+| **From day** / **How many days** | For **Days**: `0` is today, `1` tomorrow, `-1` yesterday; *how many* counts from there. Today alone is from `0`, `1` day; the next week is from `0`, `7` |
+| **Time zone** | Whose "today" — `America/Phoenix`, say. Blank uses the zone of the machine showing the graphic. The line underneath shows what today is there |
+
+Things worth knowing:
+
+- **Name the zone.** A graphics machine set to UTC thinks tomorrow has started at 5 pm in Phoenix. With the zone set, "today" is the station's today wherever the graphic plays.
+- **It moves on by itself.** A graphic on air all night drops yesterday's rows and picks up today's within half a minute of midnight, and a game drops out of *Still to come* when it starts — with nothing pushed. Tables following it, and its cycle, move with it.
+- It reads `2026-09-27` and `20260927`, ISO times (`2026-09-27T19:00`, with or without an offset), month-first dates as Google Sheets writes them (`9/27/2026`, `9/27/2026 7:00 PM`), and Unix times in seconds or milliseconds. A time with no offset is read in the zone you named. Anything else — day-first dates (`27/9/2026`), spelled-out months (`Sep 27, 2026`), impossible dates — is not guessed at: the row is left out. If a Google Sheet shows dates some other way, set the column's format to *Date* or *Date time* in Sheets.
+
+**Lookup** brings columns across from another data source, matching a column in these rows to one in that source — the feed says `PHX`, a small manual table says `PHX` is *Phoenix*, *Valley*, `phoenix.jpg`:
+
+| Setting | What it does |
+|---|---|
+| **From** | The other data source |
+| **Match** | The column in these rows |
+| **With** | The column in the other source to match it with. Blank means the same name |
+| **Bring** | The columns to bring, separated by commas. Blank brings every column but the one it matched on |
+
+Matching ignores case and spaces at the ends; if the other source has the same value twice, the first row wins. A matched row takes the other source's values, blanks included. A row with no match gets empty values — except in a column it already had, which it keeps — so make sure the source has every value the feed sends, or add a **Filter** after the lookup to drop the rows it could not name. When the other source changes, the table changes with it.
+
+**Union** adds another source's rows underneath this one's. The columns are both sources' columns together; a column one side does not have is empty on its rows. Add a **Sort** after it to interleave them.
+
+A lookup or union reads the other source as it arrives, not after that source's own tables' transforms. The pickers under a Lookup, and the row cells below, already offer the columns it brings.
+
+**Rows** controls **Row height**, the **Gap** between rows, and **Rows per page**. Leave rows-per-page at `0` and the table shows every row that fits the layer box. Set it to, say, 5 and the graphic pages through the data — the operator's **NEXT** button steps to the next page while the graphic holds on air, and **PREV** steps back.
+
+**Row reveal** animates rows on individually, with the same Preset / Stagger / Duration controls as text reveals. **Re-sort** is how long rows take to slide into a new order when the underlying data changes — set it to `0` for a hard snap. A page turn uses the reveal too: the old page plays it in reverse, then the new page reveals. With the reveal set to *None* a page turn is a straight cut.
+
+#### Cycle — tables that page themselves
+
+**Cycle** turns pages on a timer while the graphic holds, so a standings table can work through every group, or a weather table through every city, with nobody pressing anything.
+
+| Setting | What it does |
+|---|---|
+| **Seconds per page** | How long each page stays up. `0` switches cycling off and keeps the other settings |
+| **Duration column** | Optional. A column holding a time per row; a page stays up for its longest row. Seconds, or milliseconds if you choose **ms** — feeds often carry milliseconds |
+| **At the end** | **Loop** starts again from the first page. **Hold** stays on the last page. **Continue** carries the graphic on to its next STOP marker, or its outro — a round-up that pages through once and leaves by itself |
+| **Group** | Tables with the same group turn together and hold together — two halves of one readout never show different pages |
+| **Key column** | The column whose value on a page's first row names the page — `C` for Group C. It is what the control panel and Companion show, and what you ask for with `page?name=C`. Blank uses the first text column |
+
+Things worth knowing:
+
+- **Cycling only runs while the graphic holds on air.** Page one is always the first page the audience sees. Pressing PLAY on a graphic that went off air starts again from page one; a page chosen *before* rolling in — `page?name=C` while it is off air — is the page it opens on.
+- **Pressing NEXT or PREV restarts that page's time**, so the page you just chose is not snatched away a second later. **HOLD** freezes a cycle on the page it shows until **RESUME**; a hold survives the graphic going off air and coming back.
+- **New data does not throw a cycle back to page one.** A score arriving keeps the page on screen, and keeps its time. Only a page that no longer exists — the feed shrank — wraps to the first.
+- The page is worked out from the clock rather than counted, so every output that was rolled in together turns on the same frame.
+
+#### Follow — tables that change with another table
+
+**Follow** makes a table show only the rows for whatever page another table is on. The weather-channel case: a rotation shows one city a page, and beside it a row of forecast tiles should always be that city's forecast. Give the tiles table a **Follow** section:
+
+| Setting | What it does |
+|---|---|
+| **Leader table** | The table to follow — its binding, a `mount.binding` address, or its layer id. Blank switches Follow off |
+| **Match column** | The column in *this* table that must hold the leader's page name — usually `place` |
+| **Leader column** | Optional. The leader's column that names its page. Blank uses the leader's cycle **Key column**, then a column with the same name as the match column |
+
+Every time the leader turns — on its cycle, on NEXT/PREV, on `page?name=`, on new data — the follower keeps just the rows whose match column equals the leader's page name, and goes back to its own first page. Matching ignores case and spaces at the ends, the same as `page?name=`.
+
+Things worth knowing:
+
+- **Operate the leader.** The follower has nothing of its own to aim at; its pages move because the leader's did. The control panel shows *follows cities* beside a follower so a page nobody asked for is explained.
+- **No match shows no rows.** If the forecast has no Tucson, the tiles are empty for Tucson. That is on purpose: blank tiles are honest, Phoenix's forecast under a Tucson heading is wrong on air.
+- **Filtering comes first.** When the data already has the match column, following happens *before* your transforms, so a Limit of 5 means five days of this city and a Rank ranks within it. When only a transform makes the column — an Unpivot whose name column is the city — following happens after it.
+- **The leader can be in another composition.** Build the tiles as their own composition, mount it in the rotation graphic, and name the rotation's table. If a graphic mounts the same tile composition several times, each copy follows the leader nearest to it; where two are equally near, the output's console says so and you can name one as `mount.binding`. The editor only warns when it cannot find the leader, because it may be in the graphic the table is mounted into.
+- **Not across independent elements.** An element of a [scene](#13-scenes--several-graphics-one-browser-source) set to play independently is its own graphic, so a table inside it cannot follow a table outside it. Mount the tiles inline instead.
+- **Chains work.** A table can follow a follower. Two tables following each other cannot; the loop is broken, with a warning in the output's console, and one of them stops following.
+- A follower can page and cycle on its own too — five of a city's fourteen days at a time, say. Its time starts again whenever the leader moves it to a new city, and if it is in a cycle **Group**, the rest of the group goes back to its first page with it so the group never shows different pages.
 
 ![A table on the stage](images/stage-table.png)
 
@@ -588,6 +784,39 @@ Add a **Table** layer, then point its **Source** at a data source.
 Cell animation runs on its **row's** clock, not the table's. If your rows reveal with a stagger, each row's cells move as that row arrives rather than all at once — otherwise the last row's animation would play while that row is still waiting off-screen. A table with no row reveal has nothing to stagger against, so every row moves together.
 
 > **This is not editable in the editor yet.** Cells are not selectable in the layers panel, so cell keyframes have to be written into the project file by hand for now. The graphics play them correctly; there is just no UI to author them with. If you want this, say so — it is the next piece of table work.
+
+### Rules — layers that react to data
+
+Any layer can carry **rules**, in the **Rules** section of its properties. A rule says *when* something is true, *then* do something to this layer:
+
+| When… | reads |
+|---|---|
+| **The mode** | The project's mode — `first-alert`, `election night` — set from the control panel, Companion or the API (below) |
+| **A field** | A dynamic field, as the control panel or `update` sets it |
+| **Rows in a source** | How many rows a data source has. *Is empty* means none — including before it has loaded |
+| **A value in a source** | A column of a source's first row, or of a chosen row: `place=Phoenix` reads Phoenix's row |
+| **This row's column** | In a table's row template only: the row this cell is on |
+
+| Then… | does |
+|---|---|
+| **show / hide** | A layer with a *show* rule is hidden until one holds — "show when". A layer with only *hide* rules is shown until one holds — "hide when" |
+| **recolour** | A text layer's colour, or a shape's fill |
+| **image** | An image layer's picture. `{column}` is filled in from the row the rule reads, so `icons/{icon}.png` picks the icon for each forecast |
+
+A rule can have several conditions — all must hold (**+ and**). Rules apply in order and a later one wins, property by property: a reading can go orange over 100 and red over 110 with two rules. When no rule holds any more, the layer goes back to exactly how it was authored.
+
+Some things you can build with them:
+
+- **A First Alert banner** — a red shape and text with *show when the mode is `first-alert`*. Nothing else in the graphic changes; the banner appears on every graphic that has one, on every output, the moment the mode is set.
+- **Colour by value** — a temperature cell *recolour when this row's `hi` ≥ 100*.
+- **An icon per row** — an image cell with *image `icons/{icon}.png` when this row's `icon` is not empty*.
+- **Only when there is something to show** — an alerts crawl with *hide when the `alerts` source is empty*.
+
+In a table, rules on a cell read their own row, so each row can look different. Rules on layers inside a nested composition read that mount's own field values.
+
+The stage previews rules against the project's live data as you edit. For the mode, pick one in **Preview in mode** at the top of the Rules section — it changes only the editor's preview, never the mode on air.
+
+**The mode** is the project's, not one graphic's: setting it changes every graphic in the project that has a rule for it, on every output, at once. It is kept through a server restart. Set it from the control panel's **Mode** block (a button for every mode your rules name, plus **NORMAL** to clear it), from Companion's **Mode** action, or from the API (section 14a). Every change is in the activity log under **Modes**.
 
 ### Brackets
 
@@ -673,6 +902,52 @@ The stage shows the real rows while you author — the same data the graphic wil
 New headlines join the rotation at the loop seam — they scroll in the way a ticker is supposed to update, never appearing in place. That means a change can take up to one full rotation to show, which is correct, not a delay to work around.
 
 The **Transforms** on a crawl work exactly as they do on a table. A newest-first ticker limited to five stories is a **Sort** on `date` descending followed by a **Limit** of 5.
+
+### Cameras and live media
+
+A **Media** layer (**+ Add… → Live media** in the layers panel, or **Media cell** in a table) plays live pictures from a URL. Unlike a **Video** layer it is not on the timeline: it plays whatever is live when it is shown, and scrubbing the playhead does not move it.
+
+On an output it plays **only while the graphic is on air** — from PLAY until the outro ends or CLEAR — so a graphic waiting in OBS holds no camera connections and makes no sound before it is taken. The editor's stage plays it all the time, so you can see the picture while you build.
+
+| Setting | What it does |
+|---|---|
+| **URL** | The camera, stream or file. The line below it says what it will play as |
+| **Kind** | **From the URL** (below), or say it: **Snapshot**, **MJPEG stream**, **Video file**, **YouTube**, **HLS stream** |
+| **Refresh every** | For a snapshot: fetch a new picture every so many seconds. The next picture loads out of sight and swaps in once it has arrived, so a refresh never flashes |
+| **Fit** | **Contain**, **Cover** or **Stretch** |
+| **When it fails** | **Hide** (the space goes empty), **Hold the last picture**, or — in a cycling table — **Skip to the next page** |
+| **Give up after** | Seconds a source gets to show its first picture before it counts as failed. Default 10 |
+| **Play sound** | Off by default — a graphic is not a sound source |
+| **Binding** | A field on the control panel, so the operator can type a URL to play |
+
+**From the URL** means: `youtube.com` and `youtu.be` addresses are YouTube; `.m3u8` is HLS; `.mp4`, `.webm` and `.mov` are video files; the usual camera stream addresses — `/mjpg/video.cgi`, `.mjpg`, `videostream.cgi`, `action=stream` — are MJPEG; anything else is a snapshot. When a camera's address says nothing, set **Kind**.
+
+YouTube plays muted, with no controls, looping. HLS plays natively where the browser can, and through a copy of hls.js served by Breeze everywhere else — including OBS and vMix.
+
+#### A camera rotation
+
+The media layer's real job is a rotating wall of cameras, and it is built from pieces you already have:
+
+1. A **manual** data source listing the cameras — a `name` column and a `url` column, one row per camera (a Google Sheet works as well).
+2. Under **Media checks** on that source, tick **Check each row's media** and pick the URL column. Breeze now checks every camera every minute, and adds four columns to every row: `mediaState` (`ok`, `failed`, `frozen`, or `unchecked` before the first check), `mediaOk`, `mediaSrc` and `mediaKind`.
+3. A **table** reading that source, with **Rows per page** `1` and a **Cycle** — say 10 seconds a page.
+4. In the table's row: a **Media cell** on the column `mediaSrc`, and a text cell on `name` for the caption.
+5. A **Filter** transform: `mediaOk` equals `true`.
+
+A camera that is down, or **frozen** — still answering but showing the same picture for five minutes, which a browser cannot tell apart from a working one — drops out of the rotation on every output at once, and comes back when it recovers. Set **When it fails** on the media cell to **Skip** as well: then a camera that dies between checks is passed over the moment it fails to load, instead of sitting empty for the rest of its page.
+
+Things worth knowing:
+
+- **`mediaSrc` plays through Breeze.** Snapshots and MJPEG streams go through the server (`/media/…`) unless you untick **Play snapshots and streams through this server**: one connection to each camera however many outputs show it, no mixed-content or camera-login trouble in the browser, and the last good frame on screen at once while a stream connects. YouTube, HLS and video files play from where they are.
+- **A camera login in the URL** — `http://user:pass@camera/…`, the way camera makers document it — works through the proxy, which sends it as the camera expects, and it is taken out of the rows the outputs receive. It is still part of the source's definition, which anyone who can open the editor can read, so use a view-only camera account. Digest-only cameras need basic authentication switched on, or a URL that carries a token.
+- **A stream that drops is reopened.** When a camera's MJPEG stream stops or stalls, the server reconnects to it — backing off up to half a minute — while the graphic keeps its last frame; after five failed tries the layer sees the failure and does what **When it fails** says.
+- **Cameras on your own network** are refused like any other private address until they are allowed: add them to `BREEZE_DATA_ALLOW_HOSTS`.
+- **Frozen after** (seconds, default 300) is how long the same picture may stay before a camera counts as frozen. Set it to `0` for a camera that can legitimately not change — a car park at night.
+- **Check every** (seconds, default 60, at least 15) is how often every camera is checked. **Check now** in the data panel, the control panel's **Check cameras**, and the API below check them all straight away — after fixing one, or before going on air.
+- **One camera a page.** **Skip** turns the whole page, so it is meant for a rotation with **Rows per page** `1`; on a grid of several cameras a page, one failure would take the others with it (the editor warns).
+- **The next camera is fetched ahead.** A few seconds before a page turns, its snapshot is loaded into the cache, so it arrives already showing — and one that fails to load is already known about, so **Skip** passes it before anyone sees the gap.
+- **A kind column.** A camera list can name each row's kind in a column (**Kind column** under Media checks). The media cell then follows it without being told.
+- **Thumbnails stream nothing.** The editor's thumbnails show a snapshot, a proxied stream's last frame, or a YouTube video's own thumbnail — never a live stream per thumbnail.
 
 ### The separator
 
@@ -830,10 +1105,14 @@ Click **Output URL ↗** in the app bar and copy the address, or open the projec
 One page per composition, designed to be usable at speed on a laptop or a tablet in the gallery.
 
 - **PLAY** — rolls the graphic in and holds it at the next STOP marker. Press it again and it advances to the next hold, then eventually runs the outro. Repeated PLAY steps the graphic all the way through, which is the one-button workflow. **PLAY can never take a graphic off air.**
-- **NEXT** — advances to the next hold. Only shown when the graphic has more than one.
+- **NEXT** — turns the page of any paged table; with nothing to page, advances to the next hold. Shown when the graphic has more than one hold or a table that pages.
+- **PREV** — the mirror of NEXT: back a page, or back to the previous hold. It cuts straight to the earlier hold rather than playing anything backwards, and it never takes a graphic off air.
 - **STOP** — runs the outro. This is how a graphic leaves air.
 - **CLEAR** — hard reset. Nothing on screen, immediately. The panic button.
 - **Step 1/1 · holding** — which hold the graphic is on and what it is doing right now.
+- **Pages** — appears when the output reports a table with more than one page: which page it is on (`C · 3/8`), a countdown to the next turn if it cycles, and **◀ PREV / NEXT ▶** for that table alone, plus **HOLD / RESUME** for a cycling one. A table that [follows](#follow--tables-that-change-with-another-table) another says so.
+- **Mode** — appears when the project's rules name a mode: a button for each, plus **NORMAL**. The lit one is the mode on air, for the whole project ([rules](#rules--layers-that-react-to-data)).
+- **Data** — every fetched source the graphic reads, including those of graphics mounted in it, and what each is doing: *Live*, *Failing* (last good data still on air), *Expired* or *Frozen* (blank on air), or *On backup*. A source with a [backup](#when-the-data-is-bad) has **AUTO / OWN / BACKUP** buttons.
 - **Dynamic fields** — edit the text and press **UPDATE ON AIR**. Changes apply live; the graphic does not need re-playing.
 
 The indicator at the top right says whether an output page is actually connected. If it says *no output connected*, the browser source is not open — pressing PLAY will do nothing visible.
@@ -844,7 +1123,7 @@ Open the **Debug URL** — the third button on each scene in the portal's projec
 
 ![The debug page with its overlay](images/output-preview.png)
 
-In a debug tab: `Space` play, `→` next, `Esc` stop, `Backspace` clear.
+In a debug tab: `Space` play, `→` next, `←` prev, `Esc` stop, `Backspace` clear.
 
 The three buttons on every scene do different jobs, and it is worth being clear which is which:
 
@@ -873,7 +1152,10 @@ http://<host>:7331/api/control/<project>/<channel>/<verb>
 | Verb | What it does |
 |---|---|
 | `play` | Rolls in, and holds at the next STOP marker. Press again to advance |
-| `next` | Advance to the next hold |
+| `next` | Turn a page of any paged table, otherwise advance to the next hold |
+| `prev` | Back a page, otherwise back to the previous hold |
+| `page` | Go to a page of a table (below) |
+| `cycle` | Hold or resume tables that page themselves (below) |
 | `stop` | Runs the outro. This is how a graphic leaves air |
 | `clear` | Hard reset. Nothing on screen, immediately |
 | `clear-all` | Every element of a scene down at once |
@@ -908,6 +1190,51 @@ You can also preset fields on the browser-source URL itself, which is applied wh
 http://<host>:7331/play/rahb-1k3f9/lower-third?name=Jane%20Doe&autoplay=1
 ```
 
+### Paging tables
+
+A table is named by its **binding** — the name in its properties panel. Inside a nested composition it is `<mount>.<binding>`, the same address an override field uses. A table with no binding answers to its layer id. Every one of these takes an optional `table=`; without it, the command applies to every table in the graphic.
+
+```
+…/next?table=standings              ← one table forward (and any table grouped with it)
+…/prev?table=standings              ← one table back
+…/page?n=3                          ← page 3 (counting from 1)
+…/page?name=C&table=standings       ← the page whose key is C — "Group C"
+…/cycle?state=hold                  ← freeze self-paging tables where they are
+…/cycle?state=resume                ← set them going again, from the page on screen
+```
+
+A page is named with `name=`, not `key=`: `key` on a control URL is always the API key. `page` needs exactly one of `n` and `name`, and `cycle` needs `state`; anything else answers `400`. A `table` the graphic does not have is delivered like any other command and does nothing on the page — the server cannot know a graphic's tables until a browser source has built it.
+
+`next` and `prev` aimed with `table=` only ever turn pages. Without it they keep their old meaning: turn the pages of paged tables if there are any, otherwise move between holds.
+
+`state` reports each paged table under `playback.tables` — its page (counting from 0), page count, key, whether it is cycling or held, and the seconds to its next turn. Add `?data=0` to leave out the retained field data, which on a graphic fed by data sources carries every source's rows and is rarely what a button needs.
+
+From vMix or OBS scripting on the output page itself: `breeze.prev()`, `breeze.page(3)`, `breeze.page('C', 'standings')`, `breeze.cycle('hold')`.
+
+### Setting the mode
+
+```
+http://<host>:7331/api/projects/<project>/mode/set?value=first-alert
+```
+
+`value` is the mode; empty clears it. Letters, digits, spaces and `. - _`, up to 48 characters. GET and POST both work, and both need the API key when one is set. `GET /api/projects/<project>/mode` reads it back, with every mode the project's rules name. From scripting on an output page, `breeze.mode()` reads the mode and `breeze.mode('first-alert')` sets it on that page alone.
+
+### Choosing a source's backup
+
+```
+http://<host>:7331/api/projects/<project>/datasources/<source>/use?mode=backup
+```
+
+`mode` is `backup`, `primary` (the source's own rows, even stale or blank) or `auto`. GET and POST both work, and both need the API key when one is set — it changes what is on air. A source with no backup answers `409` to `backup`. The answer carries the source's status: `serving` names the source whose rows are on air when it is not this one, and `use` is set while an operator's choice is in force. The same list the editor reads, `GET /api/projects/<project>/datasources`, reports every source's status and is open to read.
+
+### Checking cameras
+
+```
+http://<host>:7331/api/projects/<project>/datasources/<source>/media/check
+```
+
+Checks every camera in a camera list now, and answers with each one's state — `ok`, `failed` (with why) or `frozen`. It answers within about four seconds whatever happens; `"done": false` means a slow camera is still being checked, and the list shows the result once it is. GET and POST both work, and both need the API key when one is set: it makes a request to every camera. `GET /api/projects/<project>/datasources/<source>/media` reads the same list without checking, and a source's status in the list of sources carries the counts as `media`.
+
 ### The API key
 
 By default there is none, which suits a closed LAN. Set one with the `BREEZE_API_KEY` environment variable and every mutating call — including the GET verb triggers, because a GET that puts a graphic to air is a write in every sense that matters — needs it.
@@ -921,7 +1248,23 @@ x-breeze-key: your-key                                    ← header
 
 `key` is stripped from an `update` before the rest becomes field values, so it will never turn up as a field on your graphic.
 
-Reads stay open either way: the portal, the browser-source pages and the editor never need credentials.
+Reads stay open either way: the portal, the browser-source pages and the editor open without credentials, and a browser source never needs one.
+
+**Signing a browser in.** People use the key through the portal, not in addresses. With a key set, the portal's header shows **API key: set — sign in**; click it, type the key once, and that browser is signed in for twelve hours. Then:
+
+- the **editor** can save, upload and create — without signing in it opens and shows everything, but every save is refused;
+- **control panels** work without `?key=` in their address;
+- the data panel's backup switch works.
+
+The browser never keeps the key. The server answers a correct key with a random session in a cookie that no script on the page can read and no other site can make the browser send. A server restart signs everyone out, and so does changing the key (which takes a restart). **Sign out** from the same chip on a shared machine. Five wrong keys from one address in a minute and it has to wait out the minute. Sign-ins, sign-outs and wrong keys go in the activity log under **Sign-ins**. With no key set, the chip reads **API key: not set**.
+
+Commands sent over a control panel's live connection need the key too — a signed-in browser, or a panel opened with `?key=`. A panel with neither shows *This server needs its API key* when a button is pressed. Reading state stays open.
+
+Wrong keys are counted wherever they are tried — the portal, a `?key=` or an `x-breeze-key` header — so the five-a-minute limit applies to every route; a device configured with a wrong key will find itself waiting too. Keys are taken out of addresses before the server logs them.
+
+Behind a reverse proxy, pass the original `Host` header through (`proxy_set_header Host $host` in nginx): a session is only accepted from a page whose address matches the one the server sees. The proxy is also the only address the wrong-key limit can see, so one person's typos make everyone behind it wait.
+
+Browsers send a cookie to every port of the machine it came from, so any other web service on the Breeze machine — Companion's own web interface, say — receives the session cookie too. Signing out, or a server restart, ends it. Over plain HTTP the session cookie, like the key, can be read by anyone capturing traffic on the network; HTTPS in front of Breeze is the only fix for that, and the cookie is marked `Secure` automatically when it is served over HTTPS.
 
 > A key in a query string is visible in the activity log, in any proxy log, and to anyone reading over your shoulder at the desk. It exists so header-less hardware can work at all, not because it is the better of the two. Use the header where the device allows it.
 
@@ -962,6 +1305,17 @@ comes with the on-air and missing-source feedbacks already attached.
 
 Presets are built when the connection starts, so a scene added in Breeze appears after
 you press **Save** on the connection.
+
+**Data sources.** The **Data source** action puts a source's [backup](#when-the-data-is-bad)
+on air, keeps its own rows, or hands back to automatic; it takes the source's id, shown
+beside its name in the data panel. **Data source is…** lights a button while a source is
+on its backup, failing, or expired, and `$(breeze:sources_failing)` and
+`$(breeze:sources_on_backup)` count them across the project. Every source with a backup
+gets a **BACKUP** preset.
+
+**Mode.** The **Mode** action sets, toggles or clears the project's mode; **Project mode
+is…** lights a button while it is on, and `$(breeze:mode)` reads it. Every mode your rules
+name gets a toggle preset in the *Modes* section.
 
 Name each connection after its project when you drive more than one — the module's
 Help page covers this, along with how to wire buttons for nested compositions.

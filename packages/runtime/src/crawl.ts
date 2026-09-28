@@ -44,7 +44,12 @@
  * same guarantee — which is the point of routing both through one call.
  */
 
-import { applyTransforms, type CrawlLayer, type DataSet } from '@breeze/schema';
+import {
+  applyTransforms,
+  type CrawlLayer,
+  type DataSet,
+  type TransformContext,
+} from '@breeze/schema';
 
 export interface CrawlAnimator {
   to(target: unknown, vars: Record<string, unknown>): { kill(): void };
@@ -91,10 +96,10 @@ export function crawlBlockText(items: string[], separator: string): string {
  *    *successfully* with zero entries gets past that, and an empty crawl is a
  *    blank strip on screen.
  */
-export function crawlItemsFrom(data: DataSet, layer: CrawlLayer): string[] {
+export function crawlItemsFrom(data: DataSet, layer: CrawlLayer, ctx: TransformContext = {}): string[] {
   if (!layer.column) return layer.items;
   const column = layer.column;
-  const shaped = applyTransforms(data, layer.transforms ?? []);
+  const shaped = applyTransforms(data, layer.transforms ?? [], ctx);
   const items = shaped.rows
     .map((row) => {
       const value = row[column];

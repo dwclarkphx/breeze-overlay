@@ -16,17 +16,39 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState, type JSX } from 'react';
 import {
+  AIR_QUALITY_PROVIDERS,
+  AIR_QUALITY_PROVIDER_INFO,
+  CAP_SEVERITIES,
+  DEFAULT_AIR_QUALITY_EXPIRY,
+  DEFAULT_AIR_QUALITY_POLL_INTERVAL,
   DEFAULT_POLL_INTERVAL,
   DEFAULT_WEATHER_POLL_INTERVAL,
+  MAX_PLACES,
   MIN_POLL_INTERVAL,
   WEATHER_PROVIDERS,
   WEATHER_PROVIDER_INFO,
   applyTransforms,
+  type DataGuard,
+  MEDIA_CHECK_DEFAULTS,
+  type MediaCheck,
+  type MediaRowStatus,
+  type MediaSummary,
+  type FallbackTrigger,
+  type GuardRange,
+  type SourceUse,
   pollFloor,
+  type AirQualityMode,
+  type AirQualityProvider,
+  type AqiScale,
+  type CapSeverity,
+  type CapTimeMode,
   type DataColumn,
   type DataRow,
   type DataSet,
   type DataSourceDef,
+  type PlaceRef,
+  type PlacesFrom,
+  type WeatherMode,
   type WeatherProvider,
 } from '@breeze/schema';
 import { useRichT, useT, type Translate } from '@breeze/i18n/react';
@@ -39,6 +61,7 @@ import {
   isFedCell,
   previewAdvance,
 } from '../state/bracket.js';
+import { parsePlaceLine, placeLine, type PlaceKind } from '../state/places.js';
 import { useEditor } from '../state/store.js';
 
 const TYPE_LABEL_KEY: Record<DataSourceDef['type'], string> = {
@@ -50,6 +73,8 @@ const TYPE_LABEL_KEY: Record<DataSourceDef['type'], string> = {
   sheets: 'editor.data.typeSheets',
   weather: 'editor.data.typeWeather',
   ftp: 'editor.data.typeFtp',
+  cap: 'editor.data.typeCap',
+  'air-quality': 'editor.data.typeAirQuality',
 };
 
 /**
@@ -67,6 +92,8 @@ const MENU: Array<{ type: DataSourceDef['type']; labelKey: string }> = [
   { type: 'xml', labelKey: 'editor.data.menuXml' },
   { type: 'sheets', labelKey: 'editor.data.menuSheets' },
   { type: 'weather', labelKey: 'editor.data.menuWeather' },
+  { type: 'air-quality', labelKey: 'editor.data.menuAirQuality' },
+  { type: 'cap', labelKey: 'editor.data.menuCap' },
   { type: 'ftp', labelKey: 'editor.data.menuFtp' },
 ];
 
@@ -90,6 +117,8 @@ const NEW_NAME: Record<DataSourceDef['type'], string> = {
   sheets: 'New private sheet',  // i18n-ignore
   weather: 'New weather',  // i18n-ignore
   ftp: 'New file drop',  // i18n-ignore
+  cap: 'New alerts',  // i18n-ignore
+  'air-quality': 'New air quality',  // i18n-ignore
 };
 
 /** RSS feeds change on a slower clock than a scoreboard; don't poll them like one. */
@@ -137,7 +166,42 @@ function blankSource(type: DataSourceDef['type'], id: string): DataSourceDef {
       units: 'imperial',
       mode: 'current',
       count: 5,
+      // New sources pair NWS day and night into one row per date, the way
+      // every other provider's daily mode reads. Existing sources keep what
+      // they were built on — see `pairDayNight` in the schema.
+      pairDayNight: true,
       pollInterval: DEFAULT_WEATHER_POLL_INTERVAL,
+      enabled: true,
+    };
+  }
+
+  if (type === 'air-quality') {
+    return {
+      id,
+      name: NEW_NAME['air-quality'],
+      type: 'air-quality',
+      // AirNow's feeds need no key and carry the reporting agency's own
+      // numbers; CAMS is the choice outside the US.
+      provider: 'airnow-feed',
+      area: '',
+      mode: 'current',
+      count: 3,
+      // Written into the def rather than left to the server default, so the
+      // operator sees the limit they are working under.
+      expireAfter: DEFAULT_AIR_QUALITY_EXPIRY,
+      pollInterval: DEFAULT_AIR_QUALITY_POLL_INTERVAL,
+      enabled: true,
+    };
+  }
+
+  if (type === 'cap') {
+    return {
+      id,
+      name: NEW_NAME.cap,
+      type: 'cap',
+      url: '',
+      times: 'exact',
+      pollInterval: 60,
       enabled: true,
     };
   }
@@ -174,7 +238,8 @@ function hasUrl(def: DataSourceDef): def is Extract<DataSourceDef, { url: string
     def.type === 'http-json' ||
     def.type === 'http-csv' ||
     def.type === 'rss' ||
-    def.type === 'xml'
+    def.type === 'xml' ||
+    def.type === 'cap'
   );
 }
 
@@ -186,7 +251,13 @@ const RSS_COLUMNS = [
   'title', 'link', 'date', 'description', 'author', 'category', 'image', 'guid',
 ] as const;
 const WEATHER_COLUMN_NAMES = [
-  'temp', 'tempMin', 'tempMax', 'condition', 'icon', 'windSpeed', 'windDir', 'precipProb',
+  'place', 'temp', 'tempMin', 'tempMax', 'condition', 'icon', 'windSpeed', 'windDir', 'precipProb',
+] as const;
+const CAP_COLUMN_NAMES = [
+  'event', 'headline', 'severity', 'areaDesc', 'onset', 'expires', 'instruction', 'active',
+] as const;
+const AIR_QUALITY_COLUMN_NAMES = [
+  'place', 'aqi', 'category', 'color', 'pollutant', 'preliminary', 'attribution',
 ] as const;
 
 /**
@@ -285,7 +356,7 @@ export function DataPanel(): JSX.Element {
 
   const save = async (def: DataSourceDef) => {
     try {
-      await api.saveDataSource(projectId, def);
+      await api.saveDataSource(projectId, withoutBlankChecks(def));
       setEditing(null);
       await reload();
     } catch (err) {
@@ -357,6 +428,7 @@ export function DataPanel(): JSX.Element {
 
           {sources.map(({ def, status, interval, rowCount }) => {
             const failing = (status.failures ?? 0) > 0;
+            const nameOf = (id: string) => sources.find((s) => s.def.id === id)?.def.name ?? id;
             return (
               <div key={def.id} className={`source-row${failing ? ' failing' : ''}`}>
                 <div className="source-head">
@@ -378,7 +450,41 @@ export function DataPanel(): JSX.Element {
                   <span>{t('editor.data.revision', { revision: status.revision })}</span>
                 </div>
                 {status.lastError && <div className="source-error">{status.lastError}</div>}
+                {/* A partial success: working, with named places on last-good rows. */}
+                {status.warning && <div className="source-warning">{status.warning}</div>}
+                {status.expired && <div className="source-error">{t('editor.data.expired')}</div>}
+                {status.stuck && <div className="source-error">{t('editor.data.guard.stuck')}</div>}
+                {status.serving !== undefined && (
+                  <div className="source-warning">
+                    {t('editor.data.guard.serving', { name: nameOf(status.serving) })}
+                  </div>
+                )}
+                {status.media && def.media && (
+                  <MediaStatusLine
+                    projectId={projectId}
+                    sourceId={def.id}
+                    summary={status.media}
+                    onChecked={reload}
+                  />
+                )}
                 <div className="source-actions">
+                  {def.fallback !== undefined && (
+                    <select
+                      className="source-use"
+                      value={status.use ?? 'auto'}
+                      title={t('editor.data.guard.useTitle')}
+                      onChange={(e) =>
+                        void api
+                          .setDataSourceUse(projectId, def.id, e.target.value as SourceUse)
+                          .then(reload)
+                          .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
+                      }
+                    >
+                      <option value="auto">{t('editor.data.guard.useAuto')}</option>
+                      <option value="primary">{t('editor.data.guard.usePrimary')}</option>
+                      <option value="backup">{t('editor.data.guard.useBackup')}</option>
+                    </select>
+                  )}
                   <button onClick={() => setEditing(def)}>{t('editor.data.edit')}</button>
                   {def.type !== 'manual' && (
                     <button onClick={() => void api.refreshDataSource(projectId, def.id).then(reload)}>
@@ -403,6 +509,7 @@ export function DataPanel(): JSX.Element {
       {editing && (
         <SourceEditor
           projectId={projectId}
+          others={sources.map((s) => s.def).filter((d) => d.id !== editing.id)}
           def={editing}
           onChange={setEditing}
           onCancel={() => setEditing(null)}
@@ -418,24 +525,35 @@ const URL_PLACEHOLDER: Record<string, string> = {
   'http-json': 'https://example.com/api/standings.json',
   rss: 'https://example.com/sport/rss',
   xml: 'https://example.com/exports/results.xml',
+  cap: 'https://api.weather.gov/alerts/active?area=AZ',
 };
 
 /* ------------------------------------------------------------------ editor */
 
 interface SourceEditorProps {
   projectId: string;
+  /** The project's other sources — candidates for a table of places. */
+  others: DataSourceDef[];
   def: DataSourceDef;
   onChange: (def: DataSourceDef) => void;
   onCancel: () => void;
   onSave: () => void;
 }
 
-function SourceEditor({ projectId, def, onChange, onCancel, onSave }: SourceEditorProps): JSX.Element {
+function SourceEditor({ projectId, others, def, onChange, onCancel, onSave }: SourceEditorProps): JSX.Element {
   const t = useT();
   const rt = useRichT();
-  const [preview, setPreview] = useState<{ ok: boolean; error?: string; data?: DataSet; rowCount?: number } | null>(
-    null,
-  );
+  const [preview, setPreview] = useState<
+    {
+      ok: boolean;
+      error?: string;
+      warning?: string;
+      refused?: string;
+      dropped?: number;
+      data?: DataSet;
+      rowCount?: number;
+    } | null
+  >(null);
   const [busy, setBusy] = useState(false);
 
   const runPreview = async () => {
@@ -459,6 +577,7 @@ function SourceEditor({ projectId, def, onChange, onCancel, onSave }: SourceEdit
   const canPreview =
     def.type === 'sheets' ? Boolean(def.spreadsheet)
     : def.type === 'weather' ? !WEATHER_PROVIDER_INFO[def.provider]?.needsBaseUrl || Boolean(def.baseUrl)
+    : def.type === 'air-quality' ? !AIR_QUALITY_PROVIDER_INFO[def.provider]?.needsBaseUrl || Boolean(def.baseUrl)
     : def.type === 'ftp' ? Boolean(def.host && def.pattern)
     : hasUrl(def) && !!def.url;
 
@@ -478,7 +597,9 @@ function SourceEditor({ projectId, def, onChange, onCancel, onSave }: SourceEdit
       ) : (
         <>
           {def.type === 'weather' ? (
-            <WeatherFields def={def} onChange={onChange} />
+            <WeatherFields def={def} others={others} onChange={onChange} />
+          ) : def.type === 'air-quality' ? (
+            <AirQualityFields def={def} others={others} onChange={onChange} />
           ) : def.type === 'ftp' ? (
             <FtpFields def={def} onChange={onChange} />
           ) : def.type === 'sheets' ? (
@@ -506,6 +627,8 @@ function SourceEditor({ projectId, def, onChange, onCancel, onSave }: SourceEdit
           {def.type === 'xml' && (
             <XmlRowPathField projectId={projectId} def={def} onChange={onChange} busy={busy} />
           )}
+
+          {def.type === 'cap' && <CapFields def={def} onChange={onChange} />}
 
           {def.type === 'http-json' && (
             <label>
@@ -548,14 +671,20 @@ function SourceEditor({ projectId, def, onChange, onCancel, onSave }: SourceEdit
             <input
               type="number"
               min={minInterval}
-              value={def.pollInterval ?? (def.type === 'weather' ? DEFAULT_WEATHER_POLL_INTERVAL : DEFAULT_POLL_INTERVAL)}
+              value={
+                def.pollInterval ??
+                (def.type === 'weather' ? DEFAULT_WEATHER_POLL_INTERVAL
+                  : def.type === 'air-quality' ? DEFAULT_AIR_QUALITY_POLL_INTERVAL
+                  : DEFAULT_POLL_INTERVAL)
+              }
               onChange={(e) => onChange({ ...def, pollInterval: Number(e.target.value) })}
             />
           </label>
 
-          {/* Weather carries no operator credential — the providers wired here
-              are keyless, and the field would be a box with nothing to put in it. */}
-          {def.type !== 'weather' && (
+          {/* Weather and air quality carry no operator credential — the
+              providers wired here are keyless, and the field would be a box with
+              nothing to put in it. */}
+          {def.type !== 'weather' && def.type !== 'air-quality' && (
             <label>
               <span>
                 {t(
@@ -576,6 +705,8 @@ function SourceEditor({ projectId, def, onChange, onCancel, onSave }: SourceEdit
             </label>
           )}
 
+          <GuardFields key={def.id} def={def} others={others} onChange={onChange} />
+
           <div className="source-actions">
             <button onClick={() => void runPreview()} disabled={!canPreview || busy}>
               {t(busy ? 'editor.data.fetching' : 'editor.data.preview')}
@@ -583,17 +714,456 @@ function SourceEditor({ projectId, def, onChange, onCancel, onSave }: SourceEdit
           </div>
 
           {preview && !preview.ok && <div className="source-error">{preview.error}</div>}
+          {preview?.ok && preview.warning && <div className="source-warning">{preview.warning}</div>}
+          {preview?.ok && preview.refused && (
+            <div className="source-error">{t('editor.data.guard.previewRefused', { reason: preview.refused })}</div>
+          )}
+          {preview?.ok && preview.dropped !== undefined && preview.dropped > 0 && (
+            <div className="source-warning">{t('editor.data.guard.previewDropped', { count: preview.dropped })}</div>
+          )}
           {preview?.ok && preview.data && (
             <DataPreview data={preview.data} total={preview.rowCount ?? preview.data.rows.length} />
           )}
         </>
       )}
 
+      {/* Any source can be a camera list — a manual table most of all. */}
+      <MediaFields def={def} onChange={onChange} />
+
       <div className="source-actions">
         <button className="primary" onClick={onSave}>{t('editor.data.saveSource')}</button>
         <button onClick={onCancel}>{t('editor.upload.cancel')}</button>
       </div>
     </div>
+  );
+}
+
+/* ----------------------------------------------------------------- media */
+
+/**
+ * A camera list's health in the source list (Wave 8): the counts, a button to
+ * check every camera now, and — opened on demand — the ones that are not ok
+ * and why.
+ */
+function MediaStatusLine({
+  projectId,
+  sourceId,
+  summary,
+  onChecked,
+}: {
+  projectId: string;
+  sourceId: string;
+  summary: MediaSummary;
+  onChecked: () => void;
+}): JSX.Element {
+  const t = useT();
+  const [rows, setRows] = useState<MediaRowStatus[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const bad = summary.failed + summary.frozen;
+  const load = () => void api.dataSourceMedia(projectId, sourceId).then((r) => setRows(r.rows)).catch(() => setRows([]));
+  const check = () => {
+    setBusy(true);
+    void api
+      .checkDataSourceMedia(projectId, sourceId)
+      .then((r) => {
+        setRows(r.rows);
+        onChecked();
+        // A long round answers before it is done; read again once it should be.
+        if (r.done === false) setTimeout(() => {
+          load();
+          onChecked();
+        }, 5000);
+      })
+      .catch(() => undefined)
+      .finally(() => setBusy(false));
+  };
+  const problems = (rows ?? []).filter((r) => r.state === 'failed' || r.state === 'frozen');
+  // Opened once, kept current: a new round of checks reloads the detail under the counts.
+  useEffect(() => {
+    if (rows !== null) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [summary.checkedAt]);
+  return (
+    <details className={`source-media${bad ? ' failing' : ''}`} onToggle={(e) => (e.currentTarget.open && rows === null ? load() : undefined)}>
+      <summary>
+        {t('editor.data.media.summary', {
+          ok: summary.ok,
+          failed: summary.failed,
+          frozen: summary.frozen,
+          unchecked: summary.unchecked,
+        })}
+      </summary>
+      <div className="source-actions">
+        <button onClick={check} disabled={busy}>
+          {t(busy ? 'editor.data.media.checking' : 'editor.data.media.checkNow')}
+        </button>
+      </div>
+      {rows !== null && problems.length === 0 && <p className="hint">{t('editor.data.media.allOk')}</p>}
+      {problems.map((r) => (
+        <div key={r.key} className="source-error" title={r.url}>
+          <code>{r.url}</code> — {t(r.state === 'frozen' ? 'editor.data.media.stateFrozen' : 'editor.data.media.stateFailed')}
+          {r.error ? `: ${r.error}` : ''}
+        </div>
+      ))}
+    </details>
+  );
+}
+
+/**
+ * Media checks on a source (Wave 8): which column holds each camera's URL,
+ * and how the server watches them. Folded away until switched on.
+ */
+function MediaFields({
+  def,
+  onChange,
+}: {
+  def: DataSourceDef;
+  onChange: (def: DataSourceDef) => void;
+}): JSX.Element {
+  const t = useT();
+  const media = def.media;
+  const declared = 'columns' in def && Array.isArray(def.columns) ? def.columns.map((c) => c.key) : [];
+  const setMedia = (patch: Partial<MediaCheck> | null) => {
+    const next = { ...def };
+    if (patch === null) delete next.media;
+    else {
+      const merged: Record<string, unknown> = { ...(media ?? { column: '' }), ...patch };
+      for (const [k, v] of Object.entries(merged)) if (v === undefined || v === '') delete merged[k];
+      next.media = merged as unknown as MediaCheck;
+    }
+    onChange(next);
+  };
+  const guessColumn = (): string =>
+    declared.find((k) => /url|src|link|camera|stream/i.test(k)) ?? declared[0] ?? 'url';
+
+  // A column is picked from the source's own list where it declares one, typed otherwise.
+  const columnInput = (value: string | undefined, onPick: (v: string | undefined) => void, optional: boolean) =>
+    declared.length ? (
+      <select value={value ?? ''} onChange={(e) => onPick(e.target.value || undefined)}>
+        {optional && <option value="">{t('editor.data.media.kindAuto')}</option>}
+        {declared.map((k) => <option key={k} value={k}>{k}</option>)}
+        {value && !declared.includes(value) && <option value={value}>{value}</option>}
+      </select>
+    ) : (
+      <input
+        defaultValue={value ?? ''}
+        placeholder={optional ? t('editor.data.media.kindAuto') : 'url'}
+        onBlur={(e) => onPick(e.target.value.trim() || undefined)}
+      />
+    );
+
+  return (
+    <details className="source-guard" open={Boolean(media)}>
+      <summary>{t('editor.data.media.title')}</summary>
+      <p className="hint">{t('editor.data.media.hint')}</p>
+      <label className="checkbox">
+        <input
+          type="checkbox"
+          checked={Boolean(media)}
+          onChange={(e) => setMedia(e.target.checked ? { column: guessColumn() } : null)}
+        />
+        <span>{t('editor.data.media.enable')}</span>
+      </label>
+      {media && (
+        <>
+          <div className="field-row">
+            <label>
+              <span>{t('editor.data.media.column')}</span>
+              {columnInput(media.column, (v) => setMedia({ column: v ?? guessColumn() }), false)}
+            </label>
+            <label>
+              <span>{t('editor.data.media.kindColumn')}</span>
+              {columnInput(media.kindColumn, (v) => setMedia({ kindColumn: v }), true)}
+            </label>
+          </div>
+          <div className="field-row">
+            <label>
+              <span>{t('editor.data.media.every')}</span>
+              <input
+                type="number"
+                min={MEDIA_CHECK_DEFAULTS.minEvery}
+                value={media.every ?? ''}
+                placeholder={String(MEDIA_CHECK_DEFAULTS.every)}
+                onChange={(e) => setMedia({ every: optionalNumber(e.target.value) })}
+                // Raised to the floor once typed, not per keystroke — "30" starts as "3".
+                onBlur={() => {
+                  if (media.every !== undefined && media.every < MEDIA_CHECK_DEFAULTS.minEvery) {
+                    setMedia({ every: MEDIA_CHECK_DEFAULTS.minEvery });
+                  }
+                }}
+              />
+            </label>
+            <label>
+              <span>{t('editor.data.media.frozenAfter')}</span>
+              <input
+                type="number"
+                min={0}
+                value={media.frozenAfter ?? ''}
+                placeholder={String(MEDIA_CHECK_DEFAULTS.frozenAfter)}
+                title={t('editor.data.media.frozenAfterTitle')}
+                onChange={(e) => {
+                  const n = optionalNumber(e.target.value);
+                  setMedia({ frozenAfter: n === undefined ? undefined : Math.max(0, n) });
+                }}
+              />
+            </label>
+          </div>
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={media.proxy !== false}
+              onChange={(e) => setMedia({ proxy: e.target.checked ? undefined : false })}
+            />
+            <span>{t('editor.data.media.proxy')}</span>
+          </label>
+          <p className="hint">{t('editor.data.media.columnsHint')}</p>
+        </>
+      )}
+    </details>
+  );
+}
+
+/* ----------------------------------------------------------------- guard */
+
+/**
+ * A value check added and never given a column is dropped on save rather than
+ * refused by the server; an emptied guard goes altogether.
+ */
+function withoutBlankChecks(def: DataSourceDef): DataSourceDef {
+  if (def.type === 'manual' || !def.guard) return def;
+  const guard: DataGuard = { ...def.guard };
+  if (guard.ranges) {
+    const ranges = guard.ranges.filter((r) => r.column.trim() !== '').map((r) => ({ ...r, column: r.column.trim() }));
+    if (ranges.length) guard.ranges = ranges;
+    else delete guard.ranges;
+  }
+  const next = { ...def };
+  if (Object.keys(guard).length) next.guard = guard;
+  else delete next.guard;
+  return next;
+}
+
+/** Parse a number field; blank or junk is absent. */
+function optionalNumber(text: string): number | undefined {
+  if (text.trim() === '') return undefined;
+  const n = Number(text);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/**
+ * When the data is bad (CYCLE.md, Wave 5): the guard a fetch must pass, how
+ * long last-good may stay up, and the backup that takes over.
+ *
+ * Folded away unless something is set — most sources need none of it, and the
+ * ones that do need it once, on the day the feed first misbehaves.
+ */
+function GuardFields({
+  def,
+  others,
+  onChange,
+}: {
+  def: Exclude<DataSourceDef, { type: 'manual' }>;
+  others: DataSourceDef[];
+  onChange: (def: DataSourceDef) => void;
+}): JSX.Element {
+  const t = useT();
+  const guard: DataGuard = def.guard ?? {};
+  const [required, setRequired] = useState((guard.required ?? []).join(', '));
+
+  const setGuard = (patch: Partial<DataGuard>) => {
+    const merged: Record<string, unknown> = { ...guard, ...patch };
+    for (const [k, v] of Object.entries(merged)) {
+      if (v === undefined || (Array.isArray(v) && v.length === 0)) delete merged[k];
+    }
+    const next = { ...def };
+    if (Object.keys(merged).length) next.guard = merged as DataGuard;
+    else delete next.guard;
+    onChange(next);
+  };
+  const ranges = guard.ranges ?? [];
+  const setRange = (i: number, range: GuardRange | null) => {
+    const list = [...ranges];
+    if (range === null) list.splice(i, 1);
+    else list[i] = range;
+    setGuard({ ranges: list });
+  };
+  const setBackup = (id: string) => {
+    const next = { ...def };
+    if (id) next.fallback = id;
+    else {
+      delete next.fallback;
+      delete next.fallbackOn;
+    }
+    onChange(next);
+  };
+
+  const ownExpiry = def.type !== 'air-quality';
+  const hours = def.expireAfter !== undefined ? def.expireAfter / 3600 : '';
+  const open = Boolean(def.guard || def.fallback || (ownExpiry && def.expireAfter !== undefined));
+
+  return (
+    <details className="source-guard" open={open}>
+      <summary>{t('editor.data.guard.title')}</summary>
+      <p className="hint">{t('editor.data.guard.hint')}</p>
+
+      <div className="field-row">
+        <label>
+          <span>{t('editor.data.guard.minRows')}</span>
+          <input
+            type="number"
+            min={1}
+            value={guard.minRows ?? ''}
+            placeholder={t('editor.data.guard.off')}
+            onChange={(e) => setGuard({ minRows: optionalNumber(e.target.value) })}
+          />
+        </label>
+        <label>
+          <span>{t('editor.data.guard.maxDrop')}</span>
+          <input
+            type="number"
+            min={1}
+            max={99}
+            value={guard.maxDropPercent ?? ''}
+            placeholder={t('editor.data.guard.off')}
+            title={t('editor.data.guard.maxDropTitle')}
+            onChange={(e) => setGuard({ maxDropPercent: optionalNumber(e.target.value) })}
+          />
+        </label>
+      </div>
+
+      <label>
+        <span>{t('editor.data.guard.required')}</span>
+        <input
+          value={required}
+          placeholder={t('editor.data.guard.requiredPlaceholder')}
+          onChange={(e) => setRequired(e.target.value)}
+          onBlur={() => setGuard({ required: required.split(',').map((c) => c.trim()).filter(Boolean) })}
+        />
+      </label>
+
+      <div className="guard-ranges">
+        <span className="guard-label">{t('editor.data.guard.ranges')}</span>
+        {ranges.map((range, i) => (
+          <div key={i} className="field-row">
+            <label>
+              <span>{t('editor.data.guard.rangeColumn')}</span>
+              <input
+                value={range.column}
+                onChange={(e) => setRange(i, { ...range, column: e.target.value })}
+                onBlur={() => setRange(i, { ...range, column: range.column.trim() })}
+              />
+            </label>
+            <label>
+              <span>{t('editor.data.guard.rangeMin')}</span>
+              <input
+                type="number"
+                value={range.min ?? ''}
+                onChange={(e) => {
+                  const { min: _min, ...rest } = range;
+                  const min = optionalNumber(e.target.value);
+                  setRange(i, min === undefined ? rest : { ...rest, min });
+                }}
+              />
+            </label>
+            <label>
+              <span>{t('editor.data.guard.rangeMax')}</span>
+              <input
+                type="number"
+                value={range.max ?? ''}
+                onChange={(e) => {
+                  const { max: _max, ...rest } = range;
+                  const max = optionalNumber(e.target.value);
+                  setRange(i, max === undefined ? rest : { ...rest, max });
+                }}
+              />
+            </label>
+            <button className="guard-del" title={t('editor.data.guard.removeRange')} onClick={() => setRange(i, null)}>×</button>
+          </div>
+        ))}
+        <button className="linkish" onClick={() => setGuard({ ranges: [...ranges, { column: '' }] })}>
+          {t('editor.data.guard.addRange')}
+        </button>
+      </div>
+
+      {(guard.required?.length || ranges.length) ? (
+        <label>
+          <span>{t('editor.data.guard.badRows')}</span>
+          <select
+            value={guard.badRows ?? 'refuse'}
+            onChange={(e) => setGuard({ badRows: e.target.value === 'drop' ? 'drop' : undefined })}
+          >
+            <option value="refuse">{t('editor.data.guard.badRowsRefuse')}</option>
+            <option value="drop">{t('editor.data.guard.badRowsDrop')}</option>
+          </select>
+        </label>
+      ) : null}
+
+      <label>
+        <span>{t('editor.data.guard.maxUnchanged')}</span>
+        <input
+          type="number"
+          min={1}
+          value={guard.maxUnchanged !== undefined ? guard.maxUnchanged / 60 : ''}
+          placeholder={t('editor.data.guard.off')}
+          title={t('editor.data.guard.maxUnchangedTitle')}
+          onChange={(e) => {
+            const minutes = optionalNumber(e.target.value);
+            setGuard({ maxUnchanged: minutes === undefined ? undefined : Math.max(60, Math.round(minutes * 60)) });
+          }}
+        />
+      </label>
+
+      {ownExpiry && (
+        <>
+          <label>
+            <span>{t('editor.data.expireAfter')}</span>
+            <input
+              type="number"
+              min={0.25}
+              step={0.25}
+              value={hours}
+              onChange={(e) => {
+                const next = { ...def };
+                if (e.target.value === '') delete next.expireAfter;
+                else next.expireAfter = Math.max(60, Math.round(Number(e.target.value) * 3600));
+                onChange(next);
+              }}
+            />
+          </label>
+          <p className="hint">{t('editor.data.expireAfterHint')}</p>
+        </>
+      )}
+
+      <div className="field-row">
+        <label>
+          <span>{t('editor.data.guard.backup')}</span>
+          <select value={def.fallback ?? ''} onChange={(e) => setBackup(e.target.value)}>
+            <option value="">{t('editor.data.guard.noBackup')}</option>
+            {others.map((o) => (
+              <option key={o.id} value={o.id}>{o.name}</option>
+            ))}
+          </select>
+        </label>
+        {def.fallback !== undefined && (
+          <label>
+            <span>{t('editor.data.guard.fallbackOn')}</span>
+            <select
+              value={def.fallbackOn ?? 'expired'}
+              onChange={(e) => {
+                const next = { ...def };
+                if (e.target.value === 'failing') next.fallbackOn = e.target.value as FallbackTrigger;
+                else delete next.fallbackOn;
+                onChange(next);
+              }}
+            >
+              <option value="expired">{t('editor.data.guard.fallbackOnExpired')}</option>
+              <option value="failing">{t('editor.data.guard.fallbackOnFailing')}</option>
+            </select>
+          </label>
+        )}
+      </div>
+      {def.fallback !== undefined && <p className="hint">{t('editor.data.guard.backupHint')}</p>}
+    </details>
   );
 }
 
@@ -726,15 +1296,20 @@ function XmlRowPathField({
  */
 function WeatherFields({
   def,
+  others,
   onChange,
 }: {
   def: Extract<DataSourceDef, { type: 'weather' }>;
+  others: DataSourceDef[];
   onChange: (def: DataSourceDef) => void;
 }): JSX.Element {
   const t = useT();
   const rt = useRichT();
   const info = WEATHER_PROVIDER_INFO[def.provider];
   const nonCommercial = info?.commercialUse === 'non-commercial-only';
+  const mode: WeatherMode = def.mode ?? 'current';
+  const forecast = mode === 'hourly' || mode === 'daily';
+  const single = !def.places && !def.placesFrom;
 
   return (
     <>
@@ -761,6 +1336,9 @@ function WeatherFields({
                 next?.pollFloor ?? DEFAULT_WEATHER_POLL_INTERVAL,
                 def.pollInterval ?? DEFAULT_WEATHER_POLL_INTERVAL,
               ),
+              // Observed is NWS and Bright Sky only; the validator would
+              // refuse it for the rest, so fall back rather than strand it.
+              ...(next && !next.modes.includes(mode) ? { mode: 'current' as const } : {}),
             });
           }}
         >
@@ -913,35 +1491,7 @@ function WeatherFields({
         )}
       </p>
 
-      <label>
-        <span>{t('editor.data.weather.place')}</span>
-        <input
-          value={def.place ?? ''}
-          placeholder={t('editor.data.weather.placePlaceholder')}
-          onChange={(e) => onChange({ ...def, place: e.target.value })}
-        />
-      </label>
-
-      <div className="field-row">
-        <label>
-          <span>{t('editor.data.weather.latitude')}</span>
-          <input
-            type="number"
-            step="0.0001"
-            value={def.latitude}
-            onChange={(e) => onChange({ ...def, latitude: Number(e.target.value) })}
-          />
-        </label>
-        <label>
-          <span>{t('editor.data.weather.longitude')}</span>
-          <input
-            type="number"
-            step="0.0001"
-            value={def.longitude}
-            onChange={(e) => onChange({ ...def, longitude: Number(e.target.value) })}
-          />
-        </label>
-      </div>
+      <PlacesFields def={def} kind="coordinates" others={others} onChange={onChange} />
 
       <div className="field-row">
         <label>
@@ -956,22 +1506,47 @@ function WeatherFields({
         </label>
         <label>
           <span>{t('editor.data.weather.report')}</span>
-          <select
-            value={def.mode ?? 'current'}
-            onChange={(e) =>
-              onChange({ ...def, mode: e.target.value as 'current' | 'hourly' | 'daily' })
-            }
-          >
+          <select value={mode} onChange={(e) => onChange({ ...def, mode: e.target.value as WeatherMode })}>
             <option value="current">{t('editor.data.weather.modeCurrent')}</option>
+            {info?.modes.includes('observed') && (
+              <option value="observed">{t('editor.data.weather.modeObserved')}</option>
+            )}
             <option value="hourly">{t('editor.data.weather.modeHourly')}</option>
             <option value="daily">{t('editor.data.weather.modeDaily')}</option>
           </select>
         </label>
       </div>
 
-      {def.mode !== 'current' && (
+      {mode === 'observed' && (
+        <p className="hint">
+          {rt('editor.data.weather.observedHint', {
+            age: <code>ageMinutes</code>,
+            station: <code>station</code>,
+          })}
+        </p>
+      )}
+
+      {/* A pinned station, for one place; a list or table pins per place. */}
+      {mode === 'observed' && def.provider === 'nws' && single && (
         <label>
-          <span>{t('editor.data.weather.rows')}</span>
+          <span>{t('editor.data.weather.station')}</span>
+          <input
+            value={def.station ?? ''}
+            placeholder="KPHX"
+            onChange={(e) => {
+              const station = e.target.value.trim().toUpperCase();
+              const next = { ...def };
+              if (station) next.station = station;
+              else delete next.station;
+              onChange(next);
+            }}
+          />
+        </label>
+      )}
+
+      {forecast && (
+        <label>
+          <span>{t(single ? 'editor.data.weather.rows' : 'editor.data.weather.rowsPerPlace')}</span>
           <input
             type="number"
             min={1}
@@ -982,12 +1557,606 @@ function WeatherFields({
         </label>
       )}
 
+      {mode === 'daily' && def.provider === 'nws' && (
+        <label className="inline">
+          <input
+            type="checkbox"
+            checked={def.pairDayNight === true}
+            onChange={(e) => onChange({ ...def, pairDayNight: e.target.checked })}
+          />
+          <span>{t('editor.data.weather.pairDayNight')}</span>
+        </label>
+      )}
+
+      {mode === 'daily' && (
+        <label>
+          <span>{t('editor.data.weather.startTomorrowAfter')}</span>
+          <select
+            value={def.startTomorrowAfter ?? ''}
+            onChange={(e) => {
+              const next = { ...def };
+              if (e.target.value === '') delete next.startTomorrowAfter;
+              else next.startTomorrowAfter = Number(e.target.value);
+              onChange(next);
+            }}
+          >
+            <option value="">{t('editor.data.weather.startTomorrowNever')}</option>
+            {Array.from({ length: 23 }, (_, i) => i + 1).map((hour) => (
+              <option key={hour} value={hour}>
+                {t('editor.data.weather.startTomorrowHour', { hour: `${String(hour).padStart(2, '0')}:00` })}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
       <p className="hint">
         {rt('editor.data.weather.columnsHint', {
           columns: <ColumnNames names={WEATHER_COLUMN_NAMES} />,
           icon: <code>icon</code>,
           example: <code>partly-cloudy</code>,
         })}
+      </p>
+    </>
+  );
+}
+
+/* ---------------------------------------------------------------- places */
+
+type Placed = Extract<DataSourceDef, { type: 'weather' | 'air-quality' }>;
+
+/** Types whose rows can be a table of places — anything tabular that is not itself place-fed. */
+const PLACE_TABLE_TYPES = new Set<DataSourceDef['type']>(['manual', 'sheets', 'http-csv', 'http-json', 'xml', 'ftp']);
+
+/** Literal keys, so the catalogue check can find every one by reading the source. */
+const PLACE_COLUMN_LABEL_KEY: Record<Exclude<keyof PlacesFrom, 'source'>, string> = {
+  name: 'editor.data.places.columnName',
+  key: 'editor.data.places.columnKey',
+  latitude: 'editor.data.places.columnLatitude',
+  longitude: 'editor.data.places.columnLongitude',
+  area: 'editor.data.places.columnArea',
+  station: 'editor.data.places.columnStation',
+};
+
+const SEVERITY_LABEL_KEY: Record<CapSeverity, string> = {
+  Unknown: 'editor.data.cap.severityUnknown',
+  Minor: 'editor.data.cap.severityMinor',
+  Moderate: 'editor.data.cap.severityModerate',
+  Severe: 'editor.data.cap.severitySevere',
+  Extreme: 'editor.data.cap.severityExtreme',
+};
+
+/*
+ * Example values for placeholders — data, not interface text: a place, a
+ * station id, a zone name, the header aliases a table is read by. Frozen for
+ * the same reason as NEW_NAME.
+ */
+const EXAMPLE = {
+  placeLine: 'Phoenix, AZ, 33.4484, -112.0740, PHX, KPHX',  // i18n-ignore
+  areaLine: 'Phoenix, AZ, 111, PHX',  // i18n-ignore
+  capArea: 'Maricopa, Phoenix',  // i18n-ignore
+  capCodes: '004013, AZZ537',  // i18n-ignore
+  capEvents: 'Heat, Dust, Ozone',  // i18n-ignore
+  zone: 'America/Phoenix',  // i18n-ignore
+} as const;
+
+const PLACE_COLUMN_ALIAS_TEXT: Record<Exclude<keyof PlacesFrom, 'source'>, string> = {
+  name: 'name / place / city',  // i18n-ignore
+  key: 'key / code / id',  // i18n-ignore
+  latitude: 'latitude / lat',  // i18n-ignore
+  longitude: 'longitude / lon / lng',  // i18n-ignore
+  area: 'area / areaId',  // i18n-ignore
+  station: 'station / icao',  // i18n-ignore
+};
+
+/**
+ * Where a source reports on: one place, a typed list, or a table of places.
+ *
+ * The three are exclusive — the validator refuses a def carrying two — so
+ * switching clears the others rather than leaving a hidden list behind the one
+ * the operator can see.
+ */
+function PlacesFields({
+  def,
+  kind,
+  others,
+  onChange,
+}: {
+  def: Placed;
+  kind: PlaceKind;
+  others: DataSourceDef[];
+  onChange: (def: DataSourceDef) => void;
+}): JSX.Element {
+  const t = useT();
+  const rt = useRichT();
+  const where = def.placesFrom ? 'table' : def.places ? 'list' : 'one';
+  const tables = others.filter((o) => PLACE_TABLE_TYPES.has(o.type));
+  const [text, setText] = useState(() => (def.places ?? []).map((p) => placeLine(p, kind)).join('\n'));
+
+  const setWhere = (next: 'one' | 'list' | 'table') => {
+    const base: Placed = { ...def };
+    delete base.places;
+    delete base.placesFrom;
+    delete base.latitude;
+    delete base.longitude;
+    if (base.type === 'air-quality') delete base.area;
+    if (next === 'one') {
+      if (kind === 'area' && base.type === 'air-quality') base.area = '';
+      else {
+        base.latitude = 0;
+        base.longitude = 0;
+      }
+    }
+    if (next === 'list') {
+      base.places = [];
+      setText('');
+    }
+    if (next === 'table') base.placesFrom = { source: tables[0]?.id ?? '' };
+    onChange(base);
+  };
+
+  const setFrom = (patch: Partial<PlacesFrom>) => {
+    const merged: PlacesFrom = { ...(def.placesFrom ?? { source: '' }), ...patch };
+    // Blank mapping fields fall back to the header aliases, so drop them
+    // rather than save an empty string the schema would refuse.
+    for (const key of Object.keys(merged) as Array<keyof PlacesFrom>) {
+      if (key !== 'source' && !merged[key]) delete merged[key];
+    }
+    onChange({ ...def, placesFrom: merged });
+  };
+
+  const parsed = (def.places ?? []).length;
+  const mappings: Array<Exclude<keyof PlacesFrom, 'source'>> = [
+    'name',
+    'key',
+    ...(kind === 'area'
+      ? (['area'] as const)
+      : (['latitude', 'longitude', ...(def.type === 'weather' ? (['station'] as const) : [])] as const)),
+  ];
+
+  return (
+    <>
+      <label>
+        <span>{t('editor.data.places.where')}</span>
+        <select value={where} onChange={(e) => setWhere(e.target.value as 'one' | 'list' | 'table')}>
+          <option value="one">{t('editor.data.places.one')}</option>
+          <option value="list">{t('editor.data.places.list')}</option>
+          <option value="table">{t('editor.data.places.table')}</option>
+        </select>
+      </label>
+
+      {where === 'one' && (
+        <>
+          <label>
+            <span>{t('editor.data.weather.place')}</span>
+            <input
+              value={def.place ?? ''}
+              placeholder={t('editor.data.weather.placePlaceholder')}
+              onChange={(e) => onChange({ ...def, place: e.target.value })}
+            />
+          </label>
+          {kind === 'area' && def.type === 'air-quality' ? (
+            <label>
+              <span>{t('editor.data.airQuality.area')}</span>
+              <input
+                value={def.area ?? ''}
+                placeholder="111"
+                onChange={(e) => onChange({ ...def, area: e.target.value.trim() })}
+              />
+            </label>
+          ) : (
+            <div className="field-row">
+              <label>
+                <span>{t('editor.data.weather.latitude')}</span>
+                <input
+                  type="number"
+                  step="0.0001"
+                  value={def.latitude ?? 0}
+                  onChange={(e) => onChange({ ...def, latitude: Number(e.target.value) })}
+                />
+              </label>
+              <label>
+                <span>{t('editor.data.weather.longitude')}</span>
+                <input
+                  type="number"
+                  step="0.0001"
+                  value={def.longitude ?? 0}
+                  onChange={(e) => onChange({ ...def, longitude: Number(e.target.value) })}
+                />
+              </label>
+            </div>
+          )}
+        </>
+      )}
+
+      {where === 'list' && (
+        <>
+          <label>
+            <span>{t(kind === 'area' ? 'editor.data.places.listAreaLabel' : 'editor.data.places.listLabel')}</span>
+            <textarea
+              rows={5}
+              value={text}
+              placeholder={kind === 'area' ? EXAMPLE.areaLine : EXAMPLE.placeLine}
+              onChange={(e) => {
+                setText(e.target.value);
+                const places = e.target.value
+                  .split('\n')
+                  .map((line) => parsePlaceLine(line, kind))
+                  .filter((p): p is PlaceRef => p !== null)
+                  .slice(0, MAX_PLACES);
+                onChange({ ...def, places });
+              }}
+            />
+          </label>
+          <p className="hint">{t('editor.data.places.listRead', { count: parsed, max: MAX_PLACES })}</p>
+        </>
+      )}
+
+      {where === 'table' && (
+        <>
+          <label>
+            <span>{t('editor.data.places.tableSource')}</span>
+            <select value={def.placesFrom?.source ?? ''} onChange={(e) => setFrom({ source: e.target.value })}>
+              {tables.length === 0 && <option value="">{t('editor.data.places.noTables')}</option>}
+              {tables.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </label>
+          <div className="field-row">
+            {mappings.map((field) => (
+              <label key={field}>
+                <span>{t(PLACE_COLUMN_LABEL_KEY[field])}</span>
+                <input
+                  value={def.placesFrom?.[field] ?? ''}
+                  placeholder={PLACE_COLUMN_ALIAS_TEXT[field]}
+                  onChange={(e) => setFrom({ [field]: e.target.value.trim() } as Partial<PlacesFrom>)}
+                />
+              </label>
+            ))}
+          </div>
+        </>
+      )}
+
+      {where !== 'one' && (
+        <p className="hint">
+          {rt('editor.data.places.hint', {
+            place: <code>place</code>,
+            placeKey: <code>placeKey</code>,
+          })}
+        </p>
+      )}
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------- CAP */
+
+/**
+ * Filters for a CAP feed.
+ *
+ * The safety rules (tests, cancellations, expired alerts) are not options and
+ * are not shown: an alert strip should not be one checkbox away from putting a
+ * test message on air.
+ */
+function CapFields({
+  def,
+  onChange,
+}: {
+  def: Extract<DataSourceDef, { type: 'cap' }>;
+  onChange: (def: DataSourceDef) => void;
+}): JSX.Element {
+  const t = useT();
+  const rt = useRichT();
+  const set = (patch: Partial<typeof def>) => {
+    const next = { ...def, ...patch };
+    // Blank filters are absent filters, not empty strings to match against.
+    for (const key of ['area', 'codes', 'events', 'timezone', 'contact'] as const) {
+      if (next[key] !== undefined && !next[key]!.trim()) delete next[key];
+    }
+    onChange(next);
+  };
+
+  return (
+    <>
+      <p className="hint">
+        {rt('editor.data.cap.sourcesHint', {
+          // Real endpoints, quoted so they can be copied.
+          // i18n-ignore-next-line
+          nws: <code>https://api.weather.gov/alerts/active?area=AZ</code>,
+          // i18n-ignore-next-line
+          airnow: <code>https://feeds.enviroflash.info/cap/aggregate.xml</code>,
+        })}
+      </p>
+      <label>
+        <span>{t('editor.data.cap.area')}</span>
+        <input value={def.area ?? ''} placeholder={EXAMPLE.capArea} onChange={(e) => set({ area: e.target.value })} />
+      </label>
+      <div className="field-row">
+        <label>
+          <span>{t('editor.data.cap.codes')}</span>
+          <input value={def.codes ?? ''} placeholder={EXAMPLE.capCodes} onChange={(e) => set({ codes: e.target.value })} />
+        </label>
+        <label>
+          <span>{t('editor.data.cap.events')}</span>
+          <input value={def.events ?? ''} placeholder={EXAMPLE.capEvents} onChange={(e) => set({ events: e.target.value })} />
+        </label>
+      </div>
+      <div className="field-row">
+        <label>
+          <span>{t('editor.data.cap.minSeverity')}</span>
+          <select
+            value={def.minSeverity ?? ''}
+            onChange={(e) => {
+              const next = { ...def };
+              if (e.target.value) next.minSeverity = e.target.value as CapSeverity;
+              else delete next.minSeverity;
+              onChange(next);
+            }}
+          >
+            <option value="">{t('editor.data.cap.anySeverity')}</option>
+            {CAP_SEVERITIES.filter((s) => s !== 'Unknown').map((s) => (
+              <option key={s} value={s}>{t(SEVERITY_LABEL_KEY[s])}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>{t('editor.data.cap.times')}</span>
+          <select value={def.times ?? 'exact'} onChange={(e) => set({ times: e.target.value as CapTimeMode })}>
+            <option value="exact">{t('editor.data.cap.timesExact')}</option>
+            <option value="local-day">{t('editor.data.cap.timesLocalDay')}</option>
+          </select>
+        </label>
+      </div>
+      {def.times === 'local-day' && (
+        <>
+          <label>
+            <span>{t('editor.data.weather.timezone')}</span>
+            <input value={def.timezone ?? ''} placeholder={EXAMPLE.zone} onChange={(e) => set({ timezone: e.target.value })} />
+          </label>
+          <p className="hint">{t('editor.data.cap.localDayHint')}</p>
+        </>
+      )}
+      <label>
+        <span>{t('editor.data.weather.contact')}</span>
+        <input
+          value={def.contact ?? ''}
+          placeholder={t('editor.data.weather.contactPlaceholder')}
+          onChange={(e) => set({ contact: e.target.value })}
+        />
+      </label>
+      <p className="hint">
+        {rt('editor.data.cap.columnsHint', { columns: <ColumnNames names={CAP_COLUMN_NAMES} /> })}
+      </p>
+    </>
+  );
+}
+
+/* ----------------------------------------------------------- air quality */
+
+/**
+ * Provider, places, mode — and the terms.
+ *
+ * AirNow's data-use guidelines are shown in full rather than linked, for the
+ * same reason as the Open-Meteo licence warning: the obligations are the
+ * station's, and the one about notifying the agencies is the kind nobody
+ * discovers from a field label.
+ */
+function AirQualityFields({
+  def,
+  others,
+  onChange,
+}: {
+  def: Extract<DataSourceDef, { type: 'air-quality' }>;
+  others: DataSourceDef[];
+  onChange: (def: DataSourceDef) => void;
+}): JSX.Element {
+  const t = useT();
+  const rt = useRichT();
+  const info = AIR_QUALITY_PROVIDER_INFO[def.provider];
+  const mode: AirQualityMode = def.mode ?? 'current';
+  const hours = def.expireAfter !== undefined ? def.expireAfter / 3600 : '';
+
+  return (
+    <>
+      <label>
+        <span>{t('editor.data.weather.provider')}</span>
+        <select
+          value={def.provider}
+          onChange={(e) => {
+            const provider = e.target.value as AirQualityProvider;
+            const next = AIR_QUALITY_PROVIDER_INFO[provider];
+            const changed: typeof def = {
+              ...def,
+              provider,
+              pollInterval: Math.max(next.pollFloor, def.pollInterval ?? DEFAULT_AIR_QUALITY_POLL_INTERVAL),
+            };
+            if (!next.needsBaseUrl) delete changed.baseUrl;
+            if (!next.scales.includes(changed.scale ?? 'us')) delete changed.scale;
+            // Areas and coordinates do not translate into each other; a list
+            // or table stays (its columns may carry both), one place resets.
+            if (next.placeKind !== info?.placeKind && !def.places && !def.placesFrom) {
+              delete changed.area;
+              delete changed.latitude;
+              delete changed.longitude;
+              if (next.placeKind === 'area') changed.area = '';
+              else {
+                changed.latitude = 0;
+                changed.longitude = 0;
+              }
+            }
+            onChange(changed);
+          }}
+        >
+          {AIR_QUALITY_PROVIDERS.map((id) => (
+            <option key={id} value={id}>{t(AIR_QUALITY_PROVIDER_INFO[id].labelKey)}</option>
+          ))}
+        </select>
+      </label>
+
+      {info && (
+        <p className="hint">
+          {t('editor.data.weather.coverageHint', { coverage: t(info.coverageKey), seconds: info.pollFloor })}
+        </p>
+      )}
+
+      {info?.commercialUse === 'non-commercial-only' && (
+        <div className="source-error">
+          {rt('editor.data.weather.nonCommercial', {
+            lead: <strong>{t('editor.data.weather.nonCommercialLead')}</strong>,
+            selfHosted: <em>{t('schema.airQuality.provider.open-meteo-self.label')}</em>,
+            link: (
+              <a href={info.licenseUrl} target="_blank" rel="noreferrer">
+                {t('editor.data.weather.readLicense')}
+              </a>
+            ),
+          })}
+        </div>
+      )}
+
+      {def.provider === 'airnow-feed' ? (
+        <div className="source-warning">
+          {rt('editor.data.airQuality.airnowTerms', {
+            lead: <strong>{t('editor.data.airQuality.airnowTermsLead')}</strong>,
+            attribution: <code>attribution</code>,
+            preliminary: <code>preliminary</code>,
+            link: (
+              <a href={info.licenseUrl} target="_blank" rel="noreferrer">
+                {t('editor.data.airQuality.guidelines')}
+              </a>
+            ),
+          })}
+        </div>
+      ) : (
+        info?.attribution && (
+          <p className="hint">
+            {rt('editor.data.weather.attribution', {
+              lead: <strong>{t('editor.data.weather.attributionLead')}</strong>,
+              credit: info.attribution,
+              column: <code>attribution</code>,
+              link: (
+                <a href={info.licenseUrl} target="_blank" rel="noreferrer">
+                  {t('editor.data.weather.license')}
+                </a>
+              ),
+            })}
+          </p>
+        )
+      )}
+
+      {info?.needsBaseUrl && (
+        <>
+          <label>
+            <span>{t('editor.data.weather.instanceUrl')}</span>
+            <input
+              value={def.baseUrl ?? ''}
+              placeholder="http://localhost:8282"
+              onChange={(e) => onChange({ ...def, baseUrl: e.target.value })}
+            />
+          </label>
+          <p className="hint">
+            {rt('editor.data.weather.allowHostsHint', {
+              // i18n-ignore-next-line — an environment variable and its value
+              env: <code>BREEZE_DATA_ALLOW_HOSTS=localhost</code>,
+            })}
+          </p>
+        </>
+      )}
+
+      {info && <PlacesFields def={def} kind={info.placeKind} others={others} onChange={onChange} />}
+
+      {def.provider === 'airnow-feed' && (
+        <p className="hint">
+          {rt('editor.data.airQuality.areaHint', {
+            // i18n-ignore-next-line
+            example: <code>https://feeds.enviroflash.info/rss/realtime/111.xml</code>,
+            id: <code>111</code>,
+          })}
+        </p>
+      )}
+
+      <div className="field-row">
+        <label>
+          <span>{t('editor.data.weather.report')}</span>
+          <select value={mode} onChange={(e) => onChange({ ...def, mode: e.target.value as AirQualityMode })}>
+            <option value="current">{t('editor.data.airQuality.modeCurrent')}</option>
+            <option value="pollutants">{t('editor.data.airQuality.modePollutants')}</option>
+            <option value="forecast">{t('editor.data.airQuality.modeForecast')}</option>
+          </select>
+        </label>
+        {info && info.scales.length > 1 && (
+          <label>
+            <span>{t('editor.data.airQuality.scale')}</span>
+            <select value={def.scale ?? 'us'} onChange={(e) => onChange({ ...def, scale: e.target.value as AqiScale })}>
+              <option value="us">{t('editor.data.airQuality.scaleUs')}</option>
+              <option value="eu">{t('editor.data.airQuality.scaleEu')}</option>
+            </select>
+          </label>
+        )}
+        {mode === 'forecast' && (
+          <label>
+            <span>{t('editor.data.airQuality.days')}</span>
+            <input
+              type="number"
+              min={1}
+              max={7}
+              value={def.count ?? 3}
+              onChange={(e) => onChange({ ...def, count: Number(e.target.value) })}
+            />
+          </label>
+        )}
+      </div>
+
+      <label>
+        <span>{t('editor.data.expireAfter')}</span>
+        <input
+          type="number"
+          min={0.25}
+          step={0.25}
+          value={hours}
+          placeholder={def.provider === 'airnow-feed' ? String(DEFAULT_AIR_QUALITY_EXPIRY / 3600) : ''}
+          onChange={(e) => {
+            const next = { ...def };
+            if (e.target.value === '') delete next.expireAfter;
+            else next.expireAfter = Math.max(60, Math.round(Number(e.target.value) * 3600));
+            onChange(next);
+          }}
+        />
+      </label>
+      <p className="hint">{t('editor.data.expireAfterHint')}</p>
+
+      {info?.placeKind === 'coordinates' && (
+        <label>
+          <span>{t('editor.data.weather.timezone')}</span>
+          <input
+            value={def.timezone ?? ''}
+            placeholder="auto"
+            onChange={(e) => {
+              const next = { ...def };
+              if (e.target.value.trim()) next.timezone = e.target.value.trim();
+              else delete next.timezone;
+              onChange(next);
+            }}
+          />
+        </label>
+      )}
+
+      <label>
+        <span>{t('editor.data.weather.contact')}</span>
+        <input
+          value={def.contact ?? ''}
+          placeholder={t('editor.data.weather.contactPlaceholder')}
+          onChange={(e) => {
+            const next = { ...def };
+            if (e.target.value.trim()) next.contact = e.target.value;
+            else delete next.contact;
+            onChange(next);
+          }}
+        />
+      </label>
+
+      <p className="hint">
+        {rt('editor.data.airQuality.columnsHint', { columns: <ColumnNames names={AIR_QUALITY_COLUMN_NAMES} /> })}
       </p>
     </>
   );

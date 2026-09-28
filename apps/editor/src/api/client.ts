@@ -22,8 +22,11 @@ import type {
   DataSet,
   DataSourceDef,
   DataSourceStatus,
+  MediaRowStatus,
+  MediaSummary,
   DataTransform,
   Project,
+  SourceUse,
 } from '@breeze/schema';
 
 import { msg, type Message, type Params } from '@breeze/i18n';
@@ -506,13 +509,42 @@ export const api = {
       { method: 'POST' },
     ),
 
+  /** Every camera's check, for a source with media checks (Wave 8). */
+  dataSourceMedia: (projectId: string, sourceId: string) =>
+    request<{ summary: MediaSummary | null; rows: MediaRowStatus[] }>(
+      `/api/projects/${encodeURIComponent(projectId)}/datasources/${encodeURIComponent(sourceId)}/media`,
+    ),
+
+  /** Check every camera now (Wave 8). */
+  checkDataSourceMedia: (projectId: string, sourceId: string) =>
+    request<{ summary: MediaSummary | null; rows: MediaRowStatus[]; done?: boolean }>(
+      `/api/projects/${encodeURIComponent(projectId)}/datasources/${encodeURIComponent(sourceId)}/media/check`,
+      { method: 'POST' },
+    ),
+
+  /** Whose rows a source serves: automatic, its own, or its backup (Wave 5). */
+  setDataSourceUse: (projectId: string, sourceId: string, mode: SourceUse) =>
+    request<{ status: DataSourceStatus }>(
+      `/api/projects/${encodeURIComponent(projectId)}/datasources/${encodeURIComponent(sourceId)}/use`,
+      { method: 'POST', body: JSON.stringify({ mode }) },
+    ),
+
   /**
    * Try a source without saving it. Returns `ok: false` with a message rather
    * than throwing — a URL that is wrong while it is being typed is the normal
    * case, not an exception.
    */
   previewDataSource: (projectId: string, def: DataSourceDef, transforms?: DataTransform[]) =>
-    request<{ ok: boolean; error?: string; data?: DataSet; rowCount?: number; truncated?: boolean }>(
+    request<{
+      ok: boolean;
+      error?: string;
+      warning?: string;
+      refused?: string;
+      dropped?: number;
+      data?: DataSet;
+      rowCount?: number;
+      truncated?: boolean;
+    }>(
       `/api/projects/${encodeURIComponent(projectId)}/datasources-preview`,
       { method: 'POST', body: JSON.stringify({ def, transforms }) },
     ),

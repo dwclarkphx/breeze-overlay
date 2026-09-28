@@ -47,7 +47,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  */
 export type ClientRole = 'renderer' | 'controller' | 'preview';
 
-export type ControlVerb = 'play' | 'stop' | 'next' | 'clear' | 'seek' | 'update';
+export type ControlVerb =
+  | 'play'
+  | 'stop'
+  | 'next'
+  | 'prev'
+  | 'page'
+  | 'cycle'
+  | 'clear'
+  | 'seek'
+  | 'update';
 
 export interface ControlCommand {
   verb: ControlVerb;
@@ -55,8 +64,41 @@ export interface ControlCommand {
   data?: Record<string, unknown>;
   /** For `seek`: composition time in seconds. */
   time?: number;
+  /**
+   * For `next`, `prev`, `page` and `cycle`: the table to aim at — its binding,
+   * `<mount>.<binding>`, or its layer id. Absent means every table, which is
+   * what `next` always did.
+   */
+  table?: string;
+  /** For `page`: a 1-based page number. */
+  page?: number;
+  /** For `page`: a page key, the alternative to `page`. */
+  key?: string;
+  /** For `cycle`. */
+  cycle?: 'hold' | 'resume';
   /** Who issued it, for the activity log. */
   source?: string;
+}
+
+/**
+ * One table's paging as the output page reported it (CYCLE.md).
+ *
+ * Carried through the hub untouched — the hub has no idea what a table is, and
+ * does not need one to relay what a renderer said to the panels watching it.
+ */
+export interface TableReport {
+  table: string;
+  page: number;
+  pageCount: number;
+  key: string | null;
+  /** The table has a cycle configured at all — whether to offer hold/resume. */
+  hasCycle: boolean;
+  cycling: boolean;
+  held: boolean;
+  secondsLeft: number | null;
+  group?: string;
+  /** The address of the table this one follows (Wave 4). Absent before 0.74's follow. */
+  follows?: string;
 }
 
 export interface PlaybackReport {
@@ -64,6 +106,8 @@ export interface PlaybackReport {
   time: number;
   step: number;
   stepCount: number;
+  /** Paged tables. Absent from renderers older than 0.74. */
+  tables?: TableReport[];
 }
 
 export interface ChannelState {
@@ -93,11 +137,30 @@ export interface ChannelState {
  * Optional, and absent means `panel` — that was the only controller in
  * existence when this protocol was written, and an older client should keep
  * being recorded as what it is.
+ *
+ * `companion` is the Bitfocus Companion module. It is a machine, not a person
+ * with a page open, and it holds one socket per channel its buttons watch, so
+ * like a `monitor` it is shown on the peers page and left out of the panel
+ * count and the activity log.
  */
-export type ControllerKind = 'panel' | 'editor' | 'monitor';
+export type ControllerKind = 'panel' | 'editor' | 'monitor' | 'companion';
 
 export type ClientMessage =
-  | { type: 'subscribe'; channel: string; role: ClientRole; client?: ControllerKind }
+  | {
+      type: 'subscribe';
+      channel: string;
+      role: ClientRole;
+      client?: ControllerKind;
+      /**
+       * `false` asks for state without the channel's retained field data.
+       *
+       * That data carries every data source's whole DataSet, and a control
+       * surface that only colours buttons from playback would otherwise be sent
+       * a weather channel's feeds on every poll, once per watched channel.
+       * Absent means true — every existing client wants the data.
+       */
+      data?: boolean;
+    }
   | { type: 'command'; command: ControlCommand }
   | { type: 'state'; playback: PlaybackReport };
 
@@ -105,7 +168,7 @@ export type ServerMessage =
   | { type: 'welcome'; channel: string; role: ClientRole; state: ChannelState }
   | { type: 'command'; command: ControlCommand }
   | { type: 'state'; channel: string; state: ChannelState }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string; code?: string };
 
 export interface HubClient {
   id: string;
@@ -114,6 +177,8 @@ export interface HubClient {
   send: (message: ServerMessage) => void;
   /** From the subscribe message. Absent until then, and for non-controllers. */
   kind?: ControllerKind;
+  /** Subscribed with `data: false` — state is sent to it without field data. */
+  omitData?: boolean;
   /** Where the socket came from — supplied by the transport, never inferred here. */
   origin?: PeerOrigin;
   /** Epoch ms. */
@@ -203,8 +268,20 @@ export class ControlHub {
         // `ControllerKind`. Meaningless on a renderer, so not kept there.
         if (message.role === 'controller') client.kind = message.client ?? 'panel';
         else delete client.kind;
+        /*
+         * Only a controller may opt out of the data. A renderer that did would
+         * reconnect mid-show to a blank graphic — the resync the retained data
+         * exists for — so the flag is ignored rather than honoured there.
+         */
+        if (message.role === 'controller' && message.data === false) client.omitData = true;
+        else delete client.omitData;
         const state = this.state(message.channel);
-        client.send({ type: 'welcome', channel: message.channel, role: message.role, state });
+        client.send({
+          type: 'welcome',
+          channel: message.channel,
+          role: message.role,
+          state: client.omitData ? { ...state, data: {} } : state,
+        });
         this.broadcastState(message.channel);
         return;
       }
@@ -219,7 +296,9 @@ export class ControlHub {
       }
 
       case 'state': {
-        if (!client.channel) return;
+        // Only an output reports what it is showing. A controller claiming a
+        // playback state would put a false one on every panel watching.
+        if (!client.channel || (client.role !== 'renderer' && client.role !== 'preview')) return;
         const channel = this.channel(client.channel);
         channel.playback = message.playback;
         channel.updatedAt = new Date().toISOString();
@@ -291,7 +370,9 @@ export class ControlHub {
       if (client.role === 'renderer') renderers += 1;
       // A monitor is part of a panel already counted, not a panel of its own.
       // Counting it made the portal's "Panels open" disagree with /peers.
-      else if (client.kind !== 'monitor') controllers += 1;
+      // Companion is a machine with a socket per watched channel — see
+      // `ControllerKind` — and would inflate the count the same way.
+      else if (client.kind !== 'monitor' && client.kind !== 'companion') controllers += 1;
     }
     return {
       data: { ...channel.data },
@@ -343,10 +424,16 @@ export class ControlHub {
 
   private broadcastState(channelName: string, opts: { excludeRenderers?: boolean } = {}): void {
     const state = this.state(channelName);
+    let lean: ChannelState | null = null;
     for (const client of this.clients.values()) {
       if (client.channel !== channelName) continue;
       if (opts.excludeRenderers && client.role === 'renderer') continue;
-      client.send({ type: 'state', channel: channelName, state });
+      if (client.omitData) {
+        lean ??= { ...state, data: {} };
+        client.send({ type: 'state', channel: channelName, state: lean });
+      } else {
+        client.send({ type: 'state', channel: channelName, state });
+      }
     }
   }
 }
