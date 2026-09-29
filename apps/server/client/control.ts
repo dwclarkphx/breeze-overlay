@@ -18,7 +18,19 @@
 export {};
 
 import { bootI18n } from './i18n.js';
-import { SYNC_AUTO, SYNC_OFF, type SourceLike } from './join.js';
+import {
+  SYNC_AUTO,
+  SYNC_OFF,
+  compareReports,
+  joinTarget,
+  onAirSources,
+  reportOf,
+  type ChannelStateLike,
+  type RuntimeLike,
+  type SourceLike,
+  type SyncCheck,
+  type SyncSide,
+} from './join.js';
 
 interface Binding {
   name: string;
@@ -68,6 +80,8 @@ interface DatasetValue {
 interface DatasetGrid {
   el: HTMLElement;
   value(): DatasetValue;
+  /** The operator has changed it since the panel opened. See `currentData`. */
+  readonly touched: boolean;
 }
 
 /**
@@ -83,8 +97,17 @@ interface DatasetGrid {
 function makeDatasetGrid(
   binding: Binding,
   onCommit: () => void,
+  /**
+   * The rows the table actually shows when it reads a source — a manual table
+   * in the project's data. Used when the layer carries no rows of its own,
+   * which a table fed by a source normally does not: starting the grid empty
+   * showed the operator a blank table that was not blank on air.
+   */
+  seed?: DatasetValue,
 ): DatasetGrid {
-  const initial = (binding.defaultValue ?? { columns: [], rows: [] }) as DatasetValue;
+  const authored = (binding.defaultValue ?? { columns: [], rows: [] }) as DatasetValue;
+  const initial = (authored.rows?.length ?? 0) === 0 && seed?.columns?.length ? seed : authored;
+  let touched = false;
   const columns = initial.columns ?? [];
   let rows: Array<Record<string, unknown>> = (initial.rows ?? []).map((r) => ({ ...r }));
 
@@ -131,6 +154,7 @@ function makeDatasetGrid(
           // Typed at the edge, so a numeric column keeps sorting numerically
           // however the operator typed it.
           const raw = input.value;
+          touched = true;
           row[col.key] =
             col.type === 'number' && raw.trim() !== '' && Number.isFinite(Number(raw))
               ? Number(raw)
@@ -143,6 +167,7 @@ function makeDatasetGrid(
           const text = (e as ClipboardEvent).clipboardData?.getData('text/plain') ?? '';
           if (!/[\t\n]/.test(text)) return; // a plain value: let the browser handle it
           e.preventDefault();
+          touched = true;
           pasteBlock(text, index, columns.findIndex((c) => c.key === col.key));
           draw();
           onCommit();
@@ -158,6 +183,7 @@ function makeDatasetGrid(
       btn.textContent = '×';
       btn.title = t('control.removeRow');
       btn.addEventListener('click', () => {
+        touched = true;
         rows.splice(index, 1);
         draw();
         onCommit();
@@ -189,6 +215,7 @@ function makeDatasetGrid(
   }
 
   addBtn.addEventListener('click', () => {
+    touched = true;
     const blank: Record<string, unknown> = {};
     for (const col of columns) blank[col.key] = col.type === 'number' ? 0 : '';
     rows.push(blank);
@@ -200,6 +227,9 @@ function makeDatasetGrid(
   return {
     el: wrap,
     value: () => ({ columns, rows: rows.map((r) => ({ ...r })) }),
+    get touched() {
+      return touched;
+    },
   };
 }
 
@@ -985,6 +1015,7 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
     previewToggle.textContent = t(on ? 'control.previewHide' : 'control.previewShow');
     if (on) renderPreview();
     else previewFrame.textContent = '';
+    runCheck(on);
   };
 
   previewToggle.addEventListener('click', () => showPreview(!previewOn));
@@ -1038,6 +1069,159 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
     if (previewOn) renderPreview();
   });
 
+  /* --------------------------------------------------------- sync check */
+
+  /**
+   * Is the preview showing what the output shows? (0.75.0)
+   *
+   * Every couple of seconds while the preview is open: read the output's
+   * latest report from `/state` (lean — no data), read the preview's own state
+   * straight out of its frame (same origin, so `breeze.runtime` is right there),
+   * age the report to the moment of reading, and compare playback, each paged
+   * table and each ticker (`compareReports`). The result is shown under the
+   * preview, row by row, with **Resync** when anything is out.
+   *
+   * The output compared against is the one the preview follows: the chosen
+   * one, else the newest on air — also for **Off**, where showing that the
+   * preview is *not* in step is exactly the point.
+   *
+   * Only the graphic's own channel. On a scene, independently triggered
+   * elements are their own graphics with their own panels.
+   */
+  const syncBadge = document.getElementById('sync-badge')!;
+  const syncAge = document.getElementById('sync-age')!;
+  const syncRows = document.getElementById('sync-rows') as HTMLTableElement;
+  const syncResync = document.getElementById('sync-resync') as HTMLButtonElement;
+  syncResync.title = t('control.syncCheckResyncTitle');
+  let syncTimer: ReturnType<typeof setInterval> | null = null;
+  let lastState: (ChannelStateLike & { sources?: SourceLike[] }) | null = null;
+  let lastFetchedAt = 0;
+
+  const previewRuntime = (): (RuntimeLike & { joinAt(r: unknown, o?: { force?: boolean }): boolean }) | null => {
+    const frame = previewFrame.querySelector('iframe');
+    try {
+      const win = frame?.contentWindow as (Window & { breeze?: { runtime?: unknown } }) | null | undefined;
+      return (win?.breeze?.runtime as ReturnType<typeof previewRuntime>) ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  /** The output the check compares against — see above. */
+  const comparedSource = (state: { sources?: SourceLike[] }): { source: SourceLike; n: number } | null => {
+    const all = state.sources ?? [];
+    const on = onAirSources(state);
+    let source: SourceLike | undefined;
+    if (syncChoice !== SYNC_AUTO && syncChoice !== SYNC_OFF) {
+      source = all.find((s) => (s.page ?? s.id) === syncChoice);
+    }
+    source ??= on.reduce<SourceLike | undefined>((a, b) => (!a || (b.reportedAt ?? 0) > (a.reportedAt ?? 0) ? b : a), undefined);
+    return source ? { source, n: all.indexOf(source) + 1 } : null;
+  };
+
+  const sideText = (check: SyncCheck, side: SyncSide | null): string => {
+    if (!side) return t('control.syncCheckMissing');
+    if (check.kind === 'playback') return t('control.syncCheckState', { state: side.state ?? '', step: side.step ?? 0 });
+    if (check.kind === 'table') {
+      const page = (side.page ?? 0) + 1;
+      const vars = { key: side.key ?? t('control.syncCheckPageNumber', { n: page }), page, count: side.pageCount ?? '?' };
+      return typeof side.secondsLeft === 'number'
+        ? t('control.syncCheckPageLeft', { ...vars, seconds: side.secondsLeft.toFixed(1) })
+        : t('control.syncCheckPage', vars);
+    }
+    const text = (side.text ?? '').replace(/\s+/g, ' ').trim();
+    // The ellipsis is the truncation mark, not a word.
+    // i18n-ignore-next-line
+    return text.length > 48 ? `${text.slice(0, 47)}…` : text;
+  };
+
+  const renderCheck = (): void => {
+    const runtime = previewRuntime();
+    const compared = lastState ? comparedSource(lastState) : null;
+    syncRows.textContent = '';
+    syncResync.hidden = true;
+    syncAge.textContent = '';
+    if (!runtime || !lastState) {
+      syncBadge.textContent = t('control.syncCheckWaiting');
+      syncBadge.removeAttribute('data-ok');
+      return;
+    }
+    if (!compared?.source.playback || compared.source.reportedAt === null) {
+      syncBadge.textContent = t('control.syncCheckNoOutput');
+      syncBadge.removeAttribute('data-ok');
+      return;
+    }
+    const { source, n } = compared;
+    const ageMs = Math.max(0, (lastState.now ?? lastFetchedAt) - source.reportedAt!) + (Date.now() - lastFetchedAt);
+    const checks = compareReports(source.playback!, ageMs, reportOf(runtime));
+    const ok = checks.every((c) => c.ok);
+    const output = t('control.syncCheckOutputName', { n });
+    syncBadge.textContent = t(ok ? 'control.syncCheckInStep' : 'control.syncCheckOutOfStep', { output });
+    syncBadge.dataset['ok'] = String(ok);
+    syncAge.textContent = t('control.syncCheckAge', { age: (ageMs / 1000).toFixed(1) });
+    syncResync.hidden = ok;
+
+    const head = syncRows.createTHead().insertRow();
+    for (const key of ['', 'control.syncCheckColWhat', 'control.syncCheckColOutput', 'control.syncCheckColPreview']) {
+      const th = document.createElement('th');
+      th.textContent = key ? t(key) : '';
+      head.appendChild(th);
+    }
+    const body = syncRows.createTBody();
+    for (const check of checks) {
+      const row = body.insertRow();
+      row.dataset['ok'] = String(check.ok);
+      const what =
+        check.kind === 'playback' ? t('control.syncCheckPlayback')
+        : check.kind === 'table' ? t('control.syncCheckTable', { name: check.name })
+        : t('control.syncCheckCrawl', { name: check.name.split('/').pop() ?? check.name });
+      const preview =
+        check.kind === 'crawl' && typeof check.driftMs === 'number'
+          ? t('control.syncCheckDrift', { drift: `${check.driftMs >= 0 ? '+' : ''}${(check.driftMs / 1000).toFixed(2)}` })
+          : sideText(check, check.preview);
+      for (const [i, text] of [check.ok ? '\u2713' : '\u2717', what, sideText(check, check.output), preview].entries()) {
+        const cell = row.insertCell();
+        if (i === 0) cell.className = 'mark';  // i18n-ignore — className
+        cell.textContent = text;
+      }
+    }
+  };
+
+  const pollCheck = async (): Promise<void> => {
+    try {
+      const url = `/api/control/${encodeURIComponent(boot.projectId)}/${encodeURIComponent(boot.compositionId)}/state?data=0`;
+      const body = (await (await fetch(url)).json()) as { state?: ChannelStateLike & { sources?: SourceLike[] } };
+      if (body.state) {
+        lastState = body.state;
+        lastFetchedAt = Date.now();
+      }
+    } catch {
+      // A missed poll leaves the last reading up; the age shown says how old it is.
+    }
+    renderCheck();
+  };
+
+  const runCheck = (on: boolean): void => {
+    if (syncTimer) clearInterval(syncTimer);
+    syncTimer = null;
+    lastState = null;
+    if (!on) return;
+    renderCheck();
+    void pollCheck();
+    syncTimer = setInterval(() => void pollCheck(), 2_000);
+  };
+
+  syncResync.addEventListener('click', () => {
+    const runtime = previewRuntime();
+    if (!runtime || !lastState) return;
+    const compared = comparedSource(lastState);
+    const choice = compared?.source.page ?? compared?.source.id ?? SYNC_AUTO;
+    // Aged by the time since the fetch as well, like the check itself.
+    const target = joinTarget({ ...lastState, now: (lastState.now ?? lastFetchedAt) + (Date.now() - lastFetchedAt) }, choice);
+    if (target) runtime.joinAt(target, { force: true });
+    renderCheck();
+  });
+
   /* ------------------------------------------------------------- fields */
 
   const inputs = new Map<string, HTMLInputElement | HTMLTextAreaElement>();
@@ -1063,7 +1247,8 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
     }
 
     if (binding.kind === 'dataset') {
-      const grid = makeDatasetGrid(binding, sendUpdate);
+      const seed = binding.source ? boot.datasets?.[binding.source] : undefined;
+      const grid = makeDatasetGrid(binding, sendUpdate, seed as DatasetValue | undefined);
       fields.appendChild(grid.el);
       grids.set(binding.name, grid);
       continue;
@@ -1106,7 +1291,17 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
           ? input.value.split('\n').map((s) => s.trim()).filter(Boolean)
           : input.value;
     }
-    for (const [name, grid] of grids) data[name] = grid.value();
+    /*
+     * Only a grid the operator has changed. PLAY sends this, and a table is
+     * the one field where "what the panel happens to hold" can be badly wrong:
+     * a table fed by a source, with no rows of its own, sent its empty grid
+     * with every PLAY and replaced the live rows with nothing — the tiles of a
+     * weather rotation came up blank while NEXT, which sends no data, worked.
+     * An untouched grid has nothing to say that the graphic does not already
+     * show; an edited one was already sent when it was committed, and is sent
+     * again here so PLAY after an edit still carries it.
+     */
+    for (const [name, grid] of grids) if (grid.touched) data[name] = grid.value();
     return data;
   }
 

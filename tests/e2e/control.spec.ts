@@ -292,3 +292,48 @@ test('two outputs stay in step', async ({ context, page }) => {
   await expect.poll(() => nameText(a), { timeout: 10_000 }).toBe('Both Screens');
   await expect.poll(() => nameText(b), { timeout: 10_000 }).toBe('Both Screens');
 });
+
+test('PLAY does not send a table the operator has not touched', async ({ context, page, request }) => {
+  /*
+   * PLAY carries the panel's field values, and a table's grid used to go with
+   * it however it had come to be. A table fed by a source shows rows the panel
+   * never held — a weather rotation's city list, with no rows of its own, went
+   * blank on PLAY while NEXT worked — and a table with authored rows had its
+   * live data put back to them. An untouched grid is now left out.
+   */
+  const CHANNEL = 'demo-1iixd/standings-72q2s';
+  const columns = [
+    { key: 'team', label: 'Team', type: 'string' },
+    { key: 'w', label: 'W', type: 'number' },
+    { key: 'l', label: 'L', type: 'number' },
+    { key: 'pct', label: 'PCT', type: 'string' },
+  ];
+  const live = [{ team: 'Flagstaff Falcons', w: 12, l: 1, pct: '.923' }];
+
+  const output = await context.newPage();
+  await output.goto(`/play/${CHANNEL}?autoplay=0`);
+  await output.waitForFunction(() => Boolean((window as { breeze?: unknown }).breeze));
+  await request.post(`/api/control/${CHANNEL}/update`, { data: { standings: { columns, rows: live } } });
+
+  await page.goto(`/control/${CHANNEL}`);
+  await page.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await expect.poll(() => output.evaluate(() => (window as any).breeze.runtime.playbackState)).toBe('holding');
+
+  const teams = await output.evaluate(() =>
+    [...document.querySelectorAll('.bz-table-row')].map((r) => r.textContent ?? ''),
+  );
+  expect(teams.join(' ')).toContain('Flagstaff Falcons');
+
+  // Leave the channel as the other specs expect it.
+  await request.post(`/api/control/${CHANNEL}/clear`);
+  const canonical = [
+    { team: 'Mesa Marlins', w: 11, l: 2, pct: '.846' },
+    { team: 'Chandler Chargers', w: 9, l: 4, pct: '.692' },
+    { team: 'Tempe Thunderbirds', w: 8, l: 5, pct: '.615' },
+    { team: 'Gilbert Grizzlies', w: 7, l: 6, pct: '.538' },
+    { team: 'Scottsdale Scorpions', w: 5, l: 8, pct: '.385' },
+    { team: 'Peoria Pioneers', w: 3, l: 10, pct: '.231' },
+  ];
+  await request.post(`/api/control/${CHANNEL}/update`, { data: { standings: { columns, rows: canonical } } });
+  await output.close();
+});

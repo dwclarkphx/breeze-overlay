@@ -108,6 +108,36 @@ export interface PlaybackReport {
   stepCount: number;
   /** Paged tables. Absent from renderers older than 0.74. */
   tables?: TableReport[];
+  /**
+   * Rotating tickers: the copy on screen and how far into its pass (0.75.0),
+   * so a page joining late scrolls in step. Absent from older renderers.
+   */
+  crawls?: CrawlReport[];
+}
+
+export interface CrawlReport {
+  layer: string;
+  text: string;
+  staged: string | null;
+  offsetMs: number;
+  passMs: number;
+}
+
+/**
+ * What a report says apart from the passage of time — state, step, pages and
+ * the copy on each ticker, but not a page's seconds left or a ticker's offset,
+ * which change on every heartbeat by construction. Two reports with the same
+ * shape tell a panel nothing new.
+ */
+function reportShape(p: PlaybackReport | undefined): string {
+  if (!p) return '';
+  return JSON.stringify([
+    p.state,
+    p.step,
+    p.stepCount,
+    (p.tables ?? []).map((t) => [t.table, t.page, t.pageCount, t.key, t.held, t.cycling, t.hasCycle]),
+    (p.crawls ?? []).map((c) => [c.layer, c.text, c.staged]),
+  ]);
 }
 
 /**
@@ -370,6 +400,7 @@ export class ControlHub {
         // playback state would put a false one on every panel watching.
         if (!client.channel || (client.role !== 'renderer' && client.role !== 'preview')) return;
         const at = Date.now();
+        const changed = reportShape(client.playback) !== reportShape(message.playback);
         client.playback = message.playback;
         client.reportedAt = at;
         /*
@@ -383,7 +414,14 @@ export class ControlHub {
           channel.reportedAt = at;
         }
         channel.updatedAt = new Date(at).toISOString();
-        this.broadcastState(client.channel, { excludeRenderers: true });
+        /*
+         * A heartbeat (0.75.0) that only aged — same state, pages and copy —
+         * is kept and not relayed: every panel on the channel would otherwise
+         * be sent the channel's whole state, data sources included, every few
+         * seconds per output. Anything that reads the ageing parts (a joining
+         * page's welcome, `/state`) reads them fresh from here.
+         */
+        if (changed) this.broadcastState(client.channel, { excludeRenderers: true });
         return;
       }
 

@@ -477,3 +477,38 @@ describe('which output the channel reports (0.74.1)', () => {
     expect(hub.state(CHANNEL).sources[0]!.playback).toBeNull();
   });
 });
+
+describe('heartbeats (0.75.0)', () => {
+  const report = (secondsLeft: number, offsetMs: number, page = 2) => ({
+    state: 'holding', time: 1, step: 1, stepCount: 1,
+    tables: [{ table: 'city', page, pageCount: 38, key: `k${page}`, hasCycle: true, cycling: true, held: false, secondsLeft }],
+    crawls: [{ layer: 'al', text: 'Flood Watch • ', staged: null, offsetMs, passMs: 20_000 }],
+  });
+
+  it('keeps a heartbeat that only aged without sending it to panels', () => {
+    const hub = new ControlHub();
+    fakeClient(hub, 'out');
+    const panel = fakeClient(hub, 'panel');
+    subscribe(hub, 'out', 'renderer');
+    subscribe(hub, 'panel', 'controller');
+    hub.handle('out', { type: 'state', playback: report(8, 1_000) });
+    const before = panel.states().length;
+
+    hub.handle('out', { type: 'state', playback: report(3, 6_000) });
+    expect(panel.states()).toHaveLength(before);
+    // Kept all the same: a page joining now reads the fresh one.
+    expect(hub.state(CHANNEL).sources[0]!.playback?.crawls?.[0]!.offsetMs).toBe(6_000);
+  });
+
+  it('relays a report whose page or copy changed', () => {
+    const hub = new ControlHub();
+    fakeClient(hub, 'out');
+    const panel = fakeClient(hub, 'panel');
+    subscribe(hub, 'out', 'renderer');
+    subscribe(hub, 'panel', 'controller');
+    hub.handle('out', { type: 'state', playback: report(8, 1_000) });
+    const before = panel.states().length;
+    hub.handle('out', { type: 'state', playback: report(10, 1_200, 3) });
+    expect(panel.states()).toHaveLength(before + 1);
+  });
+});

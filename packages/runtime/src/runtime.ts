@@ -50,7 +50,7 @@ import {
 } from './cycle.js';
 import { resolveEase } from './ease.js';
 import { applyTextFit, type FitResult } from './fit.js';
-import { CrawlLoop, crawlItemsFrom, type CrawlAnimator } from './crawl.js';
+import { CrawlLoop, crawlItemsFrom, type CrawlAnimator, type CrawlPhase } from './crawl.js';
 import {
   buildLayerElement,
   composeFilter,
@@ -187,8 +187,19 @@ export interface JoinReport {
     secondsLeft?: number | null;
     follows?: string;
   }>;
+  /** Each rotating ticker's copy and position (`crawlStates`). Absent before crawls were reported. */
+  crawls?: CrawlState[];
   /** Milliseconds between the report being made and now. Absent is 0. */
   ageMs?: number;
+}
+
+/**
+ * One rotating ticker, as an output reports it (0.75.0): which layer, the copy
+ * on screen, and how far into its pass it is. See `CrawlPhase`.
+ */
+export interface CrawlState extends CrawlPhase {
+  /** The layer's instance id — the same on every output of the same composition. */
+  layer: string;
 }
 
 /** A split text layer and the reveal built over its pieces. */
@@ -233,7 +244,13 @@ export type RuntimeEvent =
   | 'update'
   | 'timeupdate'
   /** A table turned a page — by its cycle or by a command. */
-  | 'page';
+  | 'page'
+  /**
+   * A ticker changed the copy it shows — new copy began scrolling in, or
+   * finished doing so (0.75.0). What an output page reports, so a page joining
+   * late takes up the copy on screen rather than the copy in the feed.
+   */
+  | 'crawl';
 
 export type RuntimeListener = (payload: RuntimePayload) => void;
 
@@ -1703,7 +1720,7 @@ export class BreezeRuntime {
     if (report.state === 'holding') {
       this.pendingHold = null;
       this.state = 'holding';
-      this.startCrawls();
+      this.startCrawls(report.crawls, ageMs);
       // A self-paging table the report did not mention — one page when it was
       // made, or a report from a renderer older than table reports — starts its
       // time now, as it would on reaching the hold.
@@ -1717,7 +1734,7 @@ export class BreezeRuntime {
 
     this.pendingHold = nextHoldAfter(this.plan, target);
     this.state = 'playing-in';
-    this.startCrawls();
+    this.startCrawls(report.crawls, ageMs);
     this.videos.play(target);
     this.tl.play();
     this.emit('play');
@@ -2732,6 +2749,11 @@ export class BreezeRuntime {
       direction: node.layer.direction,
       separator: node.layer.separator ?? DEFAULT_CRAWL_SEPARATOR,
       animator: gsap as unknown as CrawlAnimator,
+      // Reported by the output page (0.75.0): a page joining late takes up the
+      // copy on screen, which trails the feed by a pass on purpose.
+      onCopy: () => {
+        if (!this.destroyed) this.emit('crawl');
+      },
     });
 
     /*
@@ -2775,11 +2797,30 @@ export class BreezeRuntime {
     return loop;
   }
 
-  private startCrawls(): void {
+  /**
+   * Set every ticker rotating. With `phases` — a late join — a ticker another
+   * output reported starts at that output's copy and position instead of from
+   * the top, so the two scroll in step.
+   */
+  private startCrawls(phases?: CrawlState[], ageMs = 0): void {
+    const byLayer = new Map((phases ?? []).map((p) => [p.layer, p]));
     for (const [id, node] of this.nodes) {
       if (node.layer.type !== 'crawl') continue;
-      this.crawlFor(id)?.start();
+      const loop = this.crawlFor(id);
+      const phase = byLayer.get(id);
+      if (loop && phase && typeof phase.text === 'string' && Number.isFinite(phase.offsetMs)) loop.startAt(phase, ageMs);
+      else loop?.start();
     }
+  }
+
+  /** Every rotating ticker's copy and position — what an output reports (0.75.0). */
+  get crawlStates(): CrawlState[] {
+    const out: CrawlState[] = [];
+    for (const [id, loop] of this.crawls) {
+      const phase = loop.phase;
+      if (phase) out.push({ layer: id, ...phase });
+    }
+    return out;
   }
 
   private stopCrawls(): void {

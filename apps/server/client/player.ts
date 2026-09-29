@@ -24,7 +24,7 @@
 
 import { BreezeRuntime, installGlobals, OUTPUT_PAGE_CSS } from '@breeze/runtime';
 import { DATA_UPDATE_KEY, MODE_UPDATE_KEY, type Composition, type DataSet, type SceneElement } from '@breeze/schema';
-import { SYNC_AUTO, joinTarget, type ChannelStateLike } from './join.js';
+import { SYNC_AUTO, joinTarget, reportOf, type ChannelStateLike } from './join.js';
 
 declare global {
   interface Window {
@@ -251,37 +251,10 @@ function connectToHub(
 
   const report = () => {
     if (socket?.readyState !== WebSocket.OPEN) return;
-    /*
-     * Only tables that page are reported. A table that shows every row it has
-     * is nothing a control surface can act on, and listing it would give the
-     * operator a row of buttons that do nothing.
-     */
-    const tables = runtime.tableStates
-      .filter((s) => s.pageCount > 1 || s.cycling || s.held)
-      .map((s) => ({
-        table: s.table,
-        page: s.page,
-        pageCount: s.pageCount,
-        key: s.key,
-        hasCycle: s.hasCycle,
-        cycling: s.cycling,
-        held: s.held,
-        secondsLeft: s.secondsLeft,
-        ...(s.group ? { group: s.group } : {}),
-        ...(s.follows ? { follows: s.follows } : {}),
-      }));
-    socket.send(
-      JSON.stringify({
-        type: 'state',
-        playback: {
-          state: runtime.playbackState,
-          time: runtime.currentTime,
-          step: runtime.currentStep,
-          stepCount: runtime.stepCount,
-          tables,
-        },
-      }),
-    );
+    // One builder for the report (`client/join.ts`), shared with the panel's
+    // sync check, so what an output says and what a preview is compared on
+    // cannot drift apart.
+    socket.send(JSON.stringify({ type: 'state', playback: reportOf(runtime) }));
   };
 
   const apply = (command: {
@@ -385,12 +358,32 @@ function connectToHub(
   // own lifecycle, not only when commanded.
   // `page` too: a cycle turns pages with nobody pressing anything, and the
   // panel's page readout is only as current as the last report.
-  for (const event of ['play', 'hold', 'stop', 'finished', 'page'] as const) {
+  // `crawl` too (0.75.0): a ticker's copy changing is what a page joining late
+  // has to match, and it happens with nobody pressing anything.
+  for (const event of ['play', 'hold', 'stop', 'finished', 'page', 'crawl'] as const) {
     runtime.on(event, () => report());
   }
 
+  /*
+   * A heartbeat while on air (0.75.0).
+   *
+   * Reports are otherwise sent on events, so between them the hub's picture of
+   * a ticker's position and a page's time left only ages. Every few seconds
+   * keeps a joining page's starting point fresh and gives the panel's sync
+   * check something current to compare against. The hub relays a heartbeat
+   * only when something other than the passage of time changed, so this costs
+   * one small frame to the server and nothing to the panels.
+   */
+  setInterval(() => {
+    const state = runtime.playbackState;
+    if (state === 'holding' || state === 'playing-in') report();
+  }, HEARTBEAT_MS);
+
   connect();
 }
+
+/** How often an output on air re-reports where it is. See `connectToHub`. */
+const HEARTBEAT_MS = 5_000;
 
 /** A random id for this page load. Not a secret — only a tag other pages can name it by. */
 function newPageId(): string {

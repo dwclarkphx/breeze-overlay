@@ -4,6 +4,24 @@ All notable changes to Breeze Overlay are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow the project rule: a feature bumps the minor version, a fix bumps the patch. Releases before 0.45.0 used two-part numbers (0.01–0.44). 1.0.0 will be the first public release.
 
+## [0.75.0] - 2026-09-28
+
+> The preview shows what the output shows, and says so.
+
+### Added
+
+- A **sync check** under the control panel's preview says whether it shows what the output shows — the hold, each paging table's page and time left, each ticker's copy and scroll position — marks what differs, and offers **Resync**.
+- A page joining a graphic already on air now also scrolls each ticker in step with the output it joined, on the same copy at the same point in its scroll, instead of starting the ticker over.
+- Outputs on air report where they are every five seconds, including each ticker's copy and position; panels are only sent a report when something other than time has changed.
+
+### Fixed
+
+- PLAY on the control panel no longer sends a table the operator has not edited. A table fed by a source with no rows of its own — a city rotation reading a Cities table — went blank on PLAY while NEXT worked, and a table with authored rows had its live data put back to them. The panel's grid for a table fed by a source now starts from the rows it actually shows.
+
+### Changed
+
+- A ticker starts each pass when the previous one was due to end rather than when its completion frame ran, so outputs rolled in together no longer drift apart by a frame a pass over a long show.
+
 ## [0.74.1] - 2026-09-28
 
 ### Fixed
@@ -715,6 +733,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Composition schema v1, the single GSAP runtime with STOP-marker lifecycle, and a Fastify server serving transparent `/play` pages.
 
+[0.75.0]: https://github.com/dwclarkphx/breeze-overlay/releases/tag/v0.75.0
 [0.74.1]: https://github.com/dwclarkphx/breeze-overlay/releases/tag/v0.74.1
 [0.74.0]: https://github.com/dwclarkphx/breeze-overlay/releases/tag/v0.74.0
 [0.73.0]: https://github.com/dwclarkphx/breeze-overlay/releases/tag/v0.73.0

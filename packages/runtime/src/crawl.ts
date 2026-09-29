@@ -72,6 +72,31 @@ export interface CrawlLoopOptions {
    * to exercise.
    */
   measure?: (el: HTMLElement) => number;
+  /** Wall clock, epoch ms. Injected for tests; `Date.now` otherwise. */
+  now?: () => number;
+  /**
+   * The copy on screen changed: new copy began scrolling in, or finished
+   * doing so (0.75.0). An output page reports then, so a page joining late
+   * takes up the copy that is actually showing.
+   */
+  onCopy?: () => void;
+}
+
+/**
+ * Where a crawl is, in a form another output can take up (0.75.0).
+ *
+ * Time rather than pixels: a pass lasts `passMs` and this one is `offsetMs`
+ * into it. Two outputs rendering the same copy in the same faces measure the
+ * same width, so the same time is the same pixel — and a time, unlike a pixel
+ * offset, can be aged by however old the report is.
+ */
+export interface CrawlPhase {
+  /** The copy rotating in both blocks. */
+  text: string;
+  /** Copy written into the incoming block and scrolling in this pass, if any. */
+  staged: string | null;
+  offsetMs: number;
+  passMs: number;
 }
 
 /** One pass of the item list, with a trailing separator so it joins its repeat. */
@@ -134,6 +159,20 @@ export class CrawlLoop {
 
   private tween: { kill(): void } | null = null;
   private running = false;
+  /**
+   * When the current pass began, epoch ms, and how long it lasts.
+   *
+   * Each pass begins exactly where the last one was due to end, not whenever
+   * its completion callback happened to run. A tween's `onComplete` lands on
+   * the first frame after the pass ends, and starting the next from *that*
+   * frame lost up to a frame per pass — invisible on one output, but two
+   * outputs rolled in together drifted apart over a long show. Solved from the
+   * clock, like a cycle's pages and a sprite's frames.
+   */
+  private passStart = 0;
+  private passMs = 0;
+  /** Set when a pass staged new copy; `startPass` signals it once the pass is placed. */
+  private copyChanged = false;
 
   constructor(options: CrawlLoopOptions) {
     this.opts = options;
@@ -205,6 +244,45 @@ export class CrawlLoop {
     this.startPass();
   }
 
+  /**
+   * Start at another output's position — the late join (0.75.0).
+   *
+   * Takes that output's copy as well as its position, because a ticker adopts
+   * new copy a pass late on purpose (see the header): an output mid-way through
+   * adopting a feed change is showing the *old* copy, and a page joining it with
+   * the new one would be right about the feed and wrong about the screen.
+   * Copy this page already has beyond that stays queued, and scrolls in at the
+   * next pass as it will on the other output.
+   *
+   * `ageMs` is how old the phase is. The pass is placed so it began
+   * `offsetMs + ageMs` ago; where that runs past the end of a pass, whole
+   * passes are skipped, as they would have been had this page been rotating.
+   */
+  startAt(phase: CrawlPhase, ageMs = 0): void {
+    this.stop();
+    this.running = true;
+    const latest = this.queued ?? this.staged ?? this.current;
+    this.current = phase.text;
+    this.staged = phase.staged !== null && phase.staged !== phase.text ? phase.staged : null;
+    this.fill(this.first, this.current);
+    this.fill(this.second, this.current);
+    if (this.staged !== null) this.fill(this.incoming, this.staged);
+    const target = this.staged ?? this.current;
+    this.queued = latest && latest !== target ? latest : null;
+    this.startPass(this.now() - Math.max(0, phase.offsetMs) - Math.max(0, ageMs), { stage: false });
+  }
+
+  /** Where this crawl is now, or null when it is not rotating. */
+  get phase(): CrawlPhase | null {
+    if (!this.running || this.passMs <= 0) return null;
+    return {
+      text: this.current,
+      staged: this.staged,
+      offsetMs: Math.max(0, this.now() - this.passStart),
+      passMs: this.passMs,
+    };
+  }
+
   stop(): void {
     this.running = false;
     this.tween?.kill();
@@ -247,12 +325,20 @@ export class CrawlLoop {
    * the start of the next pass invisible. Exposed for tests.
    */
   onPassComplete(): void {
-    if (this.staged !== null) {
-      this.current = this.staged;
+    const adopted = this.staged !== null;
+    if (adopted) {
+      this.current = this.staged!;
       this.staged = null;
       this.fill(this.trailing, this.current);
     }
-    if (this.running) this.startPass();
+    // The next pass begins when this one was due to end — see `passStart`.
+    if (this.running) this.startPass(this.passMs > 0 ? this.passStart + this.passMs : undefined);
+    // After the next pass is placed, so a report made on this reads its phase.
+    if (adopted) this.opts.onCopy?.();
+  }
+
+  private now(): number {
+    return (this.opts.now ?? Date.now)();
   }
 
   private measure(el: HTMLElement): number {
@@ -277,15 +363,51 @@ export class CrawlLoop {
     this.staged = this.queued;
     this.queued = null;
     this.fill(this.incoming, this.staged);
+    this.copyChanged = true;
     return true;
   }
 
-  private startPass(): void {
+  /**
+   * Run one pass, begun at `begin` (epoch ms; now when absent).
+   *
+   * A pass begun in the past starts partway, at the position it would have
+   * reached — a completion callback that ran a frame late, or a page joining
+   * another output mid-pass. One begun more than a whole pass ago (a hidden tab
+   * that drew no frames) skips the passes it missed rather than playing them
+   * all out at once. Copy is staged only when `stage` allows it; a join has
+   * already written the blocks it needs.
+   */
+  private startPass(begin?: number, opts: { stage?: boolean } = {}): void {
+    this.copyChanged = false;
+    this.placePass(begin, opts);
+    if (this.copyChanged) {
+      this.copyChanged = false;
+      this.opts.onCopy?.();
+    }
+  }
+
+  private placePass(begin?: number, opts: { stage?: boolean } = {}): void {
     this.tween?.kill();
     this.tween = null;
 
     const { animator, track, direction } = this.opts;
     const speed = Math.max(1, Math.abs(this.opts.speed));
+    const stage = opts.stage !== false;
+    const now = this.now();
+    let start = begin ?? now;
+
+    /** How far into the pass `start` puts us, in pixels, skipping whole passes missed. */
+    const place = (distance: number): number => {
+      this.passMs = (distance / speed) * 1000;
+      let into = now - start;
+      if (this.passMs > 0 && into >= this.passMs) {
+        const skipped = Math.floor(into / this.passMs);
+        start += skipped * this.passMs;
+        into -= skipped * this.passMs;
+      }
+      this.passStart = start;
+      return Math.min(distance, (Math.max(0, into) / 1000) * speed);
+    };
 
     if (direction === 'left') {
       /*
@@ -294,13 +416,16 @@ export class CrawlLoop {
        * Only after that is the second block off screen and safe to rewrite.
        */
       animator.set(track, { x: 0 });
-      this.stageQueued();
+      if (stage) this.stageQueued();
 
       const distance = this.measure(this.first);
       if (distance <= 0) return;
+      // Partway when the pass began in the past: a late callback, or a join.
+      const travelled = place(distance);
+      if (travelled > 0) animator.set(track, { x: -travelled });
       this.tween = animator.to(track, {
         x: -distance,
-        duration: distance / speed,
+        duration: (distance - travelled) / speed,
         ease: 'none',
         onComplete: () => this.onPassComplete(),
       });
@@ -317,15 +442,17 @@ export class CrawlLoop {
     let distance = this.measure(this.first);
     animator.set(track, { x: -distance });
 
-    if (this.stageQueued()) {
+    if (stage && this.stageQueued()) {
       distance = this.measure(this.first);
       animator.set(track, { x: -distance });
     }
 
     if (distance <= 0) return;
+    const travelled = place(distance);
+    if (travelled > 0) animator.set(track, { x: -distance + travelled });
     this.tween = animator.to(track, {
       x: 0,
-      duration: distance / speed,
+      duration: (distance - travelled) / speed,
       ease: 'none',
       onComplete: () => this.onPassComplete(),
     });

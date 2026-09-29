@@ -113,3 +113,71 @@ test('the control panel offers each connected output under Sync to', async ({ br
   await panel.close();
   await output.close();
 });
+
+/* -------------------------------------------------------- tickers + check */
+
+const TICKER = 'demo-1iixd/ticker-40hbh';
+
+async function openTicker(browser: Browser, query = ''): Promise<Page> {
+  const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+  await page.goto(`/play/${TICKER}${query}`);
+  await page.waitForFunction(() => Boolean((window as { breeze?: unknown }).breeze));
+  return page;
+}
+
+const crawls = (page: Page) =>
+  page.evaluate(() =>
+    ((window as any).breeze.runtime.crawlStates as Array<{ text: string; offsetMs: number; passMs: number }>).map(
+      (c) => ({ text: c.text, offsetMs: c.offsetMs, passMs: c.passMs }),
+    ),
+  );
+
+test.describe('tickers and the sync check', () => {
+  test.afterEach(async ({ request }) => {
+    await request.post(`/api/control/${TICKER}/clear`);
+  });
+
+  test('a page joining late scrolls its ticker in step with the output', async ({ browser }) => {
+    const first = await openTicker(browser);
+    await first.request.post(`/api/control/${TICKER}/play`);
+    await expect.poll(async () => (await playback(first)).state).toBe('holding');
+    await first.waitForTimeout(2_500);
+
+    const second = await openTicker(browser);
+    await expect.poll(async () => (await playback(second)).state).toBe('holding');
+    const [a, b] = await Promise.all([crawls(first), crawls(second)]);
+    expect(b).toHaveLength(a.length);
+    expect(a.length).toBeGreaterThan(0);
+    for (const [i, c] of a.entries()) {
+      expect(b[i]!.text).toBe(c.text);
+      // Read a moment apart in two pages: a quarter second of scroll is the tolerance the check uses.
+      const drift = Math.abs(b[i]!.offsetMs - c.offsetMs) % c.passMs;
+      expect(Math.min(drift, c.passMs - drift)).toBeLessThan(250);
+    }
+    await first.close();
+    await second.close();
+  });
+
+  test('the panel says the preview is in step, and Resync puts back one that is not', async ({ browser }) => {
+    const output = await openTicker(browser);
+    await output.request.post(`/api/control/${TICKER}/play`);
+    await expect.poll(async () => (await playback(output)).state).toBe('holding');
+
+    const panel = await browser.newPage();
+    await panel.goto(`/control/${TICKER}`);
+    await panel.locator('#preview-toggle').click();
+    await expect(panel.locator('#sync-badge')).toHaveText(/^In step with Output 1/, { timeout: 10_000 });
+    await expect(panel.locator('#sync-rows tbody tr[data-ok="false"]')).toHaveCount(0);
+
+    // Off: the preview never joins, so it is not showing what the output shows.
+    await panel.locator('#preview-sync').selectOption('off');
+    await expect(panel.locator('#sync-badge')).toHaveText(/^Out of step/, { timeout: 10_000 });
+    await expect(panel.locator('#sync-resync')).toBeVisible();
+
+    await panel.locator('#sync-resync').click();
+    await expect(panel.locator('#sync-badge')).toHaveText(/^In step with Output 1/, { timeout: 10_000 });
+
+    await panel.close();
+    await output.close();
+  });
+});

@@ -512,6 +512,19 @@ ${FAVICON_LINK}
   .icon-btn{width:auto;min-width:38px;padding:6px 10px;font-size:15px;line-height:1}
   .preview-sync{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
   .preview-sync select{width:auto;max-width:16em;padding:4px 6px;font-size:13px}
+  /* Sync check (0.75.0): is the preview showing what the output shows? */
+  .sync-check{margin-top:8px;border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-size:13px}
+  .sync-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .sync-badge{font-weight:600}
+  .sync-badge[data-ok="true"]{color:#3fb950}
+  .sync-badge[data-ok="false"]{color:#d29922}
+  .sync-head .sub{color:var(--muted);font:12px/1 ui-monospace,Consolas,monospace}
+  .sync-head button{width:auto;margin-inline-start:auto;padding:4px 10px;font-size:13px}
+  .sync-rows{width:100%;border-collapse:collapse;margin-top:6px;font:12px/1.4 ui-monospace,Consolas,monospace}
+  .sync-rows th{text-align:start;color:var(--muted);font-weight:500;padding:2px 6px 2px 0}
+  .sync-rows td{padding:2px 6px 2px 0;vertical-align:top;overflow-wrap:anywhere}
+  .sync-rows td.mark{width:1.2em}
+  .sync-rows tr[data-ok="false"] td{color:#d29922}
   .icon-btn[aria-pressed="true"]{outline:2px solid var(--accent);outline-offset:-2px}
   @media (min-width:900px){
     .panel-grid{flex-direction:row-reverse;align-items:flex-start}
@@ -546,6 +559,14 @@ ${FAVICON_LINK}
     <span class="sub">${escapeHtml(`${projectId}/${composition.id}`)}</span>
   </div>
   <div class="preview-frame" id="preview-frame"></div>
+  <div class="sync-check" id="sync-check" aria-live="polite">
+    <div class="sync-head">
+      <span class="sync-badge" id="sync-badge">${t('server.pages.syncCheckWaiting')}</span>
+      <span class="sub" id="sync-age"></span>
+      <button id="sync-resync" hidden>${t('server.pages.syncCheckResync')}</button>
+    </div>
+    <table class="sync-rows" id="sync-rows"></table>
+  </div>
   <div class="hint">${t('server.pages.previewHint')}</div>
 </section>
 
