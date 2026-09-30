@@ -59,6 +59,23 @@ export interface ChannelStateLike {
   sources?: SourceLike[];
 }
 
+/**
+ * How old the channel's playback report is, in seconds — by the hub's own
+ * clock at both ends, so the viewer's clock being wrong does not matter.
+ *
+ * A report says a page has so many seconds left *as of when it was made*. The
+ * hub replays its last report to every panel on each command, and since 0.75.0
+ * does not relay a heartbeat that only aged, so the replayed one can be many
+ * seconds old. Read as though it were made just now, it puts every countdown
+ * back by however long the report had been sitting there. Zero when either
+ * clock is missing, or when they disagree the wrong way round.
+ */
+export function reportAgeSeconds(state: { reportedAt?: number | null; now?: number } | null | undefined): number {
+  if (!state || typeof state.now !== 'number' || typeof state.reportedAt !== 'number') return 0;
+  const age = (state.now - state.reportedAt) / 1000;
+  return Number.isFinite(age) && age > 0 ? age : 0;
+}
+
 export type JoinTarget = PlaybackLike & { ageMs: number };
 
 export const SYNC_AUTO = 'auto';

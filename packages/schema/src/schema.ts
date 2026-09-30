@@ -220,6 +220,18 @@ const dataTransformSchema = {
       },
       additionalProperties: false,
     },
+    {
+      // Text from a template over other columns (0.76.0).
+      type: 'object',
+      required: ['op', 'as', 'template'],
+      properties: {
+        op: { const: 'compose' },
+        as: { type: 'string', minLength: 1 },
+        template: { type: 'string', minLength: 1, maxLength: 2000 },
+        timezone: { type: 'string', pattern: '^[A-Za-z0-9_/+-]+$' },
+      },
+      additionalProperties: false,
+    },
   ],
 } as const;
 

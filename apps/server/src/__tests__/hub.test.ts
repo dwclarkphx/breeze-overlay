@@ -5,7 +5,7 @@
 // Copyright (C) 2026 Dave Clark
 // SPDX-License-Identifier: MPL-2.0
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { ControlHub, channelKey, parseClientMessage, type ServerMessage } from '../hub.js';
 
@@ -363,6 +363,61 @@ describe('table commands', () => {
 
     const last = panel.states().at(-1);
     expect(last && 'state' in last ? last.state.playback?.tables : null).toEqual(tables);
+  });
+});
+
+describe('which output speaks for the channel (0.76.0)', () => {
+  const holding = { state: 'holding', time: 1, step: 1, stepCount: 1, tables: [{ table: 'city', page: 10 }] };
+  const stuck = { state: 'playing-in', time: 0.2, step: 0, stepCount: 1, tables: [{ table: 'city', page: 0 }] };
+
+  function two() {
+    const hub = new ControlHub();
+    fakeClient(hub, 'stuck');
+    fakeClient(hub, 'good');
+    subscribe(hub, 'stuck', 'renderer'); // connected first, as in the bug report
+    subscribe(hub, 'good', 'renderer');
+    return hub;
+  }
+
+  it('prefers an output at its hold to one still playing in, whichever reported last', () => {
+    // A Hold makes every output report; the one whose clock has stopped in a
+    // hidden tab reports page one, last, and used to become the channel's.
+    const hub = two();
+    hub.handle('good', { type: 'state', playback: holding });
+    hub.handle('stuck', { type: 'state', playback: stuck });
+    expect(hub.state(CHANNEL).playback).toEqual(holding);
+    hub.handle('good', { type: 'state', playback: holding });
+    expect(hub.state(CHANNEL).playback).toEqual(holding);
+  });
+
+  it('prefers an output reporting on time to one gone quiet, at the same stage', () => {
+    vi.useFakeTimers();
+    try {
+      const hub = two();
+      hub.handle('stuck', { type: 'state', playback: { ...holding, tables: [{ table: 'city', page: 3 }] } });
+      vi.advanceTimersByTime(20_000);
+      hub.handle('good', { type: 'state', playback: holding });
+      expect(hub.state(CHANNEL).playback).toEqual(holding);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the same output when two are equal, instead of swapping on every report', () => {
+    const hub = two();
+    const other = { ...holding, tables: [{ table: 'city', page: 11 }] };
+    hub.handle('good', { type: 'state', playback: holding });
+    hub.handle('stuck', { type: 'state', playback: other });
+    expect(hub.state(CHANNEL).playback).toEqual(other); // the older connection
+    hub.handle('good', { type: 'state', playback: holding });
+    expect(hub.state(CHANNEL).playback).toEqual(other);
+  });
+
+  it('still lets an output on air beat one that is idle', () => {
+    const hub = two();
+    hub.handle('good', { type: 'state', playback: holding });
+    hub.handle('stuck', { type: 'state', playback: { state: 'idle', time: 0, step: 0, stepCount: 1 } });
+    expect(hub.state(CHANNEL).playback?.state).toBe('holding');
   });
 });
 

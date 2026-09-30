@@ -140,6 +140,24 @@ function reportShape(p: PlaybackReport | undefined): string {
   ]);
 }
 
+/** How far along an output's graphic is — the first thing a panel wants to know about it. */
+const STATE_RANK: Record<string, number> = { holding: 3, 'playing-in': 2, 'playing-out': 1 };
+
+/** A report older than this — three heartbeats — is from an output that has gone quiet. */
+const STALE_REPORT_MS = 15_000;
+
+/**
+ * Whether output `a` should speak for the channel over output `b`.
+ * Both have reported. See `state()` for why this order.
+ */
+function outranks(a: SourceReport, b: SourceReport, now: number): boolean {
+  const rank = (s: SourceReport): number => STATE_RANK[s.playback?.state ?? ''] ?? 0;
+  if (rank(a) !== rank(b)) return rank(a) > rank(b);
+  const quiet = (s: SourceReport): boolean => now - s.reportedAt! > STALE_REPORT_MS;
+  if (quiet(a) !== quiet(b)) return quiet(b);
+  return a.connectedAt < b.connectedAt;
+}
+
 /**
  * One connected output and what it last said it was showing (0.74.1).
  *
@@ -516,32 +534,41 @@ export class ControlHub {
     sources.sort((a, b) => a.connectedAt - b.connectedAt);
 
     /*
-     * The channel's playback is an output that is on air, when one is.
+     * The channel's playback is the report of the output most worth believing.
      *
      * "Whichever reported last" let one idle output hide another on air: a
      * browser source opened with `?sync=off`, or added to OBS mid-show, says
-     * idle, and every panel then read IDLE while vMix held the graphic. The
-     * question a panel is asking is "is this on air?", so an output showing it
-     * wins over one that is not; among equals, the latest report. With no
-     * output reporting at all, the retained report stands — a preview's, see
-     * `handle`, or the last word from outputs that have since gone.
+     * idle, and every panel then read IDLE while vMix held the graphic. So an
+     * output on air wins over one that is not.
+     *
+     * On air is not one thing, though. An output that has reached its hold is
+     * showing the graphic; one still `playing-in` may be mid-intro — or a
+     * hidden tab whose animation clock has stopped, stuck there for good, and
+     * reporting page one with no time left. Every command makes every output
+     * report, so "latest" handed the panel that stalled page after each Hold,
+     * until a healthy output next reported on a page turn. Ranked by how far
+     * along: holding, then playing-in, then playing-out, then the rest.
+     *
+     * Within a rank, an output that is reporting on time beats one gone quiet
+     * (heartbeats are every few seconds; a hidden tab's timers are throttled
+     * to one a minute), and among the reliable, the oldest connection wins
+     * rather than the latest report — a fixed answer, so two outputs a frame
+     * apart do not swap places on the panel at every report. With no output
+     * reporting at all, the retained report stands — a preview's, see `handle`,
+     * or the last word from outputs that have since gone.
      */
-    const onAir = (p: PlaybackReport | null) => p?.state === 'holding' || p?.state === 'playing-in' || p?.state === 'playing-out';
+    const now = Date.now();
     let chosen: SourceReport | null = null;
     for (const s of sources) {
       if (!s.playback || s.reportedAt === null) continue;
-      if (
-        !chosen ||
-        (onAir(s.playback) && !onAir(chosen.playback)) ||
-        (onAir(s.playback) === onAir(chosen.playback) && s.reportedAt > chosen.reportedAt!)
-      ) chosen = s;
+      if (!chosen || outranks(s, chosen, now)) chosen = s;
     }
 
     return {
       data: { ...channel.data },
       playback: chosen ? chosen.playback : channel.playback,
       reportedAt: chosen ? chosen.reportedAt : channel.reportedAt,
-      now: Date.now(),
+      now,
       sources,
       renderers,
       controllers,

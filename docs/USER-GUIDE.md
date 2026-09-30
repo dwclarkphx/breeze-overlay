@@ -627,7 +627,7 @@ An alerts source reads the Common Alerting Protocol — the format NWS warnings,
 - the NWS alerts API, like `https://api.weather.gov/alerts/active?area=AZ` for Arizona;
 - a single CAP alert document.
 
-Then narrow it down: **Area contains** (`Maricopa, Phoenix`), **SAME or UGC codes** (`004013, AZZ537`), **Event contains** (`Heat, Dust`), and a **Minimum severity**. You get one row per alert, most severe first, with `event`, `headline`, `description`, `instruction`, `severity`, `urgency`, `certainty`, `areaDesc`, `onset`, `expires` and more; `active` is false for an alert that has not started yet (a watch for tomorrow).
+Then narrow it down: **Area contains** (`Maricopa, Phoenix`), **SAME or UGC codes** (`004013, AZZ537`), **Event contains** (`Heat, Dust`), and a **Minimum severity**. You get one row per alert, most severe first, with `event`, `headline`, `description`, `instruction`, `severity`, `urgency`, `certainty`, `areaDesc`, `onset`, `expires` and more — including `areas` (`areaDesc` without the state, so `Pima; Pinal` rather than `Pima, AZ; Pinal, AZ`) and `areaKind` (`counties` when every area is a county, `areas` for forecast zones, which is how NWS issues heat and wind products); `active` is false for an alert that has not started yet (a watch for tomorrow).
 
 Test messages, cancellations and alerts past their expiry are always dropped — there is no setting for that. An alert that expires while the feed is unreachable still leaves the screen on time.
 
@@ -686,6 +686,7 @@ Add a **Table** layer, then point its **Source** at a data source.
 | **Date** | Keep the rows for today, tomorrow, the next seven days, or everything still to come — in a time zone you name |
 | **Lookup** | Bring columns across from another data source by a matching value — a city's display name and region onto each forecast row |
 | **Union** | Add another data source's rows underneath — a feed's alerts and your own typed announcements in one crawl |
+| **Compose** | Build a sentence from several columns with a template — one line per alert, ready for a crawl or a text cell |
 
 **Unpivot** is for the sheet somebody built for people rather than for graphics: one row a city, then `Mon`, `Tue`, `Wed` across the top. A table repeats rows, not columns, so it folds those columns into rows:
 
@@ -729,6 +730,23 @@ Things worth knowing:
 Matching ignores case and spaces at the ends; if the other source has the same value twice, the first row wins. A matched row takes the other source's values, blanks included. A row with no match gets empty values — except in a column it already had, which it keeps — so make sure the source has every value the feed sends, or add a **Filter** after the lookup to drop the rows it could not name. When the other source changes, the table changes with it.
 
 **Union** adds another source's rows underneath this one's. The columns are both sources' columns together; a column one side does not have is empty on its rows. Add a **Sort** after it to interleave them.
+
+**Compose** writes a new text column from a template that reads the row's other columns. A crawl reads one column per item and a text cell shows one, so a sentence made of several fields has to be built first:
+
+```
+The NWS has issued a {event} for the following {areaKind}: {areas|list}; from {onset|when} until {ends|when}
+→ The NWS has issued a Flood Watch for the following counties: Pima and Pinal; from 3:16 PM until Wed 3:15 AM
+```
+
+| Setting | What it does |
+|---|---|
+| **New column** | The column written — point a text cell, or a crawl's column, at it. A column of that name is replaced |
+| **Template** | Text with `{column}` fields. `'{{'` and `'}}'` write literal braces |
+| **Time zone** | For `when` and `time:` fields — `America/Phoenix`. Blank uses the machine showing the graphic |
+
+After a column name, `|` shapes the value, left to right: `list` (`A; B; C` → `A, B and C`), `drop:text` (removes it — `{areaDesc|drop:, AZ}`), `upper`, `lower`, `default:text` (when empty), `when` (a time as `3:35 PM` today, `Wed 3:15 AM` within the coming week, `Oct 6 3:15 AM` after that) and `time:h:mm A` (your own layout; the same tokens as a clock layer, in English). An empty value is empty text, never "null". Problems — an unclosed brace, an unknown modifier — are listed under the box as you type.
+
+`when` depends on the time of day, so a table or crawl using it re-runs as the day turns. On a crawl, put **Compose** in the crawl's transforms and set its column to the new one.
 
 A lookup or union reads the other source as it arrives, not after that source's own tables' transforms. The pickers under a Lookup, and the row cells below, already offer the columns it brings.
 

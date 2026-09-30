@@ -4,6 +4,20 @@ All notable changes to Breeze Overlay are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow the project rule: a feature bumps the minor version, a fix bumps the patch. Releases before 0.45.0 used two-part numbers (0.01–0.44). 1.0.0 will be the first public release.
 
+## [0.76.0] - 2026-09-29
+
+> One sentence from several columns.
+
+### Added
+
+- A **Compose** transform builds a text column from a template that reads the row's other columns, for a crawl or a text cell that needs a sentence rather than one field: `The NWS has issued a {event} for the following {areaKind}: {areas|list}; from {onset|when} until {ends|when}`. After a column name, `|` shapes the value — `list` (`A; B; C` → `A, B and C`), `drop:text`, `upper`, `lower`, `default:text`, `when` (a time as `3:35 PM` today, `Wed 3:15 AM` this week, `Oct 6 3:15 AM` after that) and `time:h:mm A` (the clock layer's tokens). It has a time zone of its own, is validated as it is typed (an unclosed brace, an unknown modifier), and a table or crawl using `when` re-runs as the day turns. It is in the editor's transforms list and in the schema.
+- A CAP source adds two columns: `areas`, the alert's areas without their state (`Pima; Pinal` for `Pima, AZ; Pinal, AZ`), and `areaKind`, `counties` when every UGC code is a county's and `areas` otherwise — NWS issues heat and wind products by forecast zone, so a sentence can say which.
+
+### Fixed
+
+- Pressing Hold or Resume on a paging table no longer sends the control panel's page list back to page one with no countdown when a second output on the channel is stalled. Every command makes every output report, and the panel showed whichever reported last — including an output still `playing-in` because its tab was hidden and its animation clock had stopped. The hub now speaks for the channel with the output furthest along (holding, then playing in, then playing out), then the one reporting on time, then the oldest connection, so outputs of the same stage no longer trade places on the panel at every report.
+- The control panel's page list counts a table's time left from when the report was made, not from when it arrived. The hub replays its last report to every panel on each command, and since 0.75.0 a heartbeat that only aged is not relayed, so the replay could be several seconds old — and every countdown and progress bar jumped back by that much after a Hold, a Resume, NEXT or an update, until the next page turn.
+
 ## [0.75.0] - 2026-09-28
 
 > The preview shows what the output shows, and says so.

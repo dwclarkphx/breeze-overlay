@@ -71,6 +71,37 @@ export interface CapAlert {
 
 const clean = (text: string | null | undefined): string => stripHtml(text ?? '');
 
+/**
+ * `Pima, AZ; Pinal, AZ` → `Pima; Pinal`.
+ *
+ * NWS writes a county alert's areas with the state after each name, which reads
+ * badly in a sentence and is redundant on a station's own screen. Only a
+ * trailing two-capital code is removed, so a zone called `Central Mountains`
+ * and a place called `St. Johns, AZ` are handled alike. Semicolons stay the
+ * separator — `{areas|list}` turns them into "Pima and Pinal".
+ */
+export function areaNames(areaDesc: string): string {
+  return areaDesc
+    .split(';')
+    .map((part) => part.trim().replace(/,\s*[A-Z]{2}$/, ''))
+    .filter(Boolean)
+    .join('; ');
+}
+
+/**
+ * `counties` when every UGC code in the alert is a county's, otherwise `areas`.
+ *
+ * A UGC code is a state, a class letter and three digits — `AZC015` is a county
+ * (`C`), `AZZ024` a forecast zone (`Z`). Heat and wind products are issued by
+ * zone, so a sentence that says "the following counties: Central Mountains"
+ * would be wrong. No UGC codes at all (a feed that does not carry them) is
+ * `areas`, the safe word.
+ */
+export function areaKind(codes: readonly string[]): 'counties' | 'areas' {
+  const ugc = codes.filter((c) => /^[A-Z]{2}[CZ]\d{3}$/.test(c));
+  return ugc.length > 0 && ugc.every((c) => c[2] === 'C') ? 'counties' : 'areas';
+}
+
 /* ------------------------------------------------------------------ XML */
 
 /**
@@ -345,6 +376,8 @@ export function capToRows(alerts: CapAlert[], def: CapDataSource, now: Date): Da
     category: alert.category || null,
     msgType: alert.msgType || null,
     areaDesc: alert.areaDesc || null,
+    areas: areaNames(alert.areaDesc) || null,
+    areaKind: areaKind(alert.codes),
     codes: alert.codes.length ? alert.codes.join(', ') : null,
     sender: alert.sender || null,
     senderName: alert.senderName || null,

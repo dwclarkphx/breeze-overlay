@@ -27,6 +27,7 @@
 /* ------------------------------------------------------------------ DataSet */
 
 import type { MediaCheck, MediaSummary } from './media.js';
+import { parseTemplate, renderTemplate, templateUsesClock } from './compose.js';
 import { addDays, localParts, readTime } from './time.js';
 
 export const COLUMN_TYPES = ['string', 'number', 'boolean', 'date'] as const;
@@ -301,13 +302,32 @@ export type DataTransform =
   | UnpivotTransform
   | DateTransform
   | LookupTransform
-  | UnionTransform;
+  | UnionTransform
+  | ComposeTransform;
 
 /**
  * What a transform may read besides its own rows: the clock, for `date`, and
  * other sources, for `lookup` and `union`. Both optional — without a clock it
  * is now; without sources a lookup finds nothing and a union adds nothing.
  */
+/**
+ * Build a text column from a template that reads other columns.
+ *
+ * One row in, one row out, with `as` added: `The NWS has issued a {event} for
+ * the following {areaKind}: {areas|list}; from {onset|when} until {ends|when}`
+ * becomes a single sentence per alert that a ticker or a text cell can show.
+ * The template language, and what each modifier does, is in `compose.ts`.
+ */
+export interface ComposeTransform {
+  op: 'compose';
+  /** The column written. An existing column of that name is replaced. */
+  as: string;
+  /** Text with `{column}` and `{column|modifier}` fields. */
+  template: string;
+  /** IANA zone for `when` and `time:` fields. Absent: the zone of the machine showing the graphic. */
+  timezone?: string;
+}
+
 export interface TransformContext {
   now?: Date;
   source?: (id: string) => DataSet | undefined;
@@ -315,7 +335,7 @@ export interface TransformContext {
 
 /** Whether a pipeline depends on the clock — a graphic showing it must re-run it as time passes. */
 export function transformsUseClock(transforms: readonly DataTransform[] | undefined): boolean {
-  return (transforms ?? []).some((t) => t.op === 'date');
+  return (transforms ?? []).some((t) => t.op === 'date' || (t.op === 'compose' && templateUsesClock(t.template)));
 }
 
 /** The other sources a pipeline reads — it must re-run when any of them changes. */
@@ -750,6 +770,14 @@ export function applyTransforms(data: DataSet, transforms: DataTransform[] = [],
         rows = out.rows;
         columns = out.columns;
         copied = true;
+        break;
+      }
+      case 'compose': {
+        const parsed = parseTemplate(t.template);
+        const now = ctx.now ?? new Date();
+        rows = mutable().map((row) => ({ ...row, [t.as]: renderTemplate(parsed, row, { timezone: t.timezone, now }) }));
+        copied = true;
+        if (!columns.some((c) => c.key === t.as)) columns = [...columns, { key: t.as, type: 'string' }];
         break;
       }
       case 'union': {
@@ -1672,6 +1700,10 @@ export const CAP_COLUMNS: DataColumn[] = [
   { key: 'category', label: 'Category', type: 'string' },
   { key: 'msgType', label: 'Message Type', type: 'string' },
   { key: 'areaDesc', label: 'Area', type: 'string' },
+  // `areaDesc` without the state suffixes — `Pima; Pinal` for `Pima, AZ; Pinal, AZ`. Reads well through `{areas|list}`.
+  { key: 'areas', label: 'Areas', type: 'string' },
+  // `counties` when every area is a county, otherwise `areas` — from the UGC codes, so a sentence can say which.
+  { key: 'areaKind', label: 'Area Kind', type: 'string' },
   { key: 'codes', label: 'Codes', type: 'string' },
   { key: 'sender', label: 'Sender', type: 'string' },
   { key: 'senderName', label: 'Sender Name', type: 'string' },

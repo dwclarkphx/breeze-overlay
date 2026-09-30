@@ -64,6 +64,8 @@ import {
   type MediaLayer,
   type MediaOnError,
   type UnionTransform,
+  type ComposeTransform,
+  parseTemplate,
   type UnpivotTransform,
 } from '@breeze/schema';
 import { useI18n, useRichT, useT } from '@breeze/i18n/react';
@@ -2996,6 +2998,80 @@ function UnionFields({
   );
 }
 
+/**
+ * The `compose` editor (0.76.0): a new column built from a template over the
+ * others. The template is a multi-line box because the sentences it exists for
+ * are long; problems are listed under it as they are typed rather than at save.
+ */
+function ComposeFields({
+  compose,
+  columns,
+  onChange,
+}: {
+  compose: ComposeTransform;
+  columns: DataColumn[];
+  onChange: (next: ComposeTransform) => void;
+}): JSX.Element {
+  const t = useT();
+  // The name and the zone are committed on blur: half a column name is not one,
+  // and half a zone name is not a zone. The template commits as it is typed.
+  const [name, setName] = useState(compose.as);
+  const [zone, setZone] = useState(compose.timezone ?? '');
+  // A template cannot be empty in the file, so an emptied box keeps its last
+  // good text stored until something is typed again.
+  const [template, setTemplate] = useState(compose.template);
+  const set = (patch: Partial<ComposeTransform>) =>
+    onChange(withoutEmpty({ ...compose, ...patch }) as ComposeTransform);
+  const typedZone = zone.trim();
+  const badZone = typedZone !== '' && !knownZone(typedZone);
+  const problems = parseTemplate(template).problems;
+  return (
+    <div className="transform-advance">
+      <label>
+        <span>{t('editor.properties.composeAs')}</span>
+        <input
+          value={name}
+          title={t('editor.properties.composeAsTitle')}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={() => { if (name.trim()) set({ as: name.trim() }); else setName(compose.as); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+        />
+      </label>
+      <label>
+        <span>{t('editor.properties.composeTemplate')}</span>
+        <textarea
+          rows={4}
+          value={template}
+          placeholder={t('editor.properties.composeTemplatePlaceholder')}
+          onChange={(e) => {
+            setTemplate(e.target.value);
+            if (e.target.value !== '') set({ template: e.target.value });
+          }}
+        />
+      </label>
+      {problems.map((p) => (
+        <p key={p} className="prop-warning" data-warning="compose-template">{p}</p>
+      ))}
+      <label>
+        <span>{t('editor.properties.timezone')}</span>
+        <input
+          value={zone}
+          placeholder={t('editor.properties.timezonePlaceholder')}
+          title={t('editor.properties.composeTimezoneTitle')}
+          onChange={(e) => setZone(e.target.value)}
+          onBlur={() => { if (!badZone) set({ timezone: typedZone || undefined }); }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !badZone) set({ timezone: typedZone || undefined }); }}
+        />
+      </label>
+      {badZone && <p className="prop-warning" data-warning="compose-timezone">{t('editor.properties.timezoneUnknown')}</p>}
+      <p className="prop-note">
+        {t('editor.properties.composeColumns', { columns: columns.map((c) => `{${c.key}}`).join(' ') })}
+      </p>
+      <p className="prop-note">{t('editor.properties.composeModifiers')}</p>
+    </div>
+  );
+}
+
 /** The first column whose name or type says date or time — the likely one for a `date` step. */
 function dateLikeColumn(columns: DataColumn[]): string | undefined {
   return (
@@ -3474,6 +3550,15 @@ function TableSection({
               />
             )}
 
+            {transform.op === 'compose' && (
+              <ComposeFields
+                key={`${layer.id}:${i}`}
+                compose={transform}
+                columns={stages[i]!}
+                onChange={(next) => setTransform(i, next)}
+              />
+            )}
+
             {transform.op === 'union' && (
               <UnionFields
                 union={transform}
@@ -3526,6 +3611,7 @@ function TableSection({
                 : op === 'date' ? { op: 'date', column: dateLikeColumn(columns) ?? key, keep: 'days' }
                 : op === 'lookup' ? { op: 'lookup', source: other, key }
                 : op === 'union' ? { op: 'union', source: other }
+                : op === 'compose' ? { op: 'compose', as: 'text', template: '{' + key + '}' }
                 : { op, n: op === 'limit' ? 10 : 0 };
               // advance reads every round, so it can only ever be right at the
               // front. Appending it would put it after the filters most tables
@@ -3547,6 +3633,7 @@ function TableSection({
             <option value="date" disabled={noColumns}>{t('editor.properties.opDate')}</option>
             <option value="lookup" disabled={noColumns || noOtherSource}>{t('editor.properties.opLookup')}</option>
             <option value="union" disabled={noOtherSource}>{t('editor.properties.opUnion')}</option>
+            <option value="compose" disabled={noColumns}>{t('editor.properties.opCompose')}</option>
           </select>
         </Field>
       </Section>

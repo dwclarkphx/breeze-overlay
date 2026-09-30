@@ -24,6 +24,7 @@ import {
   compareReports,
   joinTarget,
   onAirSources,
+  reportAgeSeconds,
   reportOf,
   type ChannelStateLike,
   type RuntimeLike,
@@ -528,7 +529,7 @@ function makePageList(
   section: HTMLElement | null,
   list: HTMLElement | null,
   send: (command: Record<string, unknown>) => void,
-): { render(tables: TableReport[] | undefined): void } {
+): { render(tables: TableReport[] | undefined, ageSeconds?: number): void } {
   if (!section || !list) return { render: () => {} };
 
   interface RowState {
@@ -641,7 +642,12 @@ function makePageList(
   };
 
   return {
-    render(tables) {
+    /**
+     * `ageSeconds` is how old the report is: its time left is as of then, not
+     * as of now, so a report the hub has been holding for six seconds has six
+     * fewer seconds on the clock than it says.
+     */
+    render(tables, ageSeconds = 0) {
       if (!tables || tables.length === 0) {
         section.hidden = true;
         list.textContent = '';
@@ -662,10 +668,11 @@ function makePageList(
         const turned = row.report.page !== report.page || row.deadline === null;
         row.report = report;
         if (report.cycling && report.secondsLeft !== null) {
-          row.deadline = Date.now() + report.secondsLeft * 1000;
+          const left = Math.max(0, report.secondsLeft - ageSeconds);
+          row.deadline = Date.now() + left * 1000;
           // The page's full time is only known when it arrives; a report in
           // the middle of a page must not shrink the bar's scale.
-          if (turned || report.secondsLeft > row.total) row.total = report.secondsLeft;
+          if (turned || left > row.total) row.total = left;
         } else {
           row.deadline = null;
         }
@@ -1338,7 +1345,14 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
       let message: {
         type: string;
         code?: string;
-        state?: { renderers: number; playback?: unknown; data?: Record<string, unknown>; sources?: SourceLike[] };
+        state?: {
+          renderers: number;
+          playback?: unknown;
+          reportedAt?: number | null;
+          now?: number;
+          data?: Record<string, unknown>;
+          sources?: SourceLike[];
+        };
       };
       try {
         message = JSON.parse(String(event.data));
@@ -1368,7 +1382,7 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
     socket.addEventListener('error', () => socket?.close());
   }
 
-  function render(state?: { renderers: number; playback?: unknown }): void {
+  function render(state?: { renderers: number; playback?: unknown; reportedAt?: number | null; now?: number }): void {
     if (!state) return;
     const playback = state.playback as
       | { state: string; step: number; stepCount: number; tables?: TableReport[] }
@@ -1384,7 +1398,7 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
     playbackEl.textContent = playback?.state ?? 'idle';
     stepEl.textContent = playback ? `${playback.step}/${playback.stepCount}` : '–';
     // With no output there is no page to show; an old report would be a lie.
-    pages.render(state.renderers > 0 ? playback?.tables : undefined);
+    pages.render(state.renderers > 0 ? playback?.tables : undefined, reportAgeSeconds(state));
   }
 
   /**

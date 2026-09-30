@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { compareReports, joinTarget, onAirSources, reportOf, SYNC_TOLERANCE, type SourceLike } from '../../client/join.js';
+import { compareReports, joinTarget, onAirSources, reportAgeSeconds, reportOf, SYNC_TOLERANCE, type SourceLike } from '../../client/join.js';
 
 const holding = { state: 'holding', time: 1, step: 1 };
 const source = (id: string, over: Partial<SourceLike> = {}): SourceLike => ({
@@ -134,5 +134,22 @@ describe('compareReports', () => {
 
   it('flags a preview that is not on the same hold', () => {
     expect(compareReports(output, 0, { ...output, state: 'idle', step: 0 })[0]!.ok).toBe(false);
+  });
+});
+
+describe('reportAgeSeconds (0.76.0)', () => {
+  it('is how long the hub had held the report when it sent it', () => {
+    expect(reportAgeSeconds({ reportedAt: 10_000, now: 16_500 })).toBe(6.5);
+  });
+
+  it('is zero for a report made this instant, or with no clock to read', () => {
+    expect(reportAgeSeconds({ reportedAt: 10_000, now: 10_000 })).toBe(0);
+    expect(reportAgeSeconds({ reportedAt: null, now: 10_000 })).toBe(0);
+    expect(reportAgeSeconds({ reportedAt: 10_000 })).toBe(0);
+    expect(reportAgeSeconds(undefined)).toBe(0);
+  });
+
+  it('is never negative, whatever order the two stamps come in', () => {
+    expect(reportAgeSeconds({ reportedAt: 12_000, now: 10_000 })).toBe(0);
   });
 });

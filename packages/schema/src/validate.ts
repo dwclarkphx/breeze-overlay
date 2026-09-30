@@ -30,6 +30,7 @@ import {
   type DataTransform,
   type PlaceRef,
 } from './data.js';
+import { parseTemplate } from './compose.js';
 import { MEDIA_COLUMNS } from './media.js';
 import { MODE_PATTERN } from './rules.js';
 import { compositionDuration, walkLayers } from './duration.js';
@@ -131,6 +132,15 @@ function checkMedia(layer: MediaLayer, path: string, inCell: boolean, cycling = 
 function checkDateTransforms(transforms: readonly DataTransform[] | undefined, path: string): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   for (const [i, t] of (transforms ?? []).entries()) {
+    if (t.op === 'compose') {
+      if (t.timezone && !isValidTimeZone(t.timezone)) {
+        issues.push({ path: `${path}/transforms/${i}/timezone`, message: `unknown time zone "${t.timezone}"` });
+      }
+      for (const problem of parseTemplate(t.template).problems) {
+        issues.push({ path: `${path}/transforms/${i}/template`, message: problem });
+      }
+      continue;
+    }
     if (t.op !== 'date') continue;
     if (t.timezone && !isValidTimeZone(t.timezone)) {
       issues.push({ path: `${path}/transforms/${i}/timezone`, message: `unknown time zone "${t.timezone}"` });
@@ -527,6 +537,7 @@ export function validateCompositionSemantics(
       let openColumns = false;
       for (const [i, t] of (layer.transforms ?? []).entries()) {
         if (t.op === 'rank') declared.add(t.as ?? DEFAULT_RANK_KEY);
+        if (t.op === 'compose') declared.add(t.as);
         if (t.op === 'lookup') {
           if (t.columns) for (const c of t.columns) declared.add(c);
           else openColumns = true;
