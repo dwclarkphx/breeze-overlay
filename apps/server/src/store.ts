@@ -23,7 +23,9 @@ import {
   assertKey,
   assetReferences,
   createProject,
+  displayName,
   makeKeyedId,
+  pagedTables,
   normalizeFolder,
   normalizeTags,
   referencedAssets,
@@ -33,6 +35,7 @@ import {
   type AssetRef,
   type AssetUsage,
   type Composition,
+  type PagedTable,
   type Project,
 } from '@breeze/schema';
 import {
@@ -325,6 +328,17 @@ export interface ChannelRef {
   sceneId: string | null;
   /** Layer id within the scene; null when the composition is played directly. */
   layerId: string | null;
+  /**
+   * Tables on this channel built to page — rows per page set, or a cycle — each
+   * with the address NEXT, PREV and `page` take as `?table=`. Empty when there
+   * are none.
+   *
+   * Here so a control surface can offer a page button for exactly the graphics
+   * that have one, when it builds its buttons at connect — before any output
+   * has reported in. The address is the one a live report will show, from the
+   * same function the runtime uses (`tableAddress` in `@breeze/schema`).
+   */
+  tables: PagedTable[];
 }
 
 /*
@@ -344,6 +358,12 @@ export async function listChannels(projectId: string): Promise<ChannelRef[]> {
   if (cached && cached.updatedAt === project.updatedAt) return cached.channels;
 
   const channels: ChannelRef[] = [];
+  const byId = new Map(project.compositions.map((c) => [c.id, c]));
+  const resolve = (id: string): Composition | undefined => byId.get(id);
+  const tablesOf = (ref: string): PagedTable[] => {
+    const target = byId.get(ref);
+    return target ? pagedTables(target, resolve) : [];
+  };
   const seen = new Set<string>();
 
   const claim = (entry: ChannelRef): void => {
@@ -356,7 +376,19 @@ export async function listChannels(projectId: string): Promise<ChannelRef[]> {
   };
 
   for (const comp of project.compositions) {
-    claim({ channel: comp.id, ref: comp.id, name: comp.name, sceneId: null, layerId: null });
+    /*
+     * `displayName`, because this is what a control surface prints on a button.
+     * A project written before names were required can still carry an empty
+     * one, and an empty Stream Deck key is worse than one showing the id.
+     */
+    claim({
+      channel: comp.id,
+      ref: comp.id,
+      name: displayName(comp.name, comp.id),
+      sceneId: null,
+      layerId: null,
+      tables: pagedTables(comp, resolve),
+    });
   }
 
   for (const comp of project.compositions) {
@@ -367,6 +399,9 @@ export async function listChannels(projectId: string): Promise<ChannelRef[]> {
         name: element.name,
         sceneId: comp.id,
         layerId: element.layerId,
+        // An element plays its own composition on its own runtime, so its
+        // tables are addressed from that composition's top, not the scene's.
+        tables: tablesOf(element.ref),
       });
     }
   }
@@ -401,7 +436,7 @@ export async function listAllChannels(): Promise<ProjectChannels[]> {
     try {
       out.push({
         id: summary.id,
-        name: summary.name,
+        name: displayName(summary.name, summary.id),
         channels: await listChannels(summary.id),
       });
     } catch {

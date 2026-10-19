@@ -16,17 +16,20 @@ import {
   collectOverrideBindings,
   createComposition,
   isValidKey,
+  nameProblem,
+  normalizeName,
   stepCount,
   suggestKey,
   uniqueKeyedId,
   type Composition,
+  type NameProblem,
   type Project,
 } from '@breeze/schema';
 import { CompositionValidationError, assertValidComposition } from '@breeze/schema/validate';
 
 import { forgetMode } from '../mode.js';
 import { actorOf, record } from '../audit.js';
-import { fail } from '../errors.js';
+import { fail, nameFail } from '../errors.js';
 import {
   NotFoundError,
   compositionReferrers,
@@ -43,13 +46,54 @@ import {
   writeProject,
 } from '../store.js';
 
+type Settled = { name: string } | { problem: NameProblem };
+
+/**
+ * A name on a create: omitted means the default, anything sent must pass.
+ *
+ * Omitted and empty are deliberately different answers. A caller that sends no
+ * name at all is asking for the default and has always got one; a caller that
+ * sends `""` has sent a name, and an empty one is now refused rather than
+ * quietly swapped for "Untitled" behind their back.
+ */
+function nameForCreate(raw: unknown, fallback: string): Settled {
+  if (raw === undefined) return { name: fallback };
+  const name = typeof raw === 'string' ? raw : '';
+  const problem = nameProblem(name);
+  return problem ? { problem } : { name: normalizeName(name) };
+}
+
+/**
+ * A name on a save over something already on disk.
+ *
+ * An *unchanged* name is let through even if it breaks the rules. That is a
+ * project written before names were required — it must stay saveable while
+ * someone fixes something else in it, the same reason the JSON Schema still
+ * accepts any string (names.ts). Only a name being changed is held to them.
+ */
+function nameForSave(raw: string, previous: string | undefined): Settled {
+  const name = raw;
+  if (previous !== undefined && name === previous) return { name };
+  const problem = nameProblem(name);
+  return problem ? { problem } : { name: normalizeName(name) };
+}
+
+const notFoundAsUndefined = (err: unknown): undefined => {
+  if (err instanceof NotFoundError) return undefined;
+  throw err;
+};
+
 export async function registerProjectRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/projects', async () => ({ projects: await listProjects() }));
 
   app.post<{ Body: { name?: string; id?: string; key?: string } }>('/api/projects', async (req, reply) => {
-    const name = req.body?.name ?? 'Untitled project';
+    const settled = nameForCreate(req.body?.name, 'Untitled project');
+    if ('problem' in settled) {
+      reply.code(400);
+      return nameFail(settled.problem);
+    }
     try {
-      const project = await newProject(name, req.body?.id, req.body?.key);
+      const project = await newProject(settled.name, req.body?.id, req.body?.key);
       void record({
         action: 'project.create',
         actor: actorOf(req),
@@ -102,9 +146,55 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
 
   app.get<{ Params: { id: string } }>('/api/projects/:id', async (req) => readProject(req.params.id));
 
-  app.put<{ Params: { id: string }; Body: Project }>('/api/projects/:id', async (req) => {
-    const body = { ...req.body, id: req.params.id };
-    return writeProject(body);
+  app.put<{ Params: { id: string }; Body: Project }>('/api/projects/:id', async (req, reply) => {
+    const existing = await readProject(req.params.id).catch(notFoundAsUndefined);
+
+    /*
+     * Names are only checked when they are strings. A missing or non-string
+     * name is a malformed document, and the schema's 422 is the truer answer
+     * for that than a 400 about what the name should contain.
+     */
+    let projectName: unknown = req.body?.name;
+    if (typeof projectName === 'string') {
+      const settled = nameForSave(projectName, existing?.name);
+      if ('problem' in settled) {
+        reply.code(400);
+        return nameFail(settled.problem);
+      }
+      projectName = settled.name;
+    }
+
+    /*
+     * Every composition's name too — this is the route the editor saves
+     * through, so a scene renamed in the properties panel arrives here rather
+     * than at the composition PUT. `composition` names which one was refused,
+     * since `field: 'name'` alone cannot say which of eleven.
+     */
+    let compositions: unknown = req.body?.compositions;
+    if (Array.isArray(compositions)) {
+      const before = new Map((existing?.compositions ?? []).map((c) => [c.id, c.name]));
+      const next: unknown[] = [];
+      for (const comp of compositions as Composition[]) {
+        if (!comp || typeof comp !== 'object' || typeof comp.name !== 'string') {
+          next.push(comp);
+          continue;
+        }
+        const settled = nameForSave(comp.name, before.get(comp.id));
+        if ('problem' in settled) {
+          reply.code(400);
+          return { ...nameFail(settled.problem), composition: comp.id };
+        }
+        next.push({ ...comp, name: settled.name });
+      }
+      compositions = next;
+    }
+
+    return writeProject({
+      ...req.body,
+      id: req.params.id,
+      name: projectName as string,
+      compositions: compositions as Composition[],
+    });
   });
 
   app.delete<{ Params: { id: string } }>('/api/projects/:id', async (req, reply) => {
@@ -156,7 +246,12 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
     '/api/projects/:id/compositions',
     async (req, reply) => {
       const project = await readProject(req.params.id);
-      const name = req.body?.name?.trim() || 'Untitled scene';
+      const settled = nameForCreate(req.body?.name, 'Untitled scene');
+      if ('problem' in settled) {
+        reply.code(400);
+        return nameFail(settled.problem);
+      }
+      const name = settled.name;
 
       const chosen =
         req.body?.key !== undefined && req.body.key.trim().length > 0
@@ -205,8 +300,20 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
 
   app.put<{ Params: { id: string; compId: string }; Body: Composition }>(
     '/api/projects/:id/compositions/:compId',
-    async (req) => {
-      const comp = { ...req.body, id: req.params.compId };
+    async (req, reply) => {
+      const previous = await getComposition(req.params.id, req.params.compId)
+        .then((c) => c.name)
+        .catch(notFoundAsUndefined);
+      let name: unknown = req.body?.name;
+      if (typeof name === 'string') {
+        const settled = nameForSave(name, previous);
+        if ('problem' in settled) {
+          reply.code(400);
+          return { ...nameFail(settled.problem), composition: req.params.compId };
+        }
+        name = settled.name;
+      }
+      const comp = { ...req.body, id: req.params.compId, name: name as string };
       // Asset-aware, so a mask `src` pointing at nothing in the bin is
       // refused here rather than rendering as no mask at all, silently
       // (MASKS.md §2.4).

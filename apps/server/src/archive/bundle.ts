@@ -32,7 +32,16 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { FORMAT_VERSION, assetReferences, type AssetRef, type Composition, type Project } from '@breeze/schema';
+import {
+  FORMAT_VERSION,
+  assetReferences,
+  nameProblem,
+  normalizeName,
+  type AssetRef,
+  type Composition,
+  type NameProblem,
+  type Project,
+} from '@breeze/schema';
 
 import { projectAssetsDir, projectDataSourcesFile, projectDir } from '../config.js';
 import { readDataSources } from '../data/sources.js';
@@ -369,6 +378,132 @@ export function openBundle(buffer: Buffer, limits: Parameters<typeof readArchive
   return { manifest, projects };
 }
 
+/* ------------------------------------------------------------- names */
+
+/**
+ * A name in a bundle that the editor would refuse.
+ *
+ * Backups written before names were required can carry an empty project or
+ * composition name, and a hand-edited bundle can carry anything. Restoring one
+ * would put a blank tile on the portal and a blank key on every Stream Deck
+ * that builds presets from it — so the restore asks for a name first, the same
+ * way it asks about id collisions: before anything is written.
+ */
+export interface NameIssue {
+  /** Bundled project id — the key the replacement is sent back under. */
+  project: string;
+  /** Set when the issue is a composition's name; absent for the project's own. */
+  composition?: string;
+  /** The name as it stands, after any replacement already supplied. */
+  name: string;
+  problem: NameProblem;
+}
+
+/** Replacement names for one bundled project. */
+export interface ProjectNames {
+  name?: string;
+  /** Composition id → replacement name. */
+  compositions?: Record<string, string>;
+}
+
+/** Replacements for a whole restore, by bundled project id. */
+export type NameOverrides = Record<string, ProjectNames>;
+
+/**
+ * Read the `x-breeze-names` header: base64 of UTF-8 JSON.
+ *
+ * A header rather than part of the body because the body is the zip itself,
+ * sent raw, and turning restore into a multipart upload to carry a few names
+ * would change the endpoint for every existing caller. Base64 rather than raw
+ * JSON because browsers refuse header values outside Latin-1 — a Japanese name
+ * typed into the prompt would otherwise fail inside `fetch` before it left the
+ * page. The cost is the usual header ceiling (16 KB in Node), which is room for
+ * a few hundred replacement names.
+ */
+export function parseNameOverrides(header: unknown): NameOverrides {
+  if (header === undefined) return {};
+  if (typeof header !== 'string') throw new BundleError('x-breeze-names must be sent once');
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(header, 'base64').toString('utf8'));
+  } catch {
+    throw new BundleError('x-breeze-names is not base64-encoded JSON');
+  }
+
+  const isRecord = (v: unknown): v is Record<string, unknown> =>
+    typeof v === 'object' && v !== null && !Array.isArray(v);
+  const shape = 'x-breeze-names must look like {"<project id>": {"name": "…", "compositions": {"<id>": "…"}}}';
+  if (!isRecord(parsed)) throw new BundleError(shape);
+
+  const out: NameOverrides = {};
+  for (const [projectId, entry] of Object.entries(parsed)) {
+    if (!isRecord(entry)) throw new BundleError(shape);
+    const names: ProjectNames = {};
+    if (entry.name !== undefined) {
+      if (typeof entry.name !== 'string') throw new BundleError(shape);
+      names.name = entry.name;
+    }
+    if (entry.compositions !== undefined) {
+      if (!isRecord(entry.compositions)) throw new BundleError(shape);
+      const comps: Record<string, string> = {};
+      for (const [compId, name] of Object.entries(entry.compositions)) {
+        if (typeof name !== 'string') throw new BundleError(shape);
+        comps[compId] = name;
+      }
+      names.compositions = comps;
+    }
+    out[projectId] = names;
+  }
+  return out;
+}
+
+/**
+ * The project with any replacement names applied and every name normalised.
+ *
+ * Normalising here as well as in the routes means a restored name is stored
+ * the same way a typed one is — NFC, trimmed — so a backup cannot carry in a
+ * decomposed "é" that the duplicate-looking scene beside it does not match.
+ * A name that still breaks a rule is left as it is for `nameIssues` to report.
+ */
+export function applyNames(project: Project, names: ProjectNames | undefined): Project {
+  const settle = (raw: string | undefined, replacement: string | undefined): string => {
+    const chosen = replacement ?? raw ?? '';
+    return nameProblem(chosen) ? chosen : normalizeName(chosen);
+  };
+  return {
+    ...project,
+    name: settle(project.name, names?.name),
+    compositions: project.compositions.map((comp) => ({
+      ...comp,
+      name: settle(comp.name, names?.compositions?.[comp.id]),
+    })),
+  };
+}
+
+/**
+ * Every name in `project` that breaks a rule.
+ *
+ * `includeProject: false` is the merge case, where the bundled project's own
+ * name is discarded — its compositions land in a project that already has one.
+ */
+export function nameIssues(
+  project: Project,
+  bundledId: string,
+  opts: { includeProject: boolean },
+): NameIssue[] {
+  const issues: NameIssue[] = [];
+  if (opts.includeProject) {
+    const problem = nameProblem(project.name);
+    if (problem) issues.push({ project: bundledId, name: project.name ?? '', problem });
+  }
+  for (const comp of project.compositions ?? []) {
+    const problem = nameProblem(comp.name);
+    if (problem) issues.push({ project: bundledId, composition: comp.id, name: comp.name ?? '', problem });
+  }
+  return issues;
+}
+
 /** The project document inside a bundle, parsed and checked. */
 export function bundledProject(files: Map<string, Uint8Array>, id: string): Project {
   const raw = files.get('project.json');
@@ -398,11 +533,16 @@ export async function mergeIntoProject(
   contents: BundleContents,
   bundledId: string,
   targetId: string,
+  names?: ProjectNames,
 ): Promise<{ id: string; added: string[]; renamed: Array<{ from: string; to: string }>; assets: number }> {
   const files = contents.projects.get(bundledId);
   if (!files) throw new BundleError(`bundle has no project "${bundledId}"`);
 
-  const incoming = bundledProject(files, bundledId);
+  const incoming = applyNames(bundledProject(files, bundledId), names);
+  // The route checks first and answers with the full list; this is the second
+  // lock, for a caller that reaches this function some other way.
+  const unnamed = nameIssues(incoming, bundledId, { includeProject: false });
+  if (unnamed.length) throw new BundleError(`bundle project "${bundledId}" has ${unnamed.length} unusable name(s)`);
   const target = await readProject(targetId);
 
   const existingComps = new Set(target.compositions.map((c) => c.id));
@@ -521,12 +661,16 @@ export async function restoreProject(
   contents: BundleContents,
   bundledId: string,
   targetId: string,
-  opts: { overwrite: boolean },
+  opts: { overwrite: boolean; names?: ProjectNames },
 ): Promise<RestoreOutcome> {
   const files = contents.projects.get(bundledId);
   if (!files) throw new BundleError(`bundle has no project "${bundledId}"`);
 
-  const project = bundledProject(files, bundledId);
+  const project = applyNames(bundledProject(files, bundledId), opts.names);
+  // Same second lock as `mergeIntoProject`: the route has already refused
+  // with the list, so reaching this means a caller skipped the route.
+  const unnamed = nameIssues(project, bundledId, { includeProject: true });
+  if (unnamed.length) throw new BundleError(`bundle project "${bundledId}" has ${unnamed.length} unusable name(s)`);
 
   /*
    * Rewriting the id also rewrites nothing else, and that is correct.

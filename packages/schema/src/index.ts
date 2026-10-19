@@ -26,5 +26,7 @@ export * from './duration.js';
 export * from './bindings.js';
 export * from './factory.js';
 export * from './keys.js';
+export * from './names.js';
+export * from './paging.js';
 export * from './scene.js';
 export * from './assets.js';

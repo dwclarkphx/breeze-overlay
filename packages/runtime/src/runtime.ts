@@ -30,6 +30,7 @@ import {
   type RuleContext,
   collectBindings,
   stepCount as schemaStepCount,
+  tableAddress as schemaTableAddress,
   type AnimatableProp,
   type BindingData,
   type Composition,
@@ -1432,7 +1433,17 @@ export class BreezeRuntime {
 
   private onComplete(): void {
     this.state = 'finished';
-    this.stopCycleTimer();
+    /*
+     * Off air, so back to page one now rather than at the next PLAY: the
+     * status a control surface shows between runs is the page the graphic
+     * will open on, and an operator can still choose another before PLAY.
+     *
+     * The reveal track is *not* refilled here. The playhead is at the end, so
+     * `refreshTableTracks` would clear the rebuilt-rows flag without refilling
+     * anything, and the next run would reveal rows that no longer exist. PLAY
+     * refills it once the playhead is back at the start.
+     */
+    this.resetTables();
     this.stopCrawls();
     this.videos.pause();
     this.emit('finished');
@@ -1481,13 +1492,17 @@ export class BreezeRuntime {
     const atEnd = this.tl.time() >= this.tl.duration() - 1e-4;
     if (this.state === 'finished' || this.state === 'idle' || this.state === 'playing-out' || atEnd) {
       /*
-       * A fresh run of a self-paging graphic starts on its first page, not on
-       * whichever page its last run was cycling through when it went off air.
-       * Not from `idle`: that is either a graphic that has never run or one a
-       * CLEAR already reset — and in both cases any page it is on now was
-       * chosen by an operator for it to open on.
+       * A fresh run starts every paged table on its first page, not on
+       * whichever page the last run left it on.
+       *
+       * Not from `idle` or `finished`: CLEAR and the end of the outro have
+       * already put every table back on page one (`onComplete`, `clear`), so a
+       * page it is on now was chosen by an operator, off air, for it to open on
+       * — `page?name=C` before PLAY. Only a run cut short still needs it here:
+       * PLAY pressed during the outro, or at the end of a timeline that never
+       * reached `onComplete`.
        */
-      if (this.state !== 'idle') this.resetCycles();
+      if (this.state !== 'idle' && this.state !== 'finished') this.resetTables();
       this.tl.pause();
       this.renderAt(0);
       // Pages reset above rebuilt rows the reveal no longer targets.
@@ -1826,7 +1841,7 @@ export class BreezeRuntime {
       this.tl.pause();
       this.renderAt(0);
       this.applyVisibilityWindows(0);
-      this.resetCycles();
+      this.resetTables();
       this.refreshTableTracks();
     }
 
@@ -1846,7 +1861,7 @@ export class BreezeRuntime {
     this.pendingHold = null;
     this.tl.pause();
     this.renderAt(0);
-    this.resetCycles();
+    this.resetTables();
     this.refreshTableTracks();
     this.stopCrawls();
     this.videos.syncTo(0);
@@ -2340,16 +2355,15 @@ export class BreezeRuntime {
   /**
    * What a caller should send to reach this table: the 0.72 field-address
    * shape, so tables and override fields are aimed at the same way.
+   *
+   * The rule lives in `@breeze/schema` because the server hands the same
+   * addresses out in `/api/channels` before anything plays. One function, so
+   * what a channel listing says and what a live report says cannot drift.
    */
   private tableAddress(id: string): string {
     const layer = this.nodes.get(id)?.layer;
     const binding = layer && layer.type === 'table' ? layer.binding : undefined;
-    if (!binding) return id;
-    let mount = '';
-    for (const m of this.mountIds()) {
-      if (id.startsWith(`${m}/`) && m.length > mount.length) mount = m;
-    }
-    return mount ? `${mount}.${binding}` : binding;
+    return schemaTableAddress(id, binding, this.mountIds());
   }
 
   /* ---------------------------------------------------------------- cycle */
@@ -2382,12 +2396,20 @@ export class BreezeRuntime {
     this.scheduleCycles();
   }
 
-  /** Back to page one with no anchor — a fresh run, or a CLEAR. */
-  private resetCycles(): void {
+  /**
+   * Every paged table back to page one, and every cycle unanchored — at the
+   * end of a run, on a CLEAR, and on a fresh run cut short.
+   *
+   * Every table, not only the ones that cycle: a table turned by hand with
+   * NEXT stayed on its last page through STOP and CLEAR and came back there on
+   * the next PLAY, which is not where a graphic starts. A cycle's HOLD is left
+   * alone; a hold survives the graphic leaving air.
+   */
+  private resetTables(): void {
     this.stopCycleTimer();
     for (const handle of this.tables.values()) {
-      if (!handle.cycle) continue;
       if (handle.block.turnTo(0)) handle.stale = true;
+      if (!handle.cycle) continue;
       handle.cycle.anchor = null;
       handle.cycle.done = false;
     }

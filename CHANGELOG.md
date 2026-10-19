@@ -4,6 +4,25 @@ All notable changes to Breeze Overlay are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow the project rule: a feature bumps the minor version, a fix bumps the patch. Releases before 0.45.0 used two-part numbers (0.01–0.44). 1.0.0 will be the first public release.
 
+## [0.77.0] - 2026-10-17
+
+> Every project and every graphic has a name you can read.
+
+### Added
+
+- **Restoring a backup asks for any name it cannot use.** When a backup carries a project or composition with an empty name, a line break in its name, or a name longer than 64 characters, the Backup page lists each one — project, composition, the name as it is, and what is wrong with it — with a box for the new name, pre-filled where it can be (a line break becomes a space, a long name is cut to 64). **Restore** stays disabled until every name is usable, and **Cancel** abandons the restore with nothing written. The server checks the whole bundle again before writing any of it, so a restore from a script is held to the same rules: `POST /api/restore` answers `400` with code `error.restoreNamesNeeded` and the list in `nameIssues`, and takes the replacements as base64 UTF-8 JSON in an `x-breeze-names` header — `{"<project id>": {"name": "…", "compositions": {"<composition id>": "…"}}}`. `POST /api/restore/inspect` returns the same list, and merges (`?mode=merge`) check composition names only, since the bundled project's own name is discarded.
+- `/api/channels` and `/api/projects/<project>/channels` list each graphic's paged tables — every table with **Rows per page** set or a **Cycle** — as `tables: [{ table, name, cycle }]`, so a control surface can offer page buttons for exactly the graphics that page, before any output has reported in. `table` is the address NEXT, PREV and `page` take, and the one a live `state` report shows; both now come from one function, so they cannot drift apart. A graphic with nothing to page lists `tables: []`.
+
+### Changed
+
+- **Project and composition names must contain at least one visible character**, on one line, up to 64 characters. Any language or script is fine — names never reach a URL, which is built from the id. A name made only of spaces or invisible characters (a zero-width space, a bidi mark) counts as empty; those characters are still allowed inside a real name, where Persian, Indic scripts and emoji need them. Names are stored trimmed and in Unicode NFC. Creating or renaming with a name that breaks a rule answers `400` with `field: "name"` and code `error.nameEmpty`, `error.nameControl` or `error.nameTooLong` (with `params.max`); a save that renames a composition also says which in `composition`. A create that sends no name at all still gets *Untitled project* or *Untitled scene*, but an empty name is no longer quietly replaced.
+- Every name field — the editor's composition name, the new project and new scene dialogs, and the restore prompt on the Backup page — says what is wrong in red directly under the field as you type. Pasting a name with line breaks or tabs in it puts spaces in their place and says so under the field, instead of the browser silently running the words together. The composition name field keeps the last good name if you clear it and click away.
+- Projects saved before this release with an empty name still open and save — only a name being *changed* is held to the rules. Until they are renamed, the portal, the editor's pickers, the play and control pages, the backup page and `/api/channels` (so Companion's presets) show the id in its place, and the editor's delete confirmation asks you to type the id rather than accepting an empty field.
+
+### Fixed
+
+- A table paged by hand with NEXT or PREV now goes back to its first page when the graphic leaves air — when its outro finishes after STOP, or on CLEAR — as a self-paging table already did. It used to stay on its last page and roll back in on it. The page does not change while the outro is still on screen, and a page chosen after that, off air (`page?name=C`, Companion's **Go to page**), is still the page the next PLAY opens on; PLAY used to discard that choice when the graphic had finished.
+
 ## [0.76.0] - 2026-09-29
 
 > One sentence from several columns.

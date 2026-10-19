@@ -16,6 +16,7 @@
 
 import {
   DATA_UPDATE_KEY,
+  displayName,
   sceneElements,
   type Composition,
   type DataSet,
@@ -216,7 +217,7 @@ export function playPage(opts: PlayPageOptions): string {
 <html lang="en">  <!-- Frozen: /play is byte-identical on every install (I18N.md §2). -->
 <head>
 <meta charset="utf-8">
-<title>${escapeHtml(composition.name)} — Breeze</title>
+<title>${escapeHtml(displayName(composition.name, composition.id))} — Breeze</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   html,body{margin:0;padding:0;width:100%;height:100%;background:transparent!important;overflow:hidden}
@@ -380,7 +381,7 @@ ${htmlOpen()}
 <head>
 <meta charset="utf-8">
 ${FAVICON_LINK}
-<title>${escapeHtml(t('server.pages.controlTitle', { name: composition.name }))}</title>
+<title>${escapeHtml(t('server.pages.controlTitle', { name: displayName(composition.name, composition.id) }))}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <style>
@@ -538,7 +539,7 @@ ${FAVICON_LINK}
 </head>
 <body>
 <header>
-  <h1>${escapeHtml(composition.name)}</h1>
+  <h1>${escapeHtml(displayName(composition.name, composition.id))}</h1>
   <span class="sub">${escapeHtml(projectId)}</span>
   <span class="status">
     <span class="dot" id="dot"></span>
@@ -762,7 +763,7 @@ export function portalPage(
           const cid = encodeURIComponent(c.id);
           return `<div class="scene" data-channel="${escapeHtml(`${p.id}/${c.id}`)}">
             <div class="scene-name">
-              ${escapeHtml(c.name)}
+              ${escapeHtml(displayName(c.name, c.id))}
               ${keyChip(c.id, t('server.pages.graphicKeyTitle', { project: p.id, key: c.id }), t, `/play/${pid}/${cid}`)}
               <span class="viewers" data-role="viewers" hidden></span>
             </div>
@@ -780,7 +781,7 @@ export function portalPage(
 
       return `<details class="tile" data-project="${escapeHtml(p.id)}">
         <summary>
-          <span class="tile-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+          <span class="tile-name" title="${escapeHtml(displayName(p.name, p.id))}">${escapeHtml(displayName(p.name, p.id))}</span>
           ${keyChip(p.id, t('server.pages.projectKeyTitle', { key: p.id }), t)}
           <span class="tile-count">${t('server.pages.sceneCount', { count })}</span>
           <span class="viewers" data-role="project-viewers" hidden></span>
@@ -996,7 +997,7 @@ export function backupPage(
     .map(
       (p) => `<tr>
       <td><input type="checkbox" class="pick" value="${escapeHtml(p.id)}" checked></td>
-      <td>${escapeHtml(p.name)}</td>
+      <td>${escapeHtml(displayName(p.name, p.id))}</td>
       <td><code>${escapeHtml(p.id)}</code></td>
       <td class="num">${p.compositions}</td>
       <td><a class="pill small" href="/api/projects/${encodeURIComponent(p.id)}/backup">${t('server.pages.download')}</a></td>
@@ -1033,6 +1034,13 @@ ${FAVICON_LINK}
   #report{max-width:900px;margin-top:14px}
   .warn{color:#d29922}
   .err{color:#f85149}
+  /* The restore's name prompt (0.77.0) — the one place this page takes typing. */
+  table.names td{vertical-align:top}
+  table.names small{display:block;margin-top:4px;font-size:11px}
+  input.rename{font:inherit;width:100%;min-width:220px;box-sizing:border-box;padding:6px 10px;
+         border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--fg)}
+  input.rename:focus{outline:2px solid var(--accent);outline-offset:-1px}
+  input.rename[aria-invalid="true"]{border-color:#d29922}
   footer{margin-top:28px;color:var(--muted);font-size:12px;max-width:820px}
 </style>
 </head>
@@ -1072,7 +1080,7 @@ ${
 <footer>
   <p>${t('server.pages.backupFooter', { id: `<em>${t('server.pages.secretId')}</em>` })}</p>
 </footer>
-${i18nBoot('__BREEZE_BACKUP__', 'backup.')}
+${i18nBoot('__BREEZE_BACKUP__', 'backup.', 'error.nameEmpty', 'error.nameControl', 'error.nameTooLong')}
 <script src="/public/backup.js"></script>
 </body>
 </html>`;

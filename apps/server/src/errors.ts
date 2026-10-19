@@ -29,6 +29,7 @@
  */
 
 import { makeTranslator, type Params } from '@breeze/i18n';
+import { NAME_MAX_LENGTH, type NameProblem } from '@breeze/schema';
 
 import { serverI18n } from './i18n.js';
 
@@ -63,6 +64,24 @@ export interface ErrorBody {
  * matching `body.code === 'error.compositionInUse'` gets a string that is
  * obviously an identifier rather than something that might be prose.
  */
+/**
+ * A refused project or composition name (`@breeze/schema` names.ts).
+ *
+ * One code per rule rather than one code with the rule as a param, so a client
+ * can say "too long — 64 at most" and "no line breaks" in its own words. The
+ * codes are spelled out as literals so `i18n:check` can see every one of them.
+ */
+export function nameFail(problem: NameProblem): ErrorBody {
+  switch (problem) {
+    case 'empty':
+      return fail('error.nameEmpty', undefined, 'name');
+    case 'control':
+      return fail('error.nameControl', undefined, 'name');
+    case 'tooLong':
+      return fail('error.nameTooLong', { max: NAME_MAX_LENGTH }, 'name');
+  }
+}
+
 export function fail(code: string, params?: Params, field?: string): ErrorBody {
   const english = makeTranslator(serverI18n().source);
   return {

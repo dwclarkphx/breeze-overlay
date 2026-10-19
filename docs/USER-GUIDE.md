@@ -209,7 +209,7 @@ If a change would produce an invalid composition, a red banner appears listing t
 
 Both pickers carry a short list of actions below the things they list.
 
-**+ New project…** at the bottom of the project picker. It asks for two things: a **name**, which is for you and can be anything, and a **URL key**, which is the part that ends up in web addresses. The key is suggested from the name as you type — "Riverside Hawks Basketball" offers `riverside-hawks` — and you can replace it with something shorter. Read [URL keys](#url-keys) below before you settle on one: it is set once and cannot be changed afterwards.
+**+ New project…** at the bottom of the project picker. It asks for two things: a **name**, which is for you, and a **URL key**, which is the part that ends up in web addresses. A name can be in any language or script, on one line, up to 64 characters; it needs at least one visible character, so a name of only spaces is refused. The key is suggested from the name as you type — "Riverside Hawks Basketball" offers `riverside-hawks` — and you can replace it with something shorter. A name with no Latin letters, such as ニュース, suggests no key: type one, or leave it empty and Breeze generates one (`proj-1k3f9`). Read [URL keys](#url-keys) below before you settle on one: it is set once and cannot be changed afterwards.
 
 The new project opens straight away, empty, with one untitled scene ready to build.
 
@@ -750,7 +750,7 @@ After a column name, `|` shapes the value, left to right: `list` (`A; B; C` → 
 
 A lookup or union reads the other source as it arrives, not after that source's own tables' transforms. The pickers under a Lookup, and the row cells below, already offer the columns it brings.
 
-**Rows** controls **Row height**, the **Gap** between rows, and **Rows per page**. Leave rows-per-page at `0` and the table shows every row that fits the layer box. Set it to, say, 5 and the graphic pages through the data — the operator's **NEXT** button steps to the next page while the graphic holds on air, and **PREV** steps back.
+**Rows** controls **Row height**, the **Gap** between rows, and **Rows per page**. Leave rows-per-page at `0` and the table shows every row that fits the layer box. Set it to, say, 5 and the graphic pages through the data — the operator's **NEXT** button steps to the next page while the graphic holds on air, and **PREV** steps back. Pages wrap: NEXT on the last page goes back to the first, and PREV on the first goes to the last, so while a paged table is holding, NEXT and PREV only turn its pages; PLAY or STOP takes the graphic off air. When the graphic leaves air — its outro finishes after **STOP**, or **CLEAR** — every paged table goes back to its first page, so the next PLAY starts there. The page does not change while the outro is still on screen. To open on a different page, choose it after that, off air (`page?name=C`, or Companion's **Go to page**).
 
 **Row reveal** animates rows on individually, with the same Preset / Stagger / Duration controls as text reveals. **Re-sort** is how long rows take to slide into a new order when the underlying data changes — set it to `0` for a hard snap. A page turn uses the reveal too: the old page plays it in reverse, then the new page reveals. With the reveal set to *None* a page turn is a straight cut.
 
@@ -1225,7 +1225,9 @@ A table is named by its **binding** — the name in its properties panel. Inside
 …/cycle?state=resume                ← set them going again, from the page on screen
 ```
 
-A page is named with `name=`, not `key=`: `key` on a control URL is always the API key. `page` needs exactly one of `n` and `name`, and `cycle` needs `state`; anything else answers `400`. A `table` the graphic does not have is delivered like any other command and does nothing on the page — the server cannot know a graphic's tables until a browser source has built it.
+A page is named with `name=`, not `key=`: `key` on a control URL is always the API key. `page` needs exactly one of `n` and `name`, and `cycle` needs `state`; anything else answers `400`. A `table` the graphic does not have is delivered like any other command and does nothing on the page. The server does not refuse it: which tables page on a given day depends on the data, which only an output knows.
+
+To find a graphic's tables before anything plays, `GET /api/channels` (every project at once) or `/api/projects/<project>/channels` lists each graphic with a `tables` array: every table built to page — **Rows per page** set, or a **Cycle** — with the `table` address to send, the layer's `name`, and `cycle: true` when HOLD and RESUME apply. A scene element's tables are listed under the element's own channel, addressed from its own composition. A table left at *every row that fits* is not listed, although it can still page on a day its data runs longer than the box.
 
 `next` and `prev` aimed with `table=` only ever turn pages. Without it they keep their old meaning: turn the pages of paged tables if there are any, otherwise move between holds.
 
@@ -1323,7 +1325,10 @@ also logs a warning whenever a verb reaches zero browser sources.
 **Presets.** The module generates a ready-made button set for every scene and every scene
 element in its project — PLAY / NEXT / STOP / CLEAR, plus CLEAR ALL on scenes. Drag them
 in from Companion's preset list rather than building buttons by hand. The PLAY preset
-comes with the on-air and missing-source feedbacks already attached.
+comes with the on-air and missing-source feedbacks already attached. A graphic with a
+table built to page — **Rows per page** set, or a **Cycle** — also gets a **PAGE** status
+button showing the page on screen out of how many, with the page's key under it
+(`2/2` over `Peoria Pioneers`); pressing it does nothing.
 
 Presets are built when the connection starts, so a scene added in Breeze appears after
 you press **Save** on the connection.

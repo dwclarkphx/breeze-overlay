@@ -25,13 +25,21 @@ import type { FastifyInstance } from 'fastify';
 
 import {
   BundleError,
+  applyNames,
   buildBundle,
   buildCompositionBundle,
+  bundledProject,
   mergeIntoProject,
+  nameIssues,
   openBundle,
+  parseNameOverrides,
   restoreProject,
+  type BundleContents,
+  type NameIssue,
+  type NameOverrides,
   type RestoreOutcome,
 } from '../archive/bundle.js';
+import { fail, type ErrorBody } from '../errors.js';
 import { backupPage } from '../pages.js';
 import { NotFoundError, listProjects, readProject } from '../store.js';
 
@@ -50,6 +58,30 @@ const BUNDLE_LIMITS = {
 };
 
 const MAX_BUNDLE_BYTES = 8 * 1024 * 1024 * 1024;
+
+/**
+ * Refuse a restore that would bring in an unusable name, before writing any of it.
+ *
+ * Checked across every project being restored in one pass, so the answer is the
+ * complete list — a restore that fixed one name per round trip would teach an
+ * operator to give up on it. `nameIssues` is the same list `inspect` returned,
+ * recomputed after the replacements, so a replacement that itself breaks a rule
+ * comes back as an issue rather than slipping through.
+ */
+function namesStillNeeded(
+  contents: BundleContents,
+  ids: Iterable<string>,
+  overrides: NameOverrides,
+  includeProject: boolean,
+): (ErrorBody & { nameIssues: NameIssue[] }) | null {
+  const issues: NameIssue[] = [];
+  for (const id of ids) {
+    const project = applyNames(bundledProject(contents.projects.get(id)!, id), overrides[id]);
+    issues.push(...nameIssues(project, id, { includeProject }));
+  }
+  if (issues.length === 0) return null;
+  return { ...fail('error.restoreNamesNeeded', { count: issues.length }), nameIssues: issues };
+}
 
 /** A filename an operator can find again in six months. */
 function bundleName(ids: readonly string[]): string {
@@ -188,13 +220,29 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
       try {
         const contents = openBundle(body, BUNDLE_LIMITS);
         const existing = new Set((await listProjects()).map((p) => p.id));
+        const issues: NameIssue[] = [];
+        const projects = [...contents.projects.keys()].map((id) => {
+          const files = contents.projects.get(id)!;
+          const project = bundledProject(files, id);
+          issues.push(...nameIssues(project, id, { includeProject: true }));
+          return {
+            id,
+            // The document's own name, not the manifest's copy: it is what a
+            // restore writes, and a hand-edited bundle can make the two differ.
+            name: project.name ?? '',
+            collides: existing.has(id),
+            assets: [...files.keys()].filter((k) => k.startsWith('assets/')).length,
+          };
+        });
         return {
           manifest: contents.manifest,
-          projects: [...contents.projects.keys()].map((id) => ({
-            id,
-            collides: existing.has(id),
-            assets: [...contents.projects.get(id)!.keys()].filter((k) => k.startsWith('assets/')).length,
-          })),
+          projects,
+          /*
+           * Names a restore will refuse until they are replaced. Includes the
+           * project's own name; a merge discards that one, so a merging
+           * client filters out the entries without a `composition`.
+           */
+          nameIssues: issues,
         };
       } catch (err) {
         if (err instanceof BundleError) {
@@ -243,10 +291,18 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
           }
 
           try {
+            const overrides = parseNameOverrides(req.headers['x-breeze-names']);
             const contents = openBundle(body, BUNDLE_LIMITS);
+
+            const needed = namesStillNeeded(contents, contents.projects.keys(), overrides, false);
+            if (needed) {
+              reply.code(400);
+              return needed;
+            }
+
             const merged = [];
             for (const bundledId of contents.projects.keys()) {
-              merged.push(await mergeIntoProject(contents, bundledId, into));
+              merged.push(await mergeIntoProject(contents, bundledId, into, overrides[bundledId]));
             }
             reply.code(201);
             return { merged };
@@ -270,6 +326,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
         }
 
         try {
+          const overrides = parseNameOverrides(req.headers['x-breeze-names']);
           const contents = openBundle(body, BUNDLE_LIMITS);
 
           // `?only=` restores a subset of a multi-project bundle — the case of
@@ -277,6 +334,20 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
           const wanted = req.query.only?.trim()
             ? new Set(req.query.only.split(',').map((s) => s.trim()).filter(Boolean))
             : null;
+
+          // Only the projects actually being restored are held to the rules: a
+          // blank name in a project `?only=` leaves behind is not this
+          // restore's business.
+          const needed = namesStillNeeded(
+            contents,
+            [...contents.projects.keys()].filter((id) => !wanted || wanted.has(id)),
+            overrides,
+            true,
+          );
+          if (needed) {
+            reply.code(400);
+            return needed;
+          }
 
           const existing = new Set((await listProjects()).map((p) => p.id));
           const restored: RestoreOutcome[] = [];
@@ -303,6 +374,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
 
             const outcome = await restoreProject(contents, bundledId, targetId, {
               overwrite: collides && mode === 'overwrite',
+              names: overrides[bundledId],
             });
             existing.add(targetId);
             restored.push(outcome);

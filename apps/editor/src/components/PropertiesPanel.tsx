@@ -20,6 +20,7 @@ import { Fragment, useEffect, useMemo, useState, type JSX } from 'react';
 import {
   ADVANCE_DEFAULTS,
   ANIMATABLE_PROPS,
+  displayName,
   CRAWL_SEPARATOR_PRESETS,
   DEFAULT_CRAWL_SEPARATOR,
   FILTER_OPS,
@@ -69,6 +70,7 @@ import {
   type UnpivotTransform,
 } from '@breeze/schema';
 import { useI18n, useRichT, useT } from '@breeze/i18n/react';
+import { NameInput } from './NameField.js';
 import {
   ROW_ANIM_PRESETS,
   TEXT_ANIM_PRESETS,
@@ -130,9 +132,9 @@ export function PropertiesPanel(): JSX.Element {
         <div className="panel-header"><span>{t('editor.properties.composition')}</span></div>
         <div className="panel-body">
           <Field label={t('editor.properties.name')}>
-            <input
+            <NameInput
               value={composition.name}
-              onChange={(e) => run({ kind: 'renameComposition', name: e.target.value })}
+              onCommit={(name) => run({ kind: 'renameComposition', name })}
             />
           </Field>
           <Field label={t('editor.properties.width')}>
@@ -1399,7 +1401,7 @@ function NestedCompositionSection({
             // it is not offered.
             .filter((c) => c.id !== selfId)
             .map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+              <option key={c.id} value={c.id}>{displayName(c.name, c.id)}</option>
             ))}
         </select>
       </Field>

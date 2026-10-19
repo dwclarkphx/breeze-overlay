@@ -20,9 +20,11 @@
 
 import { useEffect, useRef, useState, type JSX } from 'react';
 
+import { nameProblem, normalizeName } from '@breeze/schema';
 import { useRichT, useT } from '@breeze/i18n/react';
 
 import { api, ApiError, type CompositionReferrer } from '../api/client.js';
+import { NameTextInput } from './NameField.js';
 
 /**
  * Shared modal frame.
@@ -102,6 +104,8 @@ function NameKeyDialog({
 }): JSX.Element {
   const t = useT();
   const [name, setName] = useState('');
+  // An empty name is only an error once someone has typed and cleared it.
+  const [nameTouched, setNameTouched] = useState(false);
   const [key, setKey] = useState('');
   /*
    * Once the key has been typed in, the name stops driving it. Re-deriving on
@@ -128,13 +132,15 @@ function NameKeyDialog({
     return () => { cancelled = true; };
   }, [name, keyTouched]);
 
+  const nameIssue = nameProblem(name);
+
   const submit = async (): Promise<void> => {
-    if (busy || name.trim() === '') return;
+    if (busy || nameIssue) return;
     setBusy(true);
     setError(null);
     setKeyError(null);
     try {
-      await onSubmit(name.trim(), key.trim() || undefined);
+      await onSubmit(normalizeName(name), key.trim() || undefined);
     } catch (err) {
       /*
        * A rejected key is user input in a form field, not a server fault, and
@@ -152,9 +158,10 @@ function NameKeyDialog({
     <Modal title={title} onClose={onClose}>
       <label className="dialog-field">
         <span>{t('editor.project.name')}</span>
-        <input
+        <NameTextInput
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onValueChange={(next) => { setNameTouched(true); setName(next); }}
+          showEmpty={nameTouched}
           onKeyDown={(e) => { if (e.key === 'Enter') void submit(); }}
           placeholder={namePlaceholder}
         />
@@ -178,7 +185,7 @@ function NameKeyDialog({
 
       <div className="dialog-actions">
         <button onClick={onClose}>{t('editor.upload.cancel')}</button>
-        <button className="primary" onClick={() => void submit()} disabled={busy || name.trim() === ''}>
+        <button className="primary" onClick={() => void submit()} disabled={busy || nameIssue !== null}>
           {busy ? busyLabel : submitLabel}
         </button>
       </div>

@@ -15,6 +15,7 @@ import { useEffect, useState, type JSX } from 'react';
  */
 const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev';
 
+import { displayName } from '@breeze/schema';
 import { useT } from '@breeze/i18n/react';
 
 import { api, playUrl, type ProjectSummary } from './api/client.js';
@@ -174,7 +175,15 @@ export function App(): JSX.Element {
     selectComposition(value);
   };
 
-  const projectName = projects.find((p) => p.id === projectId)?.name ?? project?.name ?? '';
+  /*
+   * `displayName`, not the raw name. A project from before names were required
+   * can still have an empty one, and the delete dialog asks the operator to
+   * type this to confirm — an empty name would be confirmed by an empty field.
+   */
+  const projectName = displayName(
+    projects.find((p) => p.id === projectId)?.name ?? project?.name,
+    projectId ?? '',
+  );
   const sceneCount = project?.compositions.length ?? 0;
 
   /*
@@ -258,7 +267,7 @@ export function App(): JSX.Element {
           onChange={(e) => onProjectSelect(e.target.value)}
         >
           {projects.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
+            <option key={p.id} value={p.id}>{displayName(p.name, p.id)}</option>
           ))}
           <option disabled>──────────</option>
           <option value={NEW_PROJECT}>{t('editor.app.newProject')}</option>
@@ -271,7 +280,7 @@ export function App(): JSX.Element {
           onChange={(e) => onSceneSelect(e.target.value)}
         >
           {(project?.compositions ?? []).map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
+            <option key={c.id} value={c.id}>{displayName(c.name, c.id)}</option>
           ))}
           {projectId && <option disabled>──────────</option>}
           {projectId && <option value={NEW_SCENE}>{t('editor.app.newScene')}</option>}
