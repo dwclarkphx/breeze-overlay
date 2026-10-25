@@ -561,6 +561,24 @@ describe('favicon', () => {
   });
 });
 
+describe('interface themes', () => {
+  it('serves /theme.js as a script carrying every theme', async () => {
+    const res = await app.inject({ method: 'GET', url: '/theme.js' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('javascript');
+    expect(res.body).toContain('[data-theme=\\"dark-rg\\"]');
+  });
+
+  it('is loaded by the portal and the control panel, and never by the output page', async () => {
+    const portal = (await app.inject({ method: 'GET', url: '/' })).body;
+    expect(portal).toContain('<script src="/theme.js"></script>');
+    expect(portal).toContain('id="theme-select"');
+    expect((await app.inject({ method: 'GET', url: '/control/demo-1iixd/l3rd-name-2a94g' })).body).toContain('/theme.js');
+    // /play is frozen and is the show: a theme must never reach it.
+    expect((await app.inject({ method: 'GET', url: '/play/demo-1iixd/l3rd-name-2a94g' })).body).not.toContain('theme');
+  });
+});
+
 describe('project mode (Wave 6)', () => {
   const BASE = '/api/projects/demo-1iixd/mode';
 

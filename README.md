@@ -7,9 +7,13 @@ Built for the one-person production — school events, church services, communit
 **Status: pre-1.0, and in use.** The editor — stage, layers, properties, timeline, keyframes, easing — the operator control panel and the external-trigger API are all in place and tested. So is the rest of it:
 
 - [Text reveals](#text-reveals): per-character, per-word and per-line entrance presets.
-- [Data sources and tables](#data-sources-and-tables): live feeds normalized to one canonical shape, weather from four providers, a `table` layer that re-sorts on air, and tickers fed from those feeds.
+- [Data sources and tables](#data-sources-and-tables): live feeds normalized to one canonical shape — HTTP, RSS, XML, Google Sheets, FTP/SFTP drops, weather, NWS/CAP alerts and air quality — with staleness guards and backup sources, a `table` layer that re-sorts and pages itself on air, and tickers fed from those feeds.
+- [Layer rules and project mode](#layer-rules-and-project-mode): show, hide, recolour or re-source a layer from the data, or switch every graphic in a project at once.
+- [Live media](#live-media): webcam snapshots, MJPEG, HLS, YouTube and video files as a layer, through a camera proxy, with camera rotations in a paging table.
+- [Masks, effects and paths](#masks-effects-and-paths): feathered and invertible masks, seven keyframable filters and a drop shadow, nested compositions with per-instance overrides, and bezier paths drawn on the stage.
 - Scenes: several independently triggered graphics on one browser source.
 - Media and assets: an upload bin, ProRes 4444 → VP9/WebM-alpha transcode, PSD import, image sequences and sprites, an asset library with search, tags and folders, and backup bundles.
+- Operating: a control panel with PREV/NEXT, page readouts, a live preview that checks itself against air, browser sign-in, a [Bitfocus Companion](#bitfocus-companion) module, and [accessible interface themes](#themes).
 
 The lower-third demo is confirmed working in real OBS: transparent background and live control-panel updates both behave correctly (2026-07-28). vMix and sustained load/reconnect behavior still need a real-world pass — see [Known gaps](#known-gaps), which is an honest list rather than a short one.
 
@@ -120,7 +124,7 @@ Ports below 1024 need root; 7331 does not, so run the server as an ordinary
 user. For an unattended install, run it under systemd rather than a login
 shell — or use the container, which handles restart-on-boot already.
 
-Then open `http://<host>:7331/`. You will have access to the [Editor](#editor), Project list, and the **[User Guide](docs/USER-GUIDE.md)**. On first run the server seeds a demo project from `examples/breeze-demo.json`.
+Then open `http://<host>:7331/`. You will have access to the [Editor](#editor), Project list, and the **[User Guide](docs/USER-GUIDE.md)**. On first run the server seeds three demo projects from `examples/` — **Breeze Demo** (a lower third, badge, ticker and standings table), a **World Cup 2026 bracket**, and the same tournament as a **scene**. They are ordinary projects: delete one and it stays deleted.
 
 `<host>` is whatever reaches the machine running the server — `localhost` if
 that is the machine you are sitting at, otherwise its LAN address or hostname.
@@ -187,7 +191,8 @@ For a walkthrough with screenshots, see the **[User Guide](docs/USER-GUIDE.md)**
 
 | | |
 |---|---|
-| Select / move / scale / rotate | Click a layer, drag the handles on stage |
+| Select / move / scale / rotate | Click a layer, drag the handles on stage. A locked layer shows none, and the toolbar says so |
+| Edit a path or path mask | Drag a point or a curve handle on stage; double-click a point for corner ↔ curve, double-click a straight edge to add a point, Alt-click a point to remove it |
 | Pan / zoom stage | Alt-drag or middle-drag to pan, Ctrl+wheel to zoom |
 | Animate a property | Click its ⏱ stopwatch, then change the value at a new playhead position |
 | Edit easing | Double-click a keyframe |
@@ -197,7 +202,7 @@ For a walkthrough with screenshots, see the **[User Guide](docs/USER-GUIDE.md)**
 | Save | Ctrl+S |
 | Play / pause | Space |
 | Copy / paste keyframes | Ctrl+C / Ctrl+V (pastes at the playhead) |
-| Delete | Removes selected keyframes, or the selected layer if none |
+| Delete | Removes selected keyframes, or the selected layer if none. The red bin in the layers panel does the same, and its tooltip names what it will remove |
 
 A new layer starts at the playhead, as in After Effects — so adding one with the playhead parked late gives it a late in-point. Drag its lifetime bar back, or set **In** to 0 in the properties panel.
 
@@ -212,7 +217,7 @@ Every setting the server reads. Put the ones you change in `.env` — [Settings]
 | `BREEZE_PORT` | `7331` | |
 | `BREEZE_HOST` | `0.0.0.0` | Set to `127.0.0.1` to keep it off the LAN |
 | `BREEZE_DATA_DIR` | `<repo>/data` | Projects and uploaded assets |
-| `BREEZE_API_KEY` | *(empty)* | When set, mutating `/api/*` calls need `x-breeze-key` |
+| `BREEZE_API_KEY` | *(empty)* | When set, every write and every control action needs the key — as `x-breeze-key`, `?key=`, or a browser session signed in once from the portal. See [The API key](#the-api-key) |
 | `BREEZE_LOG_LEVEL` | `info` | |
 | `BREEZE_CONSOLE` | `log` | `dashboard` turns the terminal into a live status board — stats, connected browser sources, panels and editors, recent API callers, and a log tail. Only on an interactive terminal: piped, under a service manager, or in a container without a TTY it logs normally and says why. See the user guide's [console dashboard](docs/USER-GUIDE.md#the-console-dashboard) |
 | `BREEZE_LOCALE` | `en` | UI language for the editor, portal and operator panels, as a BCP-47 tag. An installation setting — not detected, not overridable per request. Does not affect `/play` or the API. See [Language](#language) |
@@ -235,7 +240,7 @@ Set `BREEZE_CONTACT` on any server that fetches data. It becomes the outgoing `U
 
 ```
 BREEZE_CONTACT="mystation.com, ops@mystation.com"
-→ User-Agent: BreezeOverlay/0.68.0 (mystation.com, ops@mystation.com)
+→ User-Agent: BreezeOverlay/0.78.0 (mystation.com, ops@mystation.com)
 ```
 
 The product token carries the running version, so the string changes with each release — match on `BreezeOverlay/` rather than the whole token if you are filtering your own logs.
@@ -274,6 +279,26 @@ Four things it does **not** change:
 An unrecognised tag logs one line and falls back to English rather than refusing to start — a typo in `.env` should not take the panels down. A tag that is translated but below the 95% ship threshold starts with a warning saying how far along it is.
 
 Translations are plain JSON in `packages/i18n/locales/` — copy `en.json`, translate the values, leave the keys alone. **Send one as an [issue](https://github.com/dwclarkphx/breeze-overlay/issues), not a pull request**; this project takes issue reports only, and the maintainer commits the file. `pnpm i18n:check` gives you the same verdict CI will, so you can confirm it is complete and well-formed before you send it.
+
+---
+
+### Themes
+
+The **Theme** menu on the portal recolours Breeze's own pages — the portal, editor, control panels, and the backup, activity, connections and guide pages. It never touches a graphic: `/play`, the stage and anything on air look the same in every theme.
+
+| Theme | For |
+|---|---|
+| Follow system | The default — dark or light from the OS, and the high-contrast twin when the OS asks for more contrast (`prefers-contrast: more`) |
+| Dark | Breeze's usual look |
+| Dark dimmed | Softer contrast, no pure white — for light sensitivity |
+| Dark high contrast / Light high contrast | Brighter text and borders |
+| Dark, red–green safe | Protanopia and deuteranopia: success becomes blue and danger orange, so GO and STOP stop being a red/green pair |
+| Dark, blue–yellow safe | Tritanopia: success becomes blue, warnings a lighter amber clear of red |
+| Light | Bright rooms, or for anyone who reads light backgrounds more easily |
+
+There is no formal standard list of accessible themes; the floors come from WCAG and the set follows GitHub's, which is the convention operators are most likely to know. Every theme keeps text at **4.5 : 1** or better on every surface (a test enforces it), and the two colour-blind themes keep danger, success and warning apart under a simulation of the deficiency they are for. Windows contrast themes (`forced-colors`) override all of it, as they should.
+
+**Unlike the language, a theme is per browser**, stored in that browser and followed at once by every Breeze tab open in it. The argument that makes one language right for a whole crew does not apply to colour: a tablet in a dark gallery and the laptop beside it can and should disagree. The palettes live in `apps/server/src/theme.ts` and reach every page through one script, `/theme.js`.
 
 ## Docker
 
@@ -428,9 +453,16 @@ itself, so the flag is no longer needed.
 
 ## Operating a show
 
-Open `/control/<project>/<composition>` on a laptop or tablet. Type into the fields, hit **PLAY**, and the graphic rolls on every output page connected to that composition. Edits apply live — the graphic does not need re-playing — and **NEXT** appears only on graphics with more than one hold.
+Open `/control/<project>/<composition>` on a laptop or tablet. Type into the fields, hit **PLAY**, and the graphic rolls on every output page connected to that composition. Edits apply live — the graphic does not need re-playing — and **◀ PREV** / **NEXT** appear only on graphics with more than one hold or a table that pages.
 
-Outputs and panels join a channel per composition over `/ws/control`. The hub retains each channel's field values, so a browser source that drops mid-show reconnects and comes back showing the name the operator typed rather than the placeholder baked into the composition.
+The panel also carries, where the graphic needs them:
+
+- **A page readout per paging table** — page *n* of *m*, a countdown bar to the next turn, and a hold toggle.
+- **Mode** — the [project mode](#layer-rules-and-project-mode) every graphic's rules follow.
+- **Data** — each source's health (live, failing, expired, frozen, on backup) and buttons to force a source onto its own rows or its backup. **Check cameras** for a media source.
+- **Show preview** — the real output page, embedded. It joins mid-show on the same hold, page and ticker position as the output, and a **sync check** under it says whether it matches air, marks what differs, and offers **Resync**. **Sync to** picks which output it follows.
+
+Outputs and panels join a channel per composition over `/ws/control`. The hub retains each channel's field values, so a browser source that drops mid-show reconnects and comes back showing the name the operator typed rather than the placeholder baked into the composition — and an output page opened while its graphic is on air picks up from an output already there, on the same hold and page, without replaying the intro (`?sync=off` opts one page out).
 
 ## Control surface
 
@@ -438,7 +470,10 @@ Four verbs, available everywhere — the vocabulary broadcast operators already 
 
 ```js
 play()                          // intro, then hold at the next STOP marker
-next()                          // advance to the following STOP marker
+next()                          // advance to the following STOP marker, or turn a table's page
+prev()                          // step back a hold, or a page
+page(3) / page({ name: 'C' })   // go to a page, by number or by page key
+cycle('hold') / cycle('resume') // pause or resume a self-paging table
 stop()                          // run the outro, ignoring remaining markers
 update({ name: 'Jane Doe' })    // replace bound fields live, on air
 update('{"name":"Jane Doe"}')   // vMix and OBS scripts send a JSON string
@@ -456,7 +491,8 @@ The verbs are deliberately non-overlapping, and **PLAY can never take a graphic 
 | verb | what it does |
 |---|---|
 | `play()` | walks forward: rolls in, then resumes to the next STOP marker, then runs the outro. Ignored mid-intro so a double-press cannot stutter it; rewinds first from idle, finished or the very end |
-| `next()` | advances to the next STOP marker |
+| `next()` / `prev()` | step between STOP markers — or, on a graphic whose table pages, between pages. `table=` aims one at a single table |
+| `page()` / `cycle()` | jump to a page; hold or resume a table that pages itself |
 | `stop()` | runs the outro; ignored when already off air or already leaving |
 | `clear()` | hard reset to frame 0, nothing on screen |
 | `playThrough()` | preview only: runs to the end ignoring STOP markers. The editor's ▶ |
@@ -491,6 +527,14 @@ POST   /api/projects/:id/datasources/:sourceId/refresh
 POST   /api/projects/:id/datasources-preview          { def, transforms? } — try one without saving
 POST   /api/projects/:id/datasources-inspect          { url } — suggest a JSON row path
 POST   /api/projects/:id/datasources-inspect-xml      { url } — rank candidate XML row elements
+GET|POST /api/projects/:id/datasources/:sourceId/use    ?mode=auto|primary|backup — force a source onto its own rows or its backup
+GET|POST /api/projects/:id/datasources/:sourceId/media/check   check every camera in a media source now
+
+GET    /api/projects/:id/mode                         the project mode, and every mode its rules name
+GET|POST /api/projects/:id/mode/set                   ?value=first-alert — empty clears it
+GET    /api/channels                                  every graphic's channel, with its paged tables
+GET    /api/projects/:id/channels
+GET    /media/:project/:source/:key/snapshot|stream   the camera proxy — one upstream connection shared by every output
 ```
 
 Definitions and health come back together from `GET …/datasources` on purpose: the panel shows them side by side, and a source whose def says "every 10s" next to a status saying "last fetch 40 minutes ago" is exactly the picture an operator needs. Assembling that from two round trips invites showing a stale half of it.
@@ -502,18 +546,30 @@ Definitions and health come back together from `GET …/datasources` on purpose:
 ```
 POST or GET  /api/control/<project>/<composition>/play
                                               /stop
-                                              /next
+                                              /next          ?table=<table> to turn one table's page
+                                              /prev          ?table=<table>
+                                              /page          ?n=3, or ?name=C for a page key
+                                              /cycle         ?state=hold or ?state=resume
                                               /clear
+                                              /clear-all     a scene and every element in it
 POST         /api/control/<project>/<composition>/update    body: {"name":"Jane Doe"}
 GET          /api/control/<project>/<composition>/update?name=Jane%20Doe
-GET          /api/control/<project>/<composition>/state
+GET          /api/control/<project>/<composition>/state     ?data=0 leaves field data out
 ```
 
 The verbs accept GET as well as POST. That is deliberate: a side-effecting GET is poor REST, but Stream Deck's "open URL" action and most Companion HTTP presets cannot send a body or set headers, and refusing them pushes people toward turning auth off entirely.
 
 Each response reports `delivered` — how many outputs actually received the command. `delivered: 0` means the button worked and nothing was listening, which is the failure an operator most needs to see.
 
-With `BREEZE_API_KEY` set, control actions need the key as either an `x-breeze-key` header or a `?key=` query parameter. Reads — the output page, the panel, `/state` — stay open so a browser source never needs credentials.
+`/state` reports the playback state, the current step, each paged table's page, page count, page key and seconds left, and — per connected output — that output's own report, with `reportedAt` and `now` on the server's clock.
+
+### The API key
+
+With `BREEZE_API_KEY` set, every write and every control verb except `state` needs the key: an `x-breeze-key` header or a `?key=` query parameter for a script or a Stream Deck button, or — in a browser — **sign in once on the portal** for a 12-hour session, after which the editor saves and control-panel URLs carry no key. Commands over the control WebSocket are checked the same way, on every command. Wrong keys are limited to five a minute per address, keys are compared in constant time, and `?key=` is redacted from the log. Reads — the output page, the panel, `/state` — stay open so a browser source never needs credentials.
+
+### Bitfocus Companion
+
+[companion-module-breeze-overlay](https://github.com/bitfocus/companion-module-breeze-overlay) drives Breeze from a Stream Deck through Companion. It holds a live subscription to the hub rather than polling (`client: 'companion'`, without field data), so buttons light the moment a graphic changes state, and it offers PLAY/STOP/NEXT/PREV/CLEAR, clear-all for a scene, page and cycle actions, project mode, forcing a source onto its backup, and a camera check — with feedbacks and variables for on-air state, pages, held tables, source health and cameras, and presets built from `/api/channels`. It is MIT-licensed and versioned separately; it checks the server's version and offers only what that server supports.
 
 ## Data sources and tables
 
@@ -540,8 +596,22 @@ One rule: **one canonical data shape, many source types.** Every source — a pa
 | `sheets` | A spreadsheet id/URL + A1 range | Sheets API v4, for sheets that must stay **private**. API key for link-shared, service-account JSON for private |
 | `weather` | A provider + latitude/longitude | NWS, MET Norway, Bright Sky (DWD) or Open-Meteo, normalized to one column set. See [Weather](#weather) — the license differs by provider |
 | `ftp` | Host + directory + filename pattern | FTP/FTPS/SFTP. Takes the newest file matching `results-*.csv` and hands it to the CSV/JSON/XML/RSS readers above |
+| `cap` | A CAP alerts URL | CAP XML, Atom/RSS carrying CAP fields, or NWS GeoJSON. Filters by area, event and minimum severity, drops expired and cancelled alerts, and adds `areas` (without the state) and `areaKind` (`counties` or `areas`) for writing a sentence |
+| `air-quality` | A provider + place | AirNow feeds or Open-Meteo (CAMS), current, per-pollutant or forecast, on the US or EU AQI scale |
+
+Weather and air-quality sources take **one place, a typed list of places, or a table of places read from another source** — one source for every city in a rotation. When only some places fail, the rest stay on air and the failing ones keep their last good rows.
 
 Sources are polled per-source (5s floor, higher for weather — see below), with ETag/If-Modified-Since where the origin honours them and a SHA-256 content hash deciding whether anything actually changed — a feed polled every five seconds must not re-render a table every five seconds. Failures back off exponentially and **never touch the rows**: last-good data survives an origin outage, a DNS failure and a server restart mid-show. The editor's data panel shows last fetch, last change and last error per source, so a dead feed is diagnosed there rather than by staring at a frozen graphic.
+
+### Staleness, guards and backups
+
+Last-good data surviving an outage is right for a standings table and wrong for a weather warning, so each fetched source says how long its rows stay good:
+
+- **`expireAfter`** blanks the rows after a set age rather than leaving yesterday's numbers on air. AirNow defaults to three hours.
+- **A `guard`** refuses a fetch that looks wrong: too few rows, a sudden drop, missing required values, numbers out of range. A feed that stops changing for too long is marked *frozen*.
+- **A `fallback` source** goes to air automatically when the primary expires, freezes or fails. An operator can also force either one from the control panel's Data block or `…/datasources/:sourceId/use`.
+
+The editor and control panel show each source as live, failing, expired, frozen or on backup.
 
 ### Weather
 
@@ -555,6 +625,8 @@ A weather source names a **provider and a place**, not a URL. That is what makes
 | `open-meteo` — [hosted](https://open-meteo.com/en/licence) | Worldwide | ❌ **Non-commercial only** | **Required** — CC BY 4.0 | 900s |
 | `open-meteo-self` — self-hosted | Worldwide | ✅ Yes | **Required** — CC BY 4.0 | 60s |
 
+NWS and Bright Sky also have an **observed conditions** mode — what the nearest station is reporting now, rather than a forecast — and NWS daily forecasts can pair each day with its night into one row, and start from tomorrow after a set local hour so an evening graphic does not lead with a day that is nearly over.
+
 MET Norway, like NWS, wants identifiable traffic: fill in a contact or set `BREEZE_CONTACT`, or risk being blocked with no way for them to reach you. Its one prohibition is passing your service off as Yr, NRK or MET Norway — the built-in `attribution` string credits them as a source, which is the permitted form.
 
 **Read this before putting Open-Meteo on air.** Open-Meteo's *hosted* API is free for non-commercial use only; a channel or site carrying advertising or subscriptions is commercial use under their terms and needs either a paid plan or a self-hosted instance. The *data* is CC BY 4.0 either way, which permits commercial use — so running your own instance ([AGPLv3, Docker](https://github.com/open-meteo/open-meteo)) removes the commercial restriction but **not** the attribution obligation. Open-Meteo's license asks for a credit and a link next to any location their data is displayed:
@@ -565,7 +637,7 @@ A broadcast graphic cannot carry a hyperlink, so the practical compliance is a v
 
 The free tier is also capped at 10,000 calls/day and 300,000/month. The 900s floor means one source costs ~96 calls/day, so roughly a hundred sources fit inside the daily allowance; a self-hosted instance has no such cap and drops to a 60s floor. Nothing here recomputes faster than hourly in any case.
 
-Every provider returns the **same columns** — `time`, `temp`, `tempMin`, `tempMax`, `feelsLike`, `condition`, `icon`, `precipProb`, `precipAmount`, `windSpeed`, `windGust`, `windDir`, `humidity`, `pressure`, `uvIndex`, `isDay`, `attribution` — so switching provider does not mean rebuilding the graphic. Fields a provider does not supply come back null rather than absent. `icon` is a fixed keyword (`clear`, `partly-cloudy`, `thunderstorm`, …) rather than a provider icon URL or a WMO number, so it maps onto your own artwork once.
+Every provider returns the **same columns** — `time`, `temp`, `tempMin`, `tempMax`, `feelsLike`, `condition`, `icon`, `precipProb`, `precipAmount`, `windSpeed`, `windGust`, `windDir`, `humidity`, `pressure`, `uvIndex`, `isDay`, `attribution` — so switching provider does not mean rebuilding the graphic. Multi-place, observed and daily sources add `place`, `period`, `dewPoint`, `visibility`, `station` and `ageMinutes`. Fields a provider does not supply come back null rather than absent. `icon` is a fixed keyword (`clear`, `partly-cloudy`, `thunderstorm`, …) rather than a provider icon URL or a WMO number, so it maps onto your own artwork once.
 
 Pointing at a self-hosted instance on loopback needs the fetch guard opened for it:
 
@@ -595,7 +667,28 @@ A `table` layer is a template row the runtime clones per data row. Cells are ord
 ]
 ```
 
-Transforms are stored with the *consumer*, not the source, so two graphics can slice one feed differently. `rank` is a pipeline step rather than a table option precisely so the above works: an alphabetical table that still shows league position. A sort-order change animates rows to their new y with FLIP — the standings shuffle — and `rowsPerPage` pages through overflow on `next()` while holding, without spending a stop marker.
+Transforms are stored with the *consumer*, not the source, so two graphics can slice one feed differently. `rank` is a pipeline step rather than a table option precisely so the above works: an alphabetical table that still shows league position. A sort-order change animates rows to their new y with FLIP — the standings shuffle.
+
+| Transform | Does |
+|---|---|
+| `sort`, `limit`, `offset`, `filter`, `rank` | The usual |
+| `date` | Keeps rows for a window of days, or only those still to come or already past, in a named time zone — and moves on with the clock |
+| `lookup` / `union` | Brings columns across from another source by a matching value / adds another source's rows |
+| `unpivot` | Folds columns into key/value rows — one row per forecast day |
+| `compose` | Builds a text column from a template over the row's other columns: `{event} for {areas\|list} until {ends\|when}`, with `list`, `when`, `time:`, `upper`, `lower`, `drop:` and `default:` modifiers |
+| `advance` | Bracket progression — see the user guide's [Brackets](docs/USER-GUIDE.md#brackets) |
+
+**Paging.** `rowsPerPage` pages through overflow on `next()` while holding, without spending a stop marker. A table can also **page itself** while the graphic holds — a fixed dwell per page or a per-row duration column — and loop, hold or continue at the end; page turns animate by reversing the row reveal, and tables in one cycle group turn together. Pages are solved from a clock anchor, so every output on a channel turns on the same frame. A table can **follow** another, showing only the rows matching the leader's current page key — the weather panel that turns with the city name above it.
+
+### Layer rules and project mode
+
+Any layer can carry **rules** that show it, hide it, recolour it or swap its image when a condition holds — on a dynamic field, on a source's rows, on a table cell's own row, or on the **project mode**. The mode is one value per project (`first-alert`, `election-night`, …) set from the control panel's Mode block, `…/mode/set` or `breeze.mode()`, and every graphic's rules follow it at once — the whole channel goes into severe-weather livery with one button.
+
+### Live media
+
+A **media** layer plays a webcam snapshot (refreshed without flicker), an MJPEG stream, a video file, YouTube or HLS (hls.js is staged under `public/vendor/hls/`, as GSAP is), with a timeout and a choice of hide, hold or skip when it fails. Snapshots and MJPEG go through the server's **camera proxy** at `/media/…`, so ten outputs watching one camera cost the camera one connection.
+
+Put a media cell in a self-paging table and it becomes a **camera rotation**: the next page's snapshot is fetched ahead of the turn, and a camera that fails can be skipped. A source's **media check** tests every row's camera on a schedule, spots frozen pictures, and adds `mediaState`, `mediaOk`, `mediaSrc` and `mediaKind` columns a rule or a filter can use.
 
 ### Tickers from a feed
 
@@ -626,7 +719,7 @@ A backup bundle carries the composition's authored rows, not a live feed. Restor
 
 ## Composition format
 
-Every layer can carry keyframe tracks on `x, y, scaleX, scaleY, rotation, opacity, skewX, skewY, blur, brightness, maskOffset` — transform, opacity and filter only, never layout properties, so CEF keeps everything on the compositor.
+Every layer can carry keyframe tracks on `x, y, scaleX, scaleY, rotation, opacity, skewX, skewY`, the filters `blur, brightness, contrast, saturate, hueRotate, grayscale, sepia`, and `maskOffset` — transform, opacity and filter only, never layout properties, so CEF keeps everything on the compositor.
 
 ```jsonc
 {
@@ -644,7 +737,7 @@ Every layer can carry keyframe tracks on `x, y, scaleX, scaleY, rotation, opacit
 }
 ```
 
-Layer types: `shape`, `text`, `image`, `video`, `sprite`, `crawl`, `table`, `group`, `composition`.
+Layer types: `shape` (rectangle, ellipse or path), `text`, `image`, `video`, `sprite`, `media`, `crawl`, `table`, `group`, `composition`.
 
 Any layer with a `binding` becomes an operator-editable dynamic field. `GET /api/projects/:id/compositions/:compId/bindings` returns the descriptor list plus a JSON Schema — the same block the control panel builds its form from. Binding kinds are `string`, `image`, `video`, `stringList` (a crawl's items) and `dataset` (a table's rows, which the control panel renders as an editable grid).
 
@@ -668,7 +761,7 @@ A `composition` layer inlines another composition, After Effects precomp style:
 - The nested composition's own STOP markers are ignored; only the root defines playback steps.
 - Cycles, unresolvable refs and nesting past 8 levels produce a warning on `runtime.warnings` and render nothing, rather than failing the whole graphic.
 
-### Masks
+### Masks, effects and paths
 
 Masks are real SVG `<mask>` elements, not `clip-path` — `clip-path` can neither feather nor invert, which are the two things broadcast masks are for.
 
@@ -676,7 +769,11 @@ Masks are real SVG `<mask>` elements, not `clip-path` — `clip-path` can neithe
 "mask": { "type": "rect", "x": 0, "y": 0, "width": 120, "height": 40, "feather": 6, "invert": false }
 ```
 
-`feather` becomes a genuine `feGaussianBlur`; `invert` punches a hole; the `maskOffset` keyframe track slides the mask along X for wipe reveals.
+`type` is `rect`, `ellipse`, `image` (a luminance mask from an uploaded file) or `path`. `feather` becomes a genuine `feGaussianBlur`; `invert` punches a hole; the `maskOffset` keyframe track slides the mask along X for wipe reveals. Every layer type has a mask section in the editor, with a wipe preset.
+
+**Paths.** A path is a shape, not a layer type of its own — `"shape": "path"` plus `"path"`, a string of SVG path data in the layer's own pixels — and a path mask carries the same string, so one editor serves both. Draw it by dragging on the stage (points, curve handles, double-click for corner/curve or to add a point, Alt-click to remove one) or type the numbers in the properties panel. The editor reads and writes `M`, `L`, `C` and `Z`; data with arcs, relative or shorthand commands still renders and validates, but the editor leaves it exactly as written rather than re-approximating someone's curve.
+
+**Effects.** Blur, brightness, contrast, saturation, hue rotation, grayscale and sepia, all keyframable; plus a drop shadow and a blend mode, which are static.
 
 ### Video layers
 
@@ -710,7 +807,9 @@ The properties panel reports the measured piece count and the reveal's real tota
 
 - **Not validated in real vMix.** OBS is confirmed working (transparency and live control-panel updates both correct, 2026-07-28) — vMix, sustained 60fps under GPU load, and browser-source reconnect behavior still need a real-world pass; headless Chromium cannot prove any of them.
 - **A transcoded stinger has not yet been confirmed in a real OBS Browser Source.** The encode is proven correct at the file level — alpha decodes back 0→255, monotonic — but "clean edges in OBS" is a claim only OBS can settle.
-- **Only rectangle and ellipse shapes exist.** No pen tool, no bezier paths.
+- **A point can only be added to a straight path segment.** Splitting a curve without changing its shape needs curve subdivision, which is not built; add points on straight edges and curve them afterwards.
+- **`locked` guards the stage only.** A locked layer has no handles on the stage, but the properties panel, the timeline and Delete still edit it.
+- **A light theme puts light chrome around the stage.** The editor's dark default exists because bright surroundings throw off colour judgement on a transparent graphic; the light themes are there for the people who need them, not as the better choice for grading.
 - **Text reveals do not animate out.** A preset covers the entrance; the exit is the layer's own keyframes, as the demos do it.
 - **Reveal pieces are unmasked.** `chars-up` and its siblings slide and fade rather than rising from behind a hard edge.
 - **Layer size cannot be animated.** Only `scaleX`/`scaleY` are keyframable; there is no `width`/`height` track.
@@ -723,7 +822,7 @@ The properties panel reports the measured piece count and the reveal's real tota
 
 ## What's next
 
-Per-layer effects — blur, drop-shadow and the rest of the CSS filter family, keyframable like any other property — richer masking, and editing a nested composition in place instead of opening it on its own.
+Phase 8 — masks, effects, nesting and the on-stage pen — is complete as of 0.78.0. Next is Phase 9, polish: editing a nested composition in place instead of opening it on its own, a template gallery and duplication, multiple output channels per graphic, and a packaged distribution. Before 1.0.0 the project schema has to settle, since that is the release from which an existing project is promised to keep loading.
 
 ## License
 

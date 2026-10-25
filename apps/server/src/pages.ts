@@ -29,6 +29,7 @@ import { makeTranslator, type Translate } from '@breeze/i18n';
 import { FAVICON_LINK } from './favicon.js';
 import { messagesFor, serverI18n } from './i18n.js';
 import { formatDuration, type PeersReport } from './peers.js';
+import { DARK_ROOT_DECLS, THEME_CHOICES, THEME_SCRIPT_TAG, type ThemeChoice } from './theme.js';
 import { GSAP_VENDOR_URL, GSAP_VERSION, HLS_SCRIPT } from './vendor.js';
 
 /**
@@ -380,14 +381,15 @@ export function controlPage(opts: ControlPageOptions): string {
 ${htmlOpen()}
 <head>
 <meta charset="utf-8">
+${THEME_SCRIPT_TAG}
 ${FAVICON_LINK}
 <title>${escapeHtml(t('server.pages.controlTitle', { name: displayName(composition.name, composition.id) }))}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <style>
-  :root{--ui-tracking:1;--ui-caps:uppercase;/* I18N.md §6.3 — a multiplier and a switch, so a script group is one rule. */--bg:#0d1117;--panel:#161b22;--panel2:#1c2129;--border:#30363d;--text:#c9d1d9;
-        --muted:#8b949e;--accent:#58a6ff;--go:#238636;--stop:#a52834;--key:#e3b341;
-        --fed:#3fb950}
+  :root{--ui-tracking:1;--ui-caps:uppercase;/* I18N.md §6.3 — a multiplier and a switch, so a script group is one rule. */${DARK_ROOT_DECLS}
+        /* Theme tokens (src/theme.ts) under this page's own names. */
+        --go:var(--success-emphasis);--stop:var(--danger-emphasis);--fed:var(--success);--line:var(--border)}
   :root:lang(ar),:root:lang(fa),:root:lang(ur),:root:lang(he),:root:lang(zh),:root:lang(ja),:root:lang(ko),:root:lang(hi){--ui-tracking:0;--ui-caps:none}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);
@@ -398,7 +400,7 @@ ${FAVICON_LINK}
   .sub{color:var(--muted);font-size:13px}
   .status{margin-inline-start:auto;display:flex;align-items:center;gap:8px;font-size:13px}
   .dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
-  .dot.live{background:#3fb950;box-shadow:0 0 8px #3fb950}
+  .dot.live{background:var(--success);box-shadow:0 0 8px var(--success)}
   .dot.off{background:var(--stop)}
   fieldset{border:1px solid var(--border);border-radius:8px;padding:12px;margin:0 0 14px;
            background:var(--panel)}
@@ -412,8 +414,8 @@ ${FAVICON_LINK}
   button{padding:16px 12px;font:600 16px/1 inherit;border-radius:8px;border:1px solid var(--border);
          background:var(--panel2);color:var(--text);cursor:pointer;min-height:56px}
   button:active{transform:translateY(1px)}
-  button.go{background:var(--go);border-color:#2ea043;color:#fff}
-  button.stop{background:var(--stop);border-color:#c9313f;color:#fff}
+  button.go{background:var(--go);border-color:var(--success-border);color:var(--on-accent)}
+  button.stop{background:var(--stop);border-color:var(--danger-border);color:var(--on-accent)}
   .hint{color:var(--muted);font-size:12px;margin-top:10px}
   .playback{font-family:ui-monospace,Consolas,monospace;color:var(--key)}
   /* Dataset grid. Scrolls horizontally rather than wrapping: a squashed
@@ -473,11 +475,11 @@ ${FAVICON_LINK}
   .src-name{font-weight:600}
   .src-state{font-size:13px;color:var(--fed)}
   .src-state.warn{color:var(--key)}
-  .src-state.bad{color:#f85149}
+  .src-state.bad{color:var(--danger)}
   .src-row .verbs{margin-top:8px}
-  .src-row button[aria-pressed="true"]{background:#1f6feb;border-color:#388bfd;color:#fff}
-  #mode-list button[aria-pressed="true"]{background:var(--stop);border-color:#c9313f;color:#fff}
-  #mode-list button[data-mode=""][aria-pressed="true"]{background:#1f6feb;border-color:#388bfd}
+  .src-row button[aria-pressed="true"]{background:var(--accent-dim);border-color:var(--accent-border);color:var(--on-accent)}
+  #mode-list button[aria-pressed="true"]{background:var(--stop);border-color:var(--danger-border);color:var(--on-accent)}
+  #mode-list button[data-mode=""][aria-pressed="true"]{background:var(--accent-dim);border-color:var(--accent-border)}
   .page-bar{height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:8px}
   .page-bar i{display:block;height:100%;width:0;background:var(--accent)}
   .page-row .verbs button{min-height:44px;padding:10px 8px;font-size:15px}
@@ -517,15 +519,15 @@ ${FAVICON_LINK}
   .sync-check{margin-top:8px;border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-size:13px}
   .sync-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .sync-badge{font-weight:600}
-  .sync-badge[data-ok="true"]{color:#3fb950}
-  .sync-badge[data-ok="false"]{color:#d29922}
+  .sync-badge[data-ok="true"]{color:var(--success)}
+  .sync-badge[data-ok="false"]{color:var(--attention)}
   .sync-head .sub{color:var(--muted);font:12px/1 ui-monospace,Consolas,monospace}
   .sync-head button{width:auto;margin-inline-start:auto;padding:4px 10px;font-size:13px}
   .sync-rows{width:100%;border-collapse:collapse;margin-top:6px;font:12px/1.4 ui-monospace,Consolas,monospace}
   .sync-rows th{text-align:start;color:var(--muted);font-weight:500;padding:2px 6px 2px 0}
   .sync-rows td{padding:2px 6px 2px 0;vertical-align:top;overflow-wrap:anywhere}
   .sync-rows td.mark{width:1.2em}
-  .sync-rows tr[data-ok="false"] td{color:#d29922}
+  .sync-rows tr[data-ok="false"] td{color:var(--attention)}
   .icon-btn[aria-pressed="true"]{outline:2px solid var(--accent);outline-offset:-2px}
   @media (min-width:900px){
     .panel-grid{flex-direction:row-reverse;align-items:flex-start}
@@ -682,8 +684,7 @@ export function escapeHtml(s: string): string {
  * like leaving the application.
  */
 const SHELL_CSS = `
-  :root{--ui-tracking:1;--ui-caps:uppercase;/* I18N.md §6.3 — a multiplier and a switch, so a script group is one rule. */--bg:#0d1117;--panel:#161b22;--panel2:#1c2129;--border:#30363d;--text:#c9d1d9;
-        --muted:#8b949e;--accent:#58a6ff;--live:#3fb950}
+  :root{--ui-tracking:1;--ui-caps:uppercase;/* I18N.md §6.3 — a multiplier and a switch, so a script group is one rule. */${DARK_ROOT_DECLS}--live:var(--success)}
   :root:lang(ar),:root:lang(fa),:root:lang(ur),:root:lang(he),:root:lang(zh),:root:lang(ja),:root:lang(ko),:root:lang(hi){--ui-tracking:0;--ui-caps:none}
   *{box-sizing:border-box}
   body{font:14px/1.6 system-ui,"Segoe UI","Noto Sans Arabic","Noto Sans Hebrew","Noto Sans SC","Noto Sans TC","Noto Sans JP","Noto Sans KR","Noto Sans Devanagari",sans-serif;background:var(--bg);color:var(--text);
@@ -702,8 +703,20 @@ const SHELL_CSS = `
         border:1px solid var(--border);background:var(--panel);color:var(--text);
         text-decoration:none;font-weight:600;white-space:nowrap}
   .pill:hover{border-color:var(--accent)}
-  .pill.primary{background:#1f6feb;border-color:#388bfd;color:#fff}
-  .pill.primary:hover{background:#2b7bf3}`;
+  .pill.primary{background:var(--accent-dim);border-color:var(--accent-border);color:var(--on-accent)}
+  .pill.primary:hover{background:color-mix(in srgb,var(--accent-dim) 88%,var(--on-accent))}`;
+
+/** Picker labels for each theme choice, in src/theme.ts's order. */
+const THEME_LABELS: Record<ThemeChoice, string> = {
+  system: 'server.pages.themeSystem',
+  dark: 'server.pages.themeDark',
+  'dark-dimmed': 'server.pages.themeDarkDimmed',
+  'dark-hc': 'server.pages.themeDarkHc',
+  'dark-rg': 'server.pages.themeDarkRg',
+  'dark-by': 'server.pages.themeDarkBy',
+  light: 'server.pages.themeLight',
+  'light-hc': 'server.pages.themeLightHc',
+};
 
 /**
  * Portal — the front door for everything the server hosts.
@@ -754,6 +767,18 @@ export function portalPage(
     <p class="hint">${t('server.pages.signOutHint')}</p>
   </div>
 </div>`;
+  /*
+   * The theme picker. Rendered hidden and revealed by the script: the choice
+   * lives in this browser's storage, which the server cannot see, so a
+   * server-rendered selection would be a guess — and without the script the
+   * control could not change anything anyway.
+   */
+  const themePicker = `<label class="theme-pick" id="theme-pick" hidden title="${escapeHtml(t('server.pages.themeTitle'))}">
+    <span>${t('server.pages.themeLabel')}</span>
+    <select id="theme-select">${THEME_CHOICES.map(
+      (id) => `<option value="${id}">${escapeHtml(t(THEME_LABELS[id]))}</option>`,
+    ).join('')}</select>
+  </label>`;
   const tiles = projects
     .map((p) => {
       const pid = encodeURIComponent(p.id);
@@ -797,6 +822,7 @@ export function portalPage(
 ${htmlOpen()}
 <head>
 <meta charset="utf-8">
+${THEME_SCRIPT_TAG}
 ${FAVICON_LINK}
 <title>${escapeHtml(t('server.pages.portalTitle'))}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -824,7 +850,7 @@ ${FAVICON_LINK}
          align-items:start;max-width:1100px}
   .tile{border:1px solid var(--border);border-radius:10px;background:var(--panel);
         overflow:hidden}
-  .tile[open]{grid-column:1/-1;border-color:#3d4650}
+  .tile[open]{grid-column:1/-1;border-color:color-mix(in srgb,var(--border) 75%,var(--text))}
   /* Every tile header is exactly one row tall, whatever the project is called.
      Wrapping made the grid ragged — a long name pushed the scene count onto a
      second line and that tile alone grew — so the name truncates instead and
@@ -863,7 +889,7 @@ ${FAVICON_LINK}
               white-space:nowrap}
   .tile-body{border-top:1px solid var(--border);padding:6px 16px 14px}
   .scene{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
-         padding:11px 0;border-bottom:1px solid #21262d}
+         padding:11px 0;border-bottom:1px solid var(--border-muted)}
   .scene:last-child{border-bottom:none}
   .scene-name{flex:1;min-width:200px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .scene-links{display:flex;gap:8px;flex-wrap:wrap}
@@ -871,7 +897,7 @@ ${FAVICON_LINK}
        background:var(--panel2);text-decoration:none;color:var(--text);white-space:nowrap;
        font-size:13px}
   .btn:hover{border-color:var(--accent)}
-  .btn.primary{background:#1f6feb;border-color:#388bfd;color:#fff}
+  .btn.primary{background:var(--accent-dim);border-color:var(--accent-border);color:var(--on-accent)}
   /* On-air badge. Only rendered when something is actually connected, so its
      presence carries the meaning and its absence is not a claim. */
   .viewers{flex:0 0 auto;color:var(--live);border:1px solid var(--live);border-radius:10px;
@@ -881,25 +907,32 @@ ${FAVICON_LINK}
      eye to the wrong thing. */
   .tile .viewers{margin-inline-start:0}
   footer{margin-top:36px;color:var(--muted);font-size:12px;max-width:820px}
-  .auth{margin-inline-start:auto}
+  .auth{margin-inline-start:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .theme-pick{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
+  .theme-pick[hidden]{display:none}
+  /* Capped: a select is as wide as its longest option, and the colour-blind
+     labels are long — uncapped, it pushed the API key chip off the header. */
+  .theme-pick select{font:inherit;font-size:12px;padding:5px 8px;border-radius:999px;width:auto;max-width:15em;
+                     border:1px solid var(--border);background:var(--panel);color:var(--text)}
+  .theme-pick select:hover{border-color:var(--accent)}
   .auth-chip{border:1px solid var(--border);border-radius:999px;padding:5px 12px;font:inherit;font-size:12px;
              background:var(--panel);color:var(--muted);white-space:nowrap}
   button.auth-chip{cursor:pointer}
-  .auth-chip.out{color:#ffcf7a;border-color:#6e5a2a}
-  .auth-chip.in{color:var(--live);border-color:#2f5f3a}
+  .auth-chip.out{color:var(--attention-soft);border-color:color-mix(in srgb,var(--attention) 45%,transparent)}
+  .auth-chip.in{color:var(--live);border-color:color-mix(in srgb,var(--success) 40%,transparent)}
   .auth-panel{border:1px solid var(--border);border-radius:10px;background:var(--panel);padding:12px 16px;
               margin:8px 0 4px;max-width:520px}
   .auth-panel form{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .auth-panel input{flex:1;min-width:180px;padding:7px 10px;border-radius:6px;border:1px solid var(--border);
                     background:var(--panel2);color:var(--text);font:inherit}
   .auth-panel .hint{flex-basis:100%;margin:6px 0 0}
-  .auth-error{color:#f85149;font-size:12px}
+  .auth-error{color:var(--danger);font-size:12px}
 </style>
 </head>
 <body>
 <header>
   <h1>${t('server.pages.portalTitle')} ${version ? `<span class="version">${escapeHtml(version)}</span>` : ''}</h1>
-  <span class="auth">${authChip}</span>
+  <span class="auth">${themePicker}${authChip}</span>
 </header>
 ${authPanel}
 
@@ -1009,6 +1042,7 @@ export function backupPage(
 ${htmlOpen()}
 <head>
 <meta charset="utf-8">
+${THEME_SCRIPT_TAG}
 ${FAVICON_LINK}
 <title>${escapeHtml(t('server.pages.backupTitle'))}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1019,28 +1053,28 @@ ${FAVICON_LINK}
   table{border-collapse:collapse;width:100%;max-width:900px}
   th{text-align:start;color:var(--muted);font-size:11px;text-transform:var(--ui-caps);
      letter-spacing:calc(.6px * var(--ui-tracking));font-weight:600;padding:0 12px 8px 0;border-bottom:1px solid var(--border)}
-  td{padding:9px 12px 9px 0;border-bottom:1px solid #21262d;vertical-align:middle;font-size:13px}
+  td{padding:9px 12px 9px 0;border-bottom:1px solid var(--border-muted);vertical-align:middle;font-size:13px}
   .num{text-align:end;color:var(--muted);font-variant-numeric:tabular-nums}
   .pill.small{padding:4px 10px;font-size:12px}
   .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}
   button{font:inherit;padding:7px 15px;border-radius:999px;border:1px solid var(--border);
          background:var(--panel);color:var(--fg);cursor:pointer}
   button:hover:not(:disabled){border-color:var(--accent)}
-  button.primary{background:#1f6feb;border-color:#388bfd;color:#fff}
+  button.primary{background:var(--accent-dim);border-color:var(--accent-border);color:var(--on-accent)}
   button:disabled{opacity:.5;cursor:default}
   #drop{border:1px dashed var(--border);border-radius:10px;padding:26px;text-align:center;
         color:var(--muted);max-width:900px;background:var(--panel)}
   #drop.over{border-color:var(--accent);color:var(--fg)}
   #report{max-width:900px;margin-top:14px}
-  .warn{color:#d29922}
-  .err{color:#f85149}
+  .warn{color:var(--attention)}
+  .err{color:var(--danger)}
   /* The restore's name prompt (0.77.0) — the one place this page takes typing. */
   table.names td{vertical-align:top}
   table.names small{display:block;margin-top:4px;font-size:11px}
   input.rename{font:inherit;width:100%;min-width:220px;box-sizing:border-box;padding:6px 10px;
          border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--fg)}
   input.rename:focus{outline:2px solid var(--accent);outline-offset:-1px}
-  input.rename[aria-invalid="true"]{border-color:#d29922}
+  input.rename[aria-invalid="true"]{border-color:var(--attention)}
   footer{margin-top:28px;color:var(--muted);font-size:12px;max-width:820px}
 </style>
 </head>
@@ -1157,6 +1191,7 @@ export function activityPage(
 ${htmlOpen()}
 <head>
 <meta charset="utf-8">
+${THEME_SCRIPT_TAG}
 ${FAVICON_LINK}
 <title>${escapeHtml(t('server.pages.activityTitle'))}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1167,11 +1202,11 @@ ${FAVICON_LINK}
   .tab{padding:6px 13px;border-radius:999px;border:1px solid var(--border);
        background:var(--panel);text-decoration:none;color:var(--muted);font-size:13px}
   .tab:hover{border-color:var(--accent)}
-  .tab.on{background:#1f6feb;border-color:#388bfd;color:#fff}
+  .tab.on{background:var(--accent-dim);border-color:var(--accent-border);color:var(--on-accent)}
   table{border-collapse:collapse;width:100%;max-width:1100px}
   th{text-align:start;color:var(--muted);font-size:11px;text-transform:var(--ui-caps);
      letter-spacing:calc(.6px * var(--ui-tracking));font-weight:600;padding:0 12px 8px 0;border-bottom:1px solid var(--border)}
-  td{padding:9px 12px 9px 0;border-bottom:1px solid #21262d;vertical-align:top;font-size:13px}
+  td{padding:9px 12px 9px 0;border-bottom:1px solid var(--border-muted);vertical-align:top;font-size:13px}
   .when{white-space:nowrap;color:var(--muted);font-family:ui-monospace,Consolas,monospace;
         font-size:12px}
   .who{white-space:nowrap}
@@ -1180,8 +1215,8 @@ ${FAVICON_LINK}
      colour before the row is read. */
   .verb{font-family:ui-monospace,Consolas,monospace;font-size:12px;padding:2px 7px;
         border-radius:10px;border:1px solid var(--border);color:var(--muted);white-space:nowrap}
-  .verb.delete{color:#f85149;border-color:rgba(248,81,73,.5);background:rgba(248,81,73,.08)}
-  .verb.create{color:var(--live);border-color:rgba(63,185,80,.5);background:rgba(63,185,80,.08)}
+  .verb.delete{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 50%,transparent);background:color-mix(in srgb,var(--danger) 8%,transparent)}
+  .verb.create{color:var(--live);border-color:color-mix(in srgb,var(--success) 50%,transparent);background:color-mix(in srgb,var(--success) 8%,transparent)}
   footer{margin-top:28px;color:var(--muted);font-size:12px;max-width:820px}
 </style>
 </head>
@@ -1361,6 +1396,7 @@ export function peersPage(
 ${htmlOpen()}
 <head>
 <meta charset="utf-8">
+${THEME_SCRIPT_TAG}
 ${FAVICON_LINK}
 <title>${escapeHtml(t('server.pages.connectionsTitle'))}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1372,18 +1408,18 @@ ${FAVICON_LINK}
   .tab{padding:6px 13px;border-radius:999px;border:1px solid var(--border);
        background:var(--panel);text-decoration:none;color:var(--muted);font-size:13px}
   .tab:hover{border-color:var(--accent)}
-  .tab.on{background:#1f6feb;border-color:#388bfd;color:#fff}
+  .tab.on{background:var(--accent-dim);border-color:var(--accent-border);color:var(--on-accent)}
   h2{font-size:13px;text-transform:var(--ui-caps);letter-spacing:calc(.6px * var(--ui-tracking));
      color:var(--muted);font-weight:600;margin:26px 0 10px}
   .count{color:var(--text);font:600 13px ui-monospace,Consolas,monospace;margin-inline-start:6px}
   table{border-collapse:collapse;width:100%;max-width:1100px}
   th{text-align:start;color:var(--muted);font-size:11px;text-transform:var(--ui-caps);
      letter-spacing:calc(.6px * var(--ui-tracking));font-weight:600;padding:0 12px 8px 0;border-bottom:1px solid var(--border)}
-  td{padding:9px 12px 9px 0;border-bottom:1px solid #21262d;vertical-align:top;font-size:13px}
+  td{padding:9px 12px 9px 0;border-bottom:1px solid var(--border-muted);vertical-align:top;font-size:13px}
   .num{text-align:end;font-variant-numeric:tabular-nums;white-space:nowrap}
   .who{white-space:nowrap}
   .who span{color:var(--muted);margin-inline-start:6px;font-size:12px;cursor:help}
-  .bad{color:#f85149}
+  .bad{color:var(--danger)}
   footer{margin-top:28px;color:var(--muted);font-size:12px;max-width:820px}
 </style>
 </head>
@@ -1417,6 +1453,7 @@ export function docsPage(body: string): string {
 ${htmlOpen()}
 <head>
 <meta charset="utf-8">
+${THEME_SCRIPT_TAG}
 ${FAVICON_LINK}
 <title>${escapeHtml(t('server.pages.docsTitle'))}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1424,7 +1461,7 @@ ${FAVICON_LINK}
 <style>${SHELL_CSS}
   body{padding:0}
   .doc-bar{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;
-           padding:12px 32px;background:rgba(13,17,23,.92);backdrop-filter:blur(6px);
+           padding:12px 32px;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(6px);
            border-bottom:1px solid var(--border)}
   .doc{max-width:860px;margin:0 auto;padding:28px 32px 80px}
   /* Generous measure and spacing: this is 800 lines of prose, usually read on a

@@ -43,12 +43,33 @@ interface Status {
 import { bootI18n } from './i18n.js';
 
 declare global {
-  interface Window { __BREEZE_PORTAL__?: { locale?: string; messages?: Record<string, string> }; }
+  interface Window {
+    __BREEZE_PORTAL__?: { locale?: string; messages?: Record<string, string> };
+    /** Set by /theme.js (src/theme.ts), which runs first in <head>. */
+    breezeTheme?: { ids: string[]; choice(): string; resolved(): string | null; set(id: string): void };
+  }
 }
 
 const { t } = bootI18n(window.__BREEZE_PORTAL__);
 
 const POLL_MS = 2000;
+
+/*
+ * The theme picker. The page renders it hidden because only this browser knows
+ * the stored choice; it is shown once it can say the truth. A change made in
+ * another tab — or in the editor — reaches /theme.js through the `storage`
+ * event, so the select listens for the same event to stay in step.
+ */
+(() => {
+  const pick = document.getElementById('theme-pick');
+  const select = document.getElementById('theme-select') as HTMLSelectElement | null;
+  const theme = window.breezeTheme;
+  if (!pick || !select || !theme) return;
+  select.value = theme.choice();
+  pick.hidden = false;
+  select.addEventListener('change', () => theme.set(select.value));
+  window.addEventListener('storage', () => { select.value = theme.choice(); });
+})();
 
 const el = (id: string) => document.getElementById(id);
 

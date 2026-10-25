@@ -35,6 +35,7 @@ import { seedDemos } from './seed.js';
 import { SESSION_COOKIE, Sessions, keyMatches, readCookie, redactKey, sameOrigin } from './session.js';
 import { fail } from './errors.js';
 import { FAVICON_SVG } from './favicon.js';
+import { themeScript } from './theme.js';
 import { NotFoundError, ensureDataDirs, listProjects } from './store.js';
 import { APP_VERSION, FORMAT_VERSION } from './version.js';
 
@@ -213,6 +214,21 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   };
   app.get('/favicon.svg', favicon);
   app.get('/favicon.ico', favicon);
+
+  /*
+   * Interface themes (src/theme.ts) — one script every themed page loads first
+   * in <head>, the editor included. Built once: the rules are a pure function of
+   * a table, so there is nothing to recompute per request. A short max-age
+   * rather than a version query, because the editor's index.html is a Vite
+   * input with no version to put in a URL; a minute of a stale palette after an
+   * upgrade costs nothing.
+   */
+  const themeJs = themeScript();
+  app.get('/theme.js', async (_req, reply) => {
+    reply.type('text/javascript; charset=utf-8');
+    reply.header('cache-control', 'public, max-age=60');
+    return themeJs;
+  });
 
   app.get('/', async (req, reply) => {
     reply.type('text/html; charset=utf-8');

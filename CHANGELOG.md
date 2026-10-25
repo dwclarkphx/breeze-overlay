@@ -4,6 +4,25 @@ All notable changes to Breeze Overlay are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow the project rule: a feature bumps the minor version, a fix bumps the patch. Releases before 0.45.0 used two-part numbers (0.01–0.44). 1.0.0 will be the first public release.
 
+## [0.78.0] - 2026-10-25
+
+> Paths are drawn on the stage, and Breeze can look the way you need it to.
+
+### Added
+
+- **Paths are edited on the stage.** Select a path shape, or any layer with a path mask, and its points and curve handles appear over it: drag a point to move it, drag a handle to bend the curve, double-click a point to switch it between corner and curve, double-click a straight edge to add a point there, and `Alt`-click a point to remove it. The handles follow the layer through rotation, scale and skew and stay the same size at any zoom; dragging anywhere else inside the layer still moves the whole layer. A layer with both a path shape and a path mask gets **Shape path** / **Mask path** buttons in the stage toolbar. A path using commands the stage cannot round-trip (arcs, relative or shorthand commands) is left untouched and the toolbar says so. This completes Phase 8 (MASKS.md §5.1).
+- **Interface themes**, chosen from a **Theme** menu on the portal: Follow system (the default), Dark, Dark dimmed, Dark high contrast, Dark red–green safe (protanopia, deuteranopia), Dark blue–yellow safe (tritanopia), Light and Light high contrast. Every theme keeps text at 4.5:1 or better on every panel colour, and the two colour-blind themes keep danger, success and warning apart under simulation of the deficiency they are for. Follow system honours the OS light/dark setting and its "more contrast" preference. The choice is per browser and every open Breeze tab follows a change at once. Themes recolour the portal, editor, control, backup, activity, connections and guide pages — never `/play`, the stage or anything on air. Served as `/theme.js`.
+
+### Changed
+
+- The layer **delete** button is red and its tooltip names what it removes — *Delete the selected layer “Bar”*, or *Delete the 3 selected layers* — adds *and every layer inside it* for a group or table, and gives the shortcut and the undo. It was a 🗑 emoji reading "Delete selected", which could not be coloured.
+- The project and scene pickers read **Delete selected project…** and **Delete selected scene…**, and their dialogs are titled *Delete the selected project* / *Delete the selected scene*.
+- Selecting a locked layer now says so in the stage toolbar, rather than only showing no handles.
+
+### Fixed
+
+- The control panel's preview frame and sync-check box were drawn with no border: their colour, `--line`, was never defined. It is now the theme's border colour.
+
 ## [0.77.0] - 2026-10-17
 
 > Every project and every graphic has a name you can read.

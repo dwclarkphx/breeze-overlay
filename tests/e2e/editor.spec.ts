@@ -1114,7 +1114,11 @@ test('deleting a layer removes it from the preview', async ({ page }) => {
   await page.locator('.layer-row', { hasText: 'Accent' }).first().click();
   await expect(page.locator('.stage-host [data-layer-id="accent"]')).toBeAttached();
 
-  await page.locator('.panel-actions button[title="Delete selected"]').click();
+  // The tooltip names what the click will remove, so it is asserted before the
+  // click — a button that said "Delete selected" left "selected what?" open.
+  const remove = page.locator('.panel-actions button.layer-delete');
+  await expect(remove).toHaveAttribute('title', /^Delete the selected layer “Accent”\./);
+  await remove.click();
 
   await expect(page.locator('.stage-host [data-layer-id="accent"]')).toHaveCount(0);
 });

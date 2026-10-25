@@ -18,6 +18,7 @@ import type { Layer, LayerType } from '@breeze/schema';
 
 import { useT } from '@breeze/i18n/react';
 
+import { findLayer } from '../state/commands.js';
 import { useEditor } from '../state/store.js';
 import { LayerThumb } from './LayerThumb.js';
 
@@ -57,6 +58,39 @@ export function LayersPanel(): JSX.Element {
     cellOwner?.type === 'table' ? cellOwner : activeLayer?.type === 'table' ? activeLayer : null;
 
   const assetBase = projectId ? `/assets/${encodeURIComponent(projectId)}` : undefined;
+
+  /*
+   * What the delete button will actually remove, said on the button.
+   *
+   * "Delete selected" left two questions open — selected *what*, and what
+   * happens to a group's children — and the answer to the second is "they go
+   * too", which is exactly the one worth saying before the click rather than
+   * after it. Undo covers it either way; the tooltip says so, because an
+   * operator who knows the click is reversible reads the warning as
+   * information rather than a threat.
+   */
+  const toDelete = selected
+    .map((id) => findLayer(composition.layers, id))
+    .filter((l): l is Layer => l !== undefined);
+  const deletesNested = toDelete.some(
+    (l) => (l.type === 'group' && l.children.length > 0) || (l.type === 'table' && l.row.cells.length > 0),
+  );
+  const deleteLabel =
+    toDelete.length === 0
+      ? t('editor.layers.deleteNone')
+      : t('editor.layers.deleteSelected', {
+          count: toDelete.length,
+          name: toDelete[0]?.name ?? toDelete[0]?.id ?? '',
+          nested: deletesNested ? 'yes' : 'no',
+        });
+  /*
+   * The shortcut and the undo go in the tooltip only, not the accessible name:
+   * a name containing "Undo" made this button answer to the Undo button's
+   * name too, and a screen reader would read the whole sentence on every
+   * focus. The name says what the button does; the tooltip adds how else.
+   */
+  const deleteTitle =
+    toDelete.length === 0 ? deleteLabel : t('editor.layers.deleteShortcuts', { action: deleteLabel });
 
   // Paint order is bottom-up in the JSON, so reverse for display.
   const ordered = [...composition.layers].reverse();
@@ -231,7 +265,23 @@ export function LayersPanel(): JSX.Element {
               </optgroup>
             )}
           </select>
-          <button onClick={deleteSelected} disabled={selected.length === 0} title={t('editor.layers.deleteSelected')}>🗑</button>
+          <button
+            className="layer-delete"
+            onClick={deleteSelected}
+            disabled={toDelete.length === 0}
+            title={deleteTitle}
+            aria-label={deleteLabel}
+          >
+            {/*
+              A drawn icon rather than the 🗑 emoji it replaces: an emoji paints
+              in its own colours and ignores `color`, so it could never be
+              made red — and it rendered differently on every OS.
+            */}
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+              <path d="M2.5 4h11M6.5 4V2.5h3V4M4 4l.7 9.5h6.6L12 4M6.75 6.5v5M9.25 6.5v5" // i18n-ignore — SVG path data
+                fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
           {/*
             Kept out of the layout rather than conditionally rendered: a file
             input that unmounts between the click and the dialog closing loses

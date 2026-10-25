@@ -79,6 +79,24 @@ On first run the server installs three demo projects, so there is something to t
 
 These are ordinary projects. They live in your data folder exactly as anything you create does, and you can rename, edit or **delete** any of them from the editor's project menu — see [Making and removing projects](#making-and-removing-projects). A deleted demo stays deleted, and will not come back the next time the server starts.
 
+### Changing how Breeze looks — themes
+
+The **Theme** menu at the top right of the portal changes the colours of Breeze's own pages — the portal, the editor, control panels, and the backup, activity and connections pages. It never changes a graphic: the stage, the output URL and everything that goes to air look exactly the same whatever you pick.
+
+| Theme | For |
+|---|---|
+| **Follow system** | The default. Dark or light from your operating system's setting, and the high-contrast version of either if you have asked your OS for more contrast |
+| **Dark** | Breeze's usual look |
+| **Dark dimmed** | Softer contrast and no pure white — easier on light-sensitive eyes in a dark control room |
+| **Dark high contrast** | Brighter text and borders on near-black |
+| **Dark, red–green safe** | For protanopia and deuteranopia. Red and green are the pair these viewers lose, so *success* turns blue and *danger* turns orange — a **GO** button is blue, a **STOP** button orange |
+| **Dark, blue–yellow safe** | For tritanopia. Green and blue merge for these viewers, so *success* turns blue and warnings move to a lighter amber that stays clear of red |
+| **Light** / **Light high contrast** | A light interface, for bright rooms or if you read light backgrounds more easily |
+
+Every theme keeps text at a contrast of at least 4.5 : 1 — the WCAG AA level — on every panel colour. The choice is remembered **by this browser**, not by the server, so a tablet running a control panel and the laptop beside it can each have their own. Changing it in one tab updates every Breeze tab open in the same browser at once, the editor included.
+
+Windows' own contrast themes (Settings → Accessibility → Contrast themes) also work: the browser replaces Breeze's colours with yours, whatever is picked here.
+
 ### Activity — a record of what changed
 
 The **Activity** button on the portal opens a log of the things worth being able to look up afterwards:
@@ -221,7 +239,7 @@ The new project opens straight away, empty, with one untitled scene ready to bui
 
 A new scene inherits the **stage size of the project it is added to**, not a fixed 1920×1080. Add a scene to a 1280×720 project and you get another 1280×720 scene.
 
-**Delete scene…** at the bottom of the scene picker removes the scene you are looking at. There is one thing it will refuse to do: if another scene mounts this one as a layer — which is how [scenes](#13-scenes--several-graphics-one-browser-source) are assembled — the delete is blocked and the dialog lists every scene and layer still using it. Unlink those layers first, then delete.
+**Delete selected scene…** at the bottom of the scene picker removes the scene you are looking at. There is one thing it will refuse to do: if another scene mounts this one as a layer — which is how [scenes](#13-scenes--several-graphics-one-browser-source) are assembled — the delete is blocked and the dialog lists every scene and layer still using it. Unlink those layers first, then delete.
 
 ![A delete refused because another scene mounts this one](images/delete-scene-blocked.png)
 
@@ -229,9 +247,9 @@ A new scene inherits the **stage size of the project it is added to**, not a fix
 
 This is deliberate. Deleting a scene out from under something that mounts it does not break that parent loudly; it leaves it playing with one graphic silently missing, which is the kind of thing you find out about on air.
 
-**Delete project…** at the bottom of the project picker. This one deletes the whole project directory — every scene, every uploaded asset, every data source — and there is no undo and no recycle bin. You have to type the project's name to confirm it. Anything already pointing at that project, a browser source in OBS or a button on a Stream Deck, stops working the moment it goes.
+**Delete selected project…** at the bottom of the project picker. This one deletes the whole project directory — every scene, every uploaded asset, every data source — and there is no undo and no recycle bin. You have to type the project's name to confirm it. Anything already pointing at that project, a browser source in OBS or a button on a Stream Deck, stops working the moment it goes.
 
-> Neither delete asks twice by accident. Choosing one from a picker only opens a dialog — nothing is removed until you confirm, so arrowing past `Delete project…` with the keyboard is harmless.
+> Neither delete asks twice by accident. Choosing one from a picker only opens a dialog — nothing is removed until you confirm, so arrowing past `Delete selected project…` with the keyboard is harmless.
 
 ### URL keys
 
@@ -263,7 +281,23 @@ The checkerboard is transparency — the graphic goes over live video, so there 
 
 They hide themselves automatically when the stage panel is narrower than 480px — at that size the dashed boxes cover more of the artwork than they frame. The checkbox grays out while that applies; widen the panel and the guides come back as you left them.
 
-**Selecting and moving.** Click a layer to select it. Handles appear: drag inside the box to move, drag a corner or edge to scale, drag the stalk above the box to rotate. Locked layers show no handles.
+**Selecting and moving.** Click a layer to select it. Handles appear: drag inside the box to move, drag a corner or edge to scale, drag the stalk above the box to rotate. A locked layer shows no handles, and the toolbar says it is locked — unlock it with the padlock in the layers panel.
+
+**Editing a path on the stage.** Select a shape whose **Kind** is **Path**, or any layer with a **Path** mask, and its points appear on the stage over the layer:
+
+| To | Do |
+|---|---|
+| Move a point | Drag its square |
+| Bend the curve either side of a point | Drag one of its round handles |
+| Turn a corner into a curve, or a curve back into a corner | Double-click the point |
+| Add a point | Double-click a straight edge where you want it |
+| Remove a point | `Alt`-click it. A path always keeps at least two |
+
+Dragging inside the layer anywhere *off* the points still moves the whole layer, as it does for any other layer. Every edit is one `Ctrl+Z`.
+
+A path shape with a path mask has two sets of points; the **Shape path** / **Mask path** buttons in the toolbar choose which one the stage shows. Mask points are joined to their handles by dashed lines rather than solid ones.
+
+Points can be dragged only on a path made of straight lines and curves — what Breeze itself writes. A path pasted in from elsewhere that uses arcs, relative coordinates or shorthand commands is left exactly as it is: the toolbar says the stage cannot drag it, and its numbers can still be edited in the properties panel.
 
 **Getting around:**
 
@@ -295,7 +329,7 @@ Each row has a visibility dot, a lock, a thumbnail of the layer's actual content
 | Hide / show | Click the dot — `◉` visible, `○` hidden |
 | Lock / unlock | Click the padlock. A locked layer cannot be dragged on stage |
 | Move up / down the stack | The `▲` and `▼` arrows |
-| Delete | The bin button, or press `Delete` with the layer selected |
+| Delete | The red bin button, or press `Delete` with the layer selected. Its tooltip names what it will remove — a group or table takes every layer inside it — and `Ctrl+Z` brings it back |
 
 **Adding a layer.** The `+ Add…` menu offers **Text**, **Shape**, **Image**, **Video**, **Sprite**, **Crawl**, **Table**, **Group** and **Composition** (for nesting another composition — see [section 13](#13-scenes--several-graphics-one-browser-source) for using this to build a scene).
 
@@ -323,7 +357,7 @@ Select a layer and the panel fills out. The sections you see depend on the layer
 
 ### By layer type
 
-**Shape** — **Kind** (rectangle or ellipse), **Fill** and corner **Radius**.
+**Shape** — **Kind** (rectangle, ellipse or path), **Fill** and corner **Radius**. A path also has its **Path data** and a list of its points with their coordinates; the quickest way to shape one is on the stage — see [Editing a path on the stage](#5-the-stage).
 
 ![Properties for a shape layer](images/properties-shape.png)
 

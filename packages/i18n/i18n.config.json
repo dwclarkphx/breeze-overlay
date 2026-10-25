@@ -9,6 +9,8 @@
     "apps/editor/src/components/ProjectDialogs.tsx",
     "apps/editor/src/components/Splitter.tsx",
     "apps/editor/src/components/StageViewport.tsx",
+    "apps/editor/src/components/PathHandles.tsx",
+    "apps/editor/src/components/LayersPanel.tsx",
     "apps/editor/src/components/UploadConflictDialog.tsx",
     "apps/editor/src/state/commands.ts",
     "apps/editor/src/state/format.ts",

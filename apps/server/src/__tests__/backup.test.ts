@@ -124,7 +124,8 @@ describe('the page', () => {
    */
   it('points at a script path that is actually served', async () => {
     const page = await app.inject({ method: 'GET', url: '/backup' });
-    const src = /<script src="([^"]+)"/.exec(page.body)?.[1];
+    // The page bundle, not /theme.js — every themed page loads that first in <head>.
+    const src = /<script src="(\/public\/[^"]+)"/.exec(page.body)?.[1];
     expect(src).toBe('/public/backup.js');
 
     const asset = await app.inject({ method: 'GET', url: src! });

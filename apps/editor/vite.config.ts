@@ -280,6 +280,8 @@ export default defineConfig({
       '/public': 'http://127.0.0.1:7331',
       // The tab icon lives on the server (src/favicon.ts), shared with the portal.
       '/favicon.svg': 'http://127.0.0.1:7331',
+      // Interface themes (src/theme.ts on the server), shared with every server page.
+      '/theme.js': 'http://127.0.0.1:7331',
       /*
        * The control hub. Needs `ws: true` and a `ws://` target — without it
        * Vite proxies the upgrade request as plain HTTP and the socket fails to

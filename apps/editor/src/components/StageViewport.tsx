@@ -24,6 +24,9 @@ import { DATA_UPDATE_KEY, MODE_UPDATE_KEY, type Composition, type Layer } from '
 
 import { useEditor } from '../state/store.js';
 import { findLayer, isCell } from '../state/commands.js';
+import { parsePath } from '../state/path-geometry.js';
+import { pathTargets, type PathTarget } from '../state/path-overlay.js';
+import { PathHandles } from './PathHandles.js';
 import {
   canvasFitsGuides,
   clampZoom,
@@ -506,6 +509,18 @@ export function StageViewport(): JSX.Element {
   const selectedLayer: Layer | null =
     composition && selectedId ? findLayer(composition.layers, selectedId) ?? null : null;
 
+  /*
+   * The path the on-stage handles edit (D′): a path shape's geometry, the
+   * layer's path mask, or — when it has both — whichever the toolbar says.
+   * Remembered as a preference rather than per layer, and falling back to
+   * whatever the selection actually has, so selecting a layer with only a
+   * mask after one with both still shows the mask.
+   */
+  const [pathKind, setPathKind] = useState<PathTarget['kind']>('shape');
+  const pathChoices = selectedLayer && !selectedIsCell ? pathTargets(selectedLayer) : [];
+  const pathEdit = pathChoices.find((c) => c.kind === pathKind) ?? pathChoices[0] ?? null;
+  const pathEditable = pathEdit !== null && parsePath(pathEdit.d) !== null;
+
   /**
    * Re-measure the transform handles whenever the layer moves underneath them.
    *
@@ -833,6 +848,35 @@ export function StageViewport(): JSX.Element {
           </span>
         )}
 
+        {selectedLayer?.locked && !selectedIsCell && (
+          /*
+            Said, not merely implied by missing handles. The guard has been
+            here since the schema had the field, and a locked layer looked
+            exactly like a layer the stage had failed to pick up.
+          */
+          <span className="selection-hint" data-state="locked">
+            {t('editor.stage.layerLocked', { layer: selectedLayer.name ?? selectedLayer.id })}
+          </span>
+        )}
+
+        {pathChoices.length > 1 && !selectedLayer?.locked && (
+          <span className="path-kind" role="group" title={t('editor.stage.pathEditTitle')}>
+            {pathChoices.map((c) => (
+              <button
+                key={c.kind}
+                aria-pressed={pathEdit?.kind === c.kind}
+                onClick={() => setPathKind(c.kind)}
+              >
+                {t(c.kind === 'shape' ? 'editor.stage.pathEditShape' : 'editor.stage.pathEditMask')}
+              </button>
+            ))}
+          </span>
+        )}
+
+        {pathEdit && !pathEditable && !selectedLayer?.locked && (
+          <span className="selection-hint" data-state="path">{t('editor.stage.pathNotEditable')}</span>
+        )}
+
         {previewMode && (
           <button
             className="stage-mode"
@@ -972,6 +1016,30 @@ export function StageViewport(): JSX.Element {
               onRotateStart={beginDrag}
               onRotate={onRotate}
               onRotateEnd={endGesture}
+            />
+          )}
+
+          {/*
+            The bezier surface (D′). After Moveable and above it, but
+            transparent to the pointer except for its own marks — so the drag
+            area underneath still moves the whole layer, and an anchor wins
+            only where an anchor is drawn.
+
+            `locked` is honoured here, where the drag starts, exactly as it is
+            on Moveable above: the field was deferred to this surface (MASKS.md
+            §0) so the guard would live in one kind of place. Hidden while
+            playing, because the handles are measured at the playhead and a
+            moving layer would leave them behind.
+          */}
+          {target && selectedLayer && !selectedLayer.locked && !selectedIsCell && pathEdit && pathEditable && !playing && (
+            <PathHandles
+              key={`${selectedLayer.id}:${pathEdit.kind}`}
+              layer={selectedLayer}
+              target={target}
+              edit={pathEdit}
+              zoom={zoom}
+              stage={composition.stage}
+              measureKey={`${runtimeVersion}:${playhead}`}
             />
           )}
         </div>
