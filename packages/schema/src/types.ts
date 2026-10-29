@@ -25,6 +25,8 @@ import type { DataColumn, DataRow, DataTransform } from './data.js';
 
 import type { MediaKind, MediaOnError } from './media.js';
 import type { LayerRule } from './rules.js';
+import type { TextTimer } from './timer.js';
+import type { FieldSpec } from './fields.js';
 
 export const FORMAT_VERSION = 1 as const;
 
@@ -83,6 +85,14 @@ export const ANIMATABLE_PROPS = [
   'grayscale',
   'sepia',
   'maskOffset',
+  /*
+   * Wave R (CHARTS.md §4.2–4.3). Shape-only: `trim` draws a path or arc on
+   * (0–1), `sweep` is an ellipse arc's angle in degrees. Keyframable so a line
+   * chart can draw itself on at PLAY; drivable (`LayerDrive`) so a gauge can
+   * follow a number. On every other layer they are inert at their defaults.
+   */
+  'trim',
+  'sweep',
 ] as const;
 
 export type AnimatableProp = (typeof ANIMATABLE_PROPS)[number];
@@ -112,6 +122,7 @@ export type LayerType =
   | 'media'
   | 'crawl'
   | 'table'
+  | 'roll'
   | 'composition'
   | 'group';
 
@@ -193,6 +204,71 @@ export interface LayerBase {
   cell?: string;
   /** Rules that show, hide, recolour or re-source the layer from data (Wave 6, `rules.ts`). */
   rules?: LayerRule[];
+  /**
+   * Numbers from data driving properties — a bar's width, a gauge's sweep
+   * (Wave R, CHARTS.md §3). Each tweens to its new value when the data changes.
+   */
+  drives?: LayerDrive[];
+}
+
+/* ------------------------------------------------------------------ drives */
+
+/** What a drive can move (CHARTS.md §3). */
+export const DRIVE_PROPS = [
+  'width', 'height',
+  'x', 'y',
+  'scaleX', 'scaleY',
+  'rotation',
+  'opacity',
+  'sweep',
+  'trim',
+] as const;
+
+export type DriveProp = (typeof DRIVE_PROPS)[number];
+
+/** Which edge a driven width or height grows from. */
+export const DRIVE_GROWS = ['start', 'center', 'end'] as const;
+export type DriveGrow = (typeof DRIVE_GROWS)[number];
+
+/**
+ * Where a drive reads its number: the same subjects a rule condition reads,
+ * exactly one of them.
+ *
+ * - `column` alone: the cell's own row (a layer inside a table row template);
+ * - `source` + `column`: that source's first row, or with `where` the first
+ *   row whose `where.column` equals `where.value`;
+ * - `binding`: a dynamic field;
+ * - `timer`: a timer's value in seconds.
+ */
+export interface DriveSubject {
+  column?: string;
+  source?: string;
+  where?: { column: string; value: DataRow[string] };
+  binding?: string;
+  timer?: string;
+}
+
+/**
+ * One end of a drive's input range. A number, or worked out from the data:
+ * `min` / `max` / `total` of the subject's column across its rows (the rows of
+ * the cell's table, or of the named source), or another column of the same row
+ * or another field (`{ column: 'goal' }` for a meter).
+ */
+export type DomainEnd = number | 'min' | 'max' | 'total' | { column: string } | { binding: string };
+
+export interface LayerDrive {
+  property: DriveProp;
+  from: DriveSubject;
+  /** Input range. Default `{ min: 0, max: 'max' }`: the leading bar fills the range. */
+  domain?: { min?: DomainEnd; max?: DomainEnd };
+  /** Output range, in the property's own units: px, degrees, scale, 0–1 for opacity and trim. */
+  range: [number, number];
+  /** Keep the output inside `range`. Default true. */
+  clamp?: boolean;
+  /** Width and height only: the edge that stays put. Default `start` (left, top). */
+  grow?: DriveGrow;
+  /** Animate a change. Absent: the value is set at once. */
+  tween?: { duration: number; ease?: Ease };
 }
 
 export interface LayerEffects {
@@ -270,6 +346,62 @@ export interface ShapeLayer extends LayerBase {
    * it to a filled blob would make every freshly drawn stroke look wrong.
    */
   path?: string;
+  /** A colour field (`Composition.fields`, kind `color`) whose value fills this shape — a team colour. Phase 9 Wave B. */
+  colorBinding?: string;
+  /**
+   * Ellipse only: draw an arc of it instead of the whole (Wave R, CHARTS.md
+   * §4.2). With `thickness` it is a ring segment — a gauge, a donut slice —
+   * stroked in the fill; without, a pie wedge.
+   */
+  arc?: ShapeArc;
+  /**
+   * Path or arc: how much of the outline is drawn, 0–1, from its start
+   * (Wave R, CHARTS.md §4.3). Default 1. Keyframe it to draw a line on.
+   */
+  trim?: number;
+  /**
+   * Path only: generate the path from rows instead of `path` — a line or
+   * area chart, or a sparkline (Wave R, CHARTS.md §4.4).
+   */
+  plot?: ShapePlot;
+}
+
+export const ARC_CAPS = ['butt', 'round'] as const;
+export type ArcCap = (typeof ARC_CAPS)[number];
+
+export interface ShapeArc {
+  /** Degrees clockwise from 12 o'clock where the arc begins. Default 0. */
+  start?: number;
+  /** Degrees of arc, 0–360. Drivable and keyframable as `sweep`. */
+  sweep: number;
+  /** Ring thickness in px. Absent: a filled wedge from the centre. */
+  thickness?: number;
+  /** Ring ends. Default `butt`. */
+  cap?: ArcCap;
+}
+
+export const PLOT_CURVES = ['linear', 'monotone'] as const;
+export type PlotCurve = (typeof PLOT_CURVES)[number];
+
+/** A plot's axis end: a number, or the lowest / highest value in the rows. */
+export type PlotDomainEnd = number | 'min' | 'max';
+
+export interface ShapePlot {
+  /** The data source whose rows are drawn. */
+  source?: string;
+  transforms?: DataTransform[];
+  /** Column for the vertical value. */
+  y: string;
+  /** Column for the horizontal value. Absent: rows evenly spaced in order. */
+  x?: string;
+  /** Vertical range. Default `min` to `max` of the rows. `pad` widens it by that fraction each way. */
+  domain?: { min?: PlotDomainEnd; max?: PlotDomainEnd; pad?: number };
+  /** `monotone` is smooth and never overshoots a reading. Default `linear`. */
+  curve?: PlotCurve;
+  /** Close the line down to the baseline so the fill paints the area under it. */
+  area?: boolean;
+  /** Animate the line to new values when the row count is unchanged. */
+  tween?: { duration: number; ease?: Ease };
 }
 
 export interface TextStyle {
@@ -395,6 +527,8 @@ export interface TextLayer extends LayerBase {
   text: string;
   /** Dynamic-field name; `update({ [binding]: value })` replaces `text`. */
   binding?: string;
+  /** A colour field whose value colours this text, independently of `binding`. Phase 9 Wave B. */
+  colorBinding?: string;
   style: TextStyle;
   fit?: TextFit;
   textAnimPreset?: TextAnimPreset;
@@ -408,6 +542,28 @@ export interface TextLayer extends LayerBase {
    * validator rejects it rather than letting it be discovered on air.
    */
   clock?: TextClock;
+  /**
+   * Turns this layer into a countdown, count-up or stopwatch (Phase 9 Wave B).
+   * Like `clock`, a property rather than a layer type, and exclusive with both
+   * `clock` and `binding`. The state lives in the hub per channel; see `timer.ts`.
+   */
+  timer?: TextTimer;
+  /**
+   * Count to a new number instead of jumping to it (Wave R, CHARTS.md §4.5):
+   * 38 % rolls up to 41 %. Applies when the text shows a number — a number
+   * field, or a table cell reading a numeric column.
+   */
+  count?: NumberCount;
+}
+
+export interface NumberCount {
+  /** Seconds to count over. */
+  duration: number;
+  ease?: Ease;
+  /** Decimal places shown while counting and after. Default: the new value's own. */
+  decimals?: number;
+  prefix?: string;
+  suffix?: string;
 }
 
 export interface ImageLayer extends LayerBase {
@@ -712,6 +868,12 @@ export interface TableLayer extends LayerBase {
    * hard is resolving it, and that is `{ op: 'advance' }` in the data pipeline.
    */
   layout?: 'rows';
+  /**
+   * Which way rows step: `y` down the layer (the default), or `x` across it —
+   * a column chart, or a row of labels under a line (Wave R, CHARTS.md §4.1).
+   * With `x`, `row.height` is the step across and paging fits the layer width.
+   */
+  axis?: TableAxis;
   rowAnim?: RowAnimPreset;
   flip?: RowFlipOptions;
   /**
@@ -805,6 +967,80 @@ export interface TableCycle {
   keyColumn?: string;
 }
 
+export const TABLE_AXES = ['y', 'x'] as const;
+export type TableAxis = (typeof TABLE_AXES)[number];
+
+/* ------------------------------------------------------------------- rolls */
+
+/** Wave R (ROLLS.md §4). */
+export const ROLL_DIRECTIONS = ['up', 'down', 'left', 'right'] as const;
+export type RollDirection = (typeof ROLL_DIRECTIONS)[number];
+
+/** Where travel 0 is: content just outside the window, or its first line already showing. */
+export const ROLL_FROMS = ['enter', 'top'] as const;
+export type RollFrom = (typeof ROLL_FROMS)[number];
+
+/** Where travel ends: the last line has left, or the last line sits at the far edge. */
+export const ROLL_TOS = ['exit', 'bottom'] as const;
+export type RollTo = (typeof ROLL_TOS)[number];
+
+/** At the end: park, wrap round, or carry the graphic on to its next STOP or outro. */
+export const ROLL_ENDS = ['hold', 'loop', 'continue'] as const;
+export type RollEnd = (typeof ROLL_ENDS)[number];
+
+/** `play`: PLAY starts it from the top. `operator`: it waits at the top until told. */
+export const ROLL_STARTS = ['play', 'operator'] as const;
+export type RollStart = (typeof ROLL_STARTS)[number];
+
+/**
+ * Long text that scrolls under the operator's control — credits, lyrics, a
+ * long announcement (Wave R, ROLLS.md).
+ *
+ * Finite where a crawl is endless: it has a start and an end, lays out rows of
+ * different kinds (`heading`, `line`, `pair`, `gap` — what a text source emits)
+ * and is driven by a transport the hub owns, like a timer. The designer sets
+ * the speed; the operator plays, pauses, reverses and changes it as a multiple.
+ */
+export interface RollLayer extends LayerBase {
+  type: 'roll';
+  /** Data-source id — usually a text source. */
+  source?: string;
+  /** Rows carried in the composition: the authoring placeholder and the offline fallback. */
+  data?: { columns: DataColumn[]; rows: DataRow[] };
+  transforms?: DataTransform[];
+  /** Column holding each row's text. Default `text`. */
+  column?: string;
+  direction: RollDirection;
+  /** The designer's speed, px/s at stage resolution. */
+  speed: number;
+  /** Which transport drives it; layers naming the same id move together. Default `main`. */
+  scrollId?: string;
+  /** Default `enter`. */
+  from?: RollFrom;
+  /** Default `exit`. */
+  to?: RollTo;
+  /** Default `hold`. */
+  end?: RollEnd;
+  /** `loop` only: px between the end of the text and its next start. Default one line. */
+  loopGap?: number;
+  /** Default `play`. */
+  start?: RollStart;
+  /** Plain lines. */
+  style: TextStyle;
+  /** `heading` rows. Default: `style`, bold, a quarter larger. */
+  headingStyle?: TextStyle;
+  /** `pair` rows: the two halves, how the width splits (0–1) and the px between. */
+  pairStyle?: { left?: TextStyle; right?: TextStyle; split?: number; gutter?: number };
+  /** Height of a `gap` row in px. Default one line of `style`. */
+  gapSize?: number;
+  /** Extra px between rows. Default 0. */
+  spacing?: number;
+  /** Left and right rolls: what goes between rows. Default the crawl's bullet. */
+  separator?: string;
+  /** Soft edges on the window, px at each end of the travel. */
+  fade?: { start: number; end: number };
+}
+
 export interface CompositionLayer extends LayerBase {
   type: 'composition';
   /** id of another composition in the same project. */
@@ -855,6 +1091,7 @@ export type Layer =
   | MediaLayer
   | CrawlLayer
   | TableLayer
+  | RollLayer
   | CompositionLayer
   | GroupLayer;
 
@@ -905,6 +1142,12 @@ export interface Composition {
    * not change what goes to air.
    */
   posterTime?: number;
+  /**
+   * Typed fields by binding name (Phase 9 Wave B) — a number with buttons, a
+   * select, a toggle, a colour, an asset. See `fields.ts`. A name here with no
+   * layer bound to it is still a field: a toggle read only by a layer rule.
+   */
+  fields?: Record<string, FieldSpec>;
   /** Free-form authoring metadata; never read by the runtime. */
   meta?: Record<string, unknown>;
 }

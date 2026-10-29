@@ -14,8 +14,23 @@
  */
 
 import type { Composition, Layer } from './types.js';
+import { fieldDefault, type FieldSpec } from './fields.js';
 
-export type BindingKind = 'string' | 'image' | 'video' | 'stringList' | 'dataset';
+/**
+ * `number`, `boolean`, `enum`, `color` and `asset` come from a declaration in
+ * `Composition.fields` (Phase 9 Wave B); the rest from the layer's type.
+ */
+export type BindingKind =
+  | 'string'
+  | 'image'
+  | 'video'
+  | 'stringList'
+  | 'dataset'
+  | 'number'
+  | 'boolean'
+  | 'enum'
+  | 'color'
+  | 'asset';
 
 export interface BindingDescriptor {
   name: string;
@@ -39,6 +54,8 @@ export interface BindingDescriptor {
   source?: string;
   /** For a crawl: which column of `source` supplies the items. */
   column?: string;
+  /** The typed-field declaration, when `Composition.fields` has one for this name. */
+  field?: FieldSpec;
 }
 
 /**
@@ -107,7 +124,59 @@ export function collectBindings(comp: Composition): BindingDescriptor[] {
     }
   });
 
+  /*
+   * Colour bindings (Phase 9 Wave B): a text or shape layer recoloured by a
+   * field. A `color` field whether or not it is declared — the declaration
+   * only adds a label and a default.
+   */
+  eachLayer(comp.layers, (layer) => {
+    if ((layer.type !== 'text' && layer.type !== 'shape') || !layer.colorBinding) return;
+    const name = layer.colorBinding;
+    const existing = byName.get(name);
+    if (existing) {
+      if (!existing.layerIds.includes(layer.id)) existing.layerIds.push(layer.id);
+      return;
+    }
+    byName.set(name, { name, kind: 'color', layerIds: [layer.id], defaultValue: '#ffffff', label: layer.name ?? name });
+  });
+
+  /*
+   * Typed fields. A declaration retypes the field — a text layer bound to
+   * `homeScore` becomes a number — and a declaration nothing binds to is a
+   * field of its own, for a layer rule to read. The authored text stays the
+   * default only where it is a value of the declared kind.
+   */
+  for (const [name, spec] of Object.entries(comp.fields ?? {})) {
+    const existing = byName.get(name);
+    if (existing) {
+      if (existing.kind === 'stringList' || existing.kind === 'dataset') continue;
+      existing.kind = spec.kind;
+      existing.field = spec;
+      if (spec.label) existing.label = spec.label;
+      existing.defaultValue = spec.default ?? typedDefault(spec, existing.defaultValue);
+    } else {
+      byName.set(name, {
+        name,
+        kind: spec.kind,
+        layerIds: [],
+        defaultValue: fieldDefault(spec),
+        label: spec.label ?? name,
+        field: spec,
+      });
+    }
+  }
+
   return [...byName.values()];
+}
+
+/** The authored value when it already fits the kind, else the kind's default. */
+function typedDefault(spec: FieldSpec, authored: unknown): unknown {
+  if (spec.kind === 'number' && typeof authored === 'string' && authored.trim() !== '' && Number.isFinite(Number(authored))) {
+    return Number(authored);
+  }
+  if (spec.kind === 'enum' && typeof authored === 'string' && spec.options.some((o) => o.value === authored)) return authored;
+  if (spec.kind === 'asset' && typeof authored === 'string') return authored;
+  return fieldDefault(spec);
 }
 
 /**
@@ -232,8 +301,29 @@ export interface SourceRef {
 export function collectSources(comp: Composition): SourceRef[] {
   const byId = new Map<string, SourceRef>();
 
+  /*
+   * What else reads a source by itself (Wave R): a plotted line, and a drive
+   * reading a source row — a thermometer's goal. Listed so the panel's Data
+   * block watches them, like a table's.
+   */
+  const note = (id: string, layer: Layer): void => {
+    const existing = byId.get(id);
+    if (existing) existing.layerIds.push(layer.id);
+    else byId.set(id, { id, layerIds: [layer.id], kind: 'dataset', label: layer.name ?? id });
+  };
+
   eachLayer(comp.layers, (layer) => {
+    if (layer.type === 'shape' && layer.plot?.source) note(layer.plot.source, layer);
+    for (const drive of layer.drives ?? []) if (drive.from.source) note(drive.from.source, layer);
+    if (layer.type === 'roll') {
+      if (layer.source) note(layer.source, layer);
+      return;
+    }
     if (layer.type !== 'table' && layer.type !== 'crawl') return;
+    if (layer.type === 'table') {
+      // A cell's drive reading a source (a goal) counts too.
+      for (const cell of layer.row.cells) for (const drive of cell.drives ?? []) if (drive.from.source) note(drive.from.source, cell);
+    }
     if (!layer.source) return;
 
     const existing = byId.get(layer.source);
@@ -335,6 +425,59 @@ export function bindingsJsonSchema(
           default: b.defaultValue,
         };
         break;
+      /*
+       * Typed fields (Phase 9 Wave B). Plain JSON Schema keywords wherever one
+       * exists, so a generic form generator — OGraf's included — draws the
+       * right control without knowing Breeze; `x-breeze-*` only for what
+       * JSON Schema has no word for.
+       */
+      case 'number': {
+        const f = b.field?.kind === 'number' ? b.field : undefined;
+        properties[key] = {
+          type: 'number',
+          title,
+          default: b.defaultValue,
+          ...(f?.min !== undefined ? { minimum: f.min } : {}),
+          ...(f?.max !== undefined ? { maximum: f.max } : {}),
+          ...(f?.step !== undefined ? { multipleOf: f.step } : {}),
+          ...(f?.buttons?.length ? { 'x-breeze-buttons': f.buttons } : {}),
+        };
+        break;
+      }
+      case 'boolean':
+        properties[key] = { type: 'boolean', title, default: b.defaultValue };
+        break;
+      case 'enum': {
+        const options = b.field?.kind === 'enum' ? b.field.options : [];
+        properties[key] = {
+          type: 'string',
+          title,
+          default: b.defaultValue,
+          enum: options.map((o) => o.value),
+          oneOf: options.map((o) => ({ const: o.value, title: o.label ?? o.value })),
+        };
+        break;
+      }
+      case 'color':
+        properties[key] = {
+          type: 'string',
+          title,
+          format: 'color',
+          pattern: '^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$',
+          default: b.defaultValue,
+        };
+        break;
+      case 'asset': {
+        const assetKind = b.field?.kind === 'asset' ? (b.field.assetKind ?? 'image') : 'image';
+        properties[key] = {
+          type: 'string',
+          title,
+          description: `${assetKind} asset path`,
+          'x-breeze-asset': assetKind,
+          default: b.defaultValue,
+        };
+        break;
+      }
       default:
         properties[key] = { type: 'string', title, default: b.defaultValue };
     }

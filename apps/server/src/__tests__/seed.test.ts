@@ -193,6 +193,9 @@ describe('deleting a demo', () => {
   });
 });
 
+/** Demos with no earlier id: an older install has never seen them, so an upgrade installs them. */
+const neverRenamed = () => demoIds.filter((_, i) => !DEMOS[i]!.formerly?.length);
+
 describe('upgrading an existing install', () => {
   it('adopts a project that predates the ledger instead of overwriting it', async () => {
     /*
@@ -243,7 +246,8 @@ describe('upgrading an existing install', () => {
       expect(await exists(projectDir(demoIds[i]!))).toBe(false);
     }
 
-    expect(await seedDemos()).toEqual([]);
+    // Only a demo that was never renamed — new since that install — arrives.
+    expect((await seedDemos()).sort()).toEqual(neverRenamed().sort());
     for (const [i, demo] of DEMOS.entries()) {
       if (!demo.formerly?.length) continue;
       expect(await exists(projectDir(demo.formerly[0]!))).toBe(true);
@@ -262,8 +266,8 @@ describe('upgrading an existing install', () => {
       JSON.stringify({ formatVersion: 1, installed: oldIds }),
     );
 
-    expect(await seedDemos()).toEqual([]);
-    expect(await store.listProjects()).toEqual([]);
+    expect((await seedDemos()).sort()).toEqual(neverRenamed().sort());
+    expect((await store.listProjects()).map((p) => p.id).sort()).toEqual(neverRenamed().sort());
   });
 
   it('gives every demo an id that follows the creation rule', () => {

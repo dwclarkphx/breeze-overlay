@@ -423,17 +423,34 @@ test.describe('dragging on the stage', () => {
     await page.mouse.click(rulerBox.x + 240 * 1.0, rulerBox.y + 10);
     await expect(page.locator('.timecode')).not.toHaveText('00:00:00');
 
-    const offset = await page.evaluate(() => {
-      const layer = document.querySelector<HTMLElement>('.stage-host [data-layer-id="bar"]');
-      const area = document.querySelector<HTMLElement>('.moveable-area');
-      if (!layer || !area) return null;
-      const l = layer.getBoundingClientRect();
-      const a = area.getBoundingClientRect();
-      return {
-        dx: Math.round(a.left + a.width / 2 - (l.left + l.width / 2)),
-        dy: Math.round(a.top + a.height / 2 - (l.top + l.height / 2)),
-      };
-    });
+    const measure = () =>
+      page.evaluate(() => {
+        const layer = document.querySelector<HTMLElement>('.stage-host [data-layer-id="bar"]');
+        const area = document.querySelector<HTMLElement>('.moveable-area');
+        if (!layer || !area) return null;
+        const l = layer.getBoundingClientRect();
+        const a = area.getBoundingClientRect();
+        return {
+          dx: Math.round(a.left + a.width / 2 - (l.left + l.width / 2)),
+          dy: Math.round(a.top + a.height / 2 - (l.top + l.height / 2)),
+        };
+      });
+
+    /*
+     * The timecode is painted in the same commit whose effects then seek the
+     * runtime and re-measure the handles, so a read straight after it can land
+     * between the paint and those effects (failed this way once under load,
+     * 2026-10-26). Give it the effects; a stale rect stays stale, so the
+     * assertion below still catches the bug this test is for.
+     */
+    await expect
+      .poll(async () => {
+        const o = await measure();
+        return o !== null && Math.abs(o.dx) <= 2 && Math.abs(o.dy) <= 2;
+      }, { timeout: 2000 })
+      .toBe(true)
+      .catch(() => undefined);
+    const offset = await measure();
 
     expect(offset).not.toBeNull();
     /*

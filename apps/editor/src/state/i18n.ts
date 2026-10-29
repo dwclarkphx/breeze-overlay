@@ -49,8 +49,17 @@ export const bootCatalogue: Catalogue = sourceCatalogue(SOURCE);
  * asked for. A tag with no catalogue resolves to English rather than throwing:
  * the server has already logged the mismatch, and the editor repeating it as a
  * crash would help nobody.
+ *
+ * `en.json` is excluded on purpose. It is already imported statically above, so
+ * a lazy entry for it could never become its own chunk — Rolldown reports that
+ * as INEFFECTIVE_DYNAMIC_IMPORT on every build — and `messagesFor` returns
+ * `SOURCE` for the source locale before it ever consults this map, so the entry
+ * was dead anyway.
  */
-const CATALOGUES = import.meta.glob<{ default: Messages }>('../../../../packages/i18n/locales/*.json');
+const CATALOGUES = import.meta.glob<{ default: Messages }>([
+  '../../../../packages/i18n/locales/*.json',
+  '!../../../../packages/i18n/locales/en.json',
+]);
 
 async function messagesFor(locale: string): Promise<Messages> {
   if (locale === SOURCE_LOCALE) return SOURCE;

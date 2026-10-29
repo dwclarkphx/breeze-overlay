@@ -42,6 +42,10 @@ export type AuditAction =
   | 'panel.disconnect'
   /** An operator chose whose rows a data source serves (Wave 5). */
   | 'source.use'
+  /** An operator changed a text source's words on air (Wave R). */
+  | 'source.text'
+  /** A poll was opened, closed, reset or re-worded (Wave R). Single votes are not logged. */
+  | 'source.poll'
   /** A browser signed in with the API key, signed out, or gave a wrong key. */
   | 'session.start'
   | 'session.end'

@@ -130,6 +130,26 @@ const ONE_OF_EACH: Record<DataSourceDef['type'], DataSourceDef> = {
     expireAfter: 10800,
     pollInterval: 900,
   },
+  text: {
+    id: 'credits',
+    name: 'Credits',
+    type: 'text',
+    body: '# Credits\nProducer | Dave Clark\n\nThanks for watching',
+    split: 'lines',
+    operatorEditable: true,
+  },
+  poll: {
+    id: 'poll-1',
+    name: 'Poll',
+    type: 'poll',
+    question: 'Best pizza topping?',
+    options: [
+      { id: 'pep', label: 'Pepperoni', color: '#C62828' },
+      { id: 'mush', label: 'Mushroom' },
+    ],
+    votes: { pep: 12, mush: 7 },
+    status: 'open',
+  },
 };
 
 describe('data sources schema', () => {

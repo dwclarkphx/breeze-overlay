@@ -43,6 +43,12 @@ describe('isExternalApiCall', () => {
     expect(isExternalApiCall(req('/peers'))).toBe(false);
   });
 
+  it('counts an OGraf controller calling the Server API, and not a renderer fetching a pointer package', () => {
+    expect(isExternalApiCall(req('/ograf/v1/renderers/demo/target/graphicInstance/playAction'))).toBe(true);
+    expect(isExternalApiCall(req('/ograf/v1'))).toBe(true);
+    expect(isExternalApiCall(req('/ograf/package/demo~lt/graphic.mjs'))).toBe(false);
+  });
+
   it('leaves out our own pages, by fetch metadata or by a same-origin referer', () => {
     expect(isExternalApiCall(req('/api/status', { 'sec-fetch-site': 'same-origin' }))).toBe(false);
     expect(isExternalApiCall(req('/api/status', { referer: 'http://breeze.local:7331/' }))).toBe(false);

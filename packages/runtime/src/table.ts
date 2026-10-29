@@ -33,6 +33,7 @@ import {
   ROW_ANIM_PRESET_IDS,
   applyTransforms,
   conform,
+  driveValue,
   inferColumns,
   type DataColumn,
   type DataRow,
@@ -52,6 +53,7 @@ import {
   type MediaLayer,
 } from '@breeze/schema';
 
+import { applyDriveValue, countTo, countable, drivesTransform, seedGsapTransform, type DriveMode } from './charts.js';
 import { normalisePageKey } from './cycle.js';
 import { buildLayerElement, type BuildContext, type LayerNodes } from './dom.js';
 import type { LayerInstance } from './expand.js';
@@ -721,7 +723,8 @@ export class TableBlock {
 
     this.paging = paging(
       this.view.rows.length,
-      layer.size?.height ?? 0,
+      // Rows step across the box for `axis: 'x'` (Wave R) — a column chart.
+      (layer.axis === 'x' ? layer.size?.width : layer.size?.height) ?? 0,
       height,
       gap,
       layer.rowsPerPage,
@@ -756,6 +759,7 @@ export class TableBlock {
     const layer = this.opts.layer;
     const gap = layer.row.gap ?? 0;
     const height = layer.row.height;
+    const axis = layer.axis === 'x' ? 'x' : 'y';
 
     this.computeView();
 
@@ -776,20 +780,22 @@ export class TableBlock {
 
       const y = rowOffset(index, height, gap);
       let handle = this.rows.get(key);
+      let built = false;
 
       if (!handle) {
         handle = this.buildRow(key, y);
         this.rows.set(key, handle);
         entering.push(handle.el);
+        built = true;
       } else if (handle.y !== y) {
         moving.push({ el: handle.el, from: handle.y, to: y });
       }
 
-      this.writeRow(handle, row);
+      this.writeRow(handle, row, built ? 'set' : 'tween');
       handle.y = y;
 
       if (!opts.animate || entering.includes(handle.el)) {
-        this.opts.animator.set(handle.el, { y });
+        this.opts.animator.set(handle.el, { [axis]: y });
       }
     });
 
@@ -827,7 +833,7 @@ export class TableBlock {
          * racing it.
          */
         this.opts.animator.to(m.el, {
-          y: m.to,
+          [axis]: m.to,
           duration: flipDuration,
           ease: flip?.ease ?? 'power2.inOut',
           overwrite: 'auto',
@@ -835,7 +841,7 @@ export class TableBlock {
       }
     } else {
       for (const m of moving) {
-        this.opts.animator.set(m.el, { y: m.to });
+        this.opts.animator.set(m.el, { [axis]: m.to });
       }
     }
 
@@ -869,10 +875,16 @@ export class TableBlock {
     const el = this.doc.createElement('div');
     el.className = 'bz-table-row';
     el.dataset['rowKey'] = key;
-    el.style.height = `${layer.row.height}px`;
+    if (layer.axis === 'x') {
+      // Rows step across (Wave R): each is a column `row.height` wide, the table's height tall.
+      el.style.width = `${layer.row.height}px`;
+      el.style.height = '100%';
+    } else {
+      el.style.height = `${layer.row.height}px`;
+    }
     // Position goes through the animator, never `style.transform` — see the
     // FLIP note in `render`. The caller places it immediately after this.
-    this.opts.animator.set(el, { y });
+    this.opts.animator.set(el, { [layer.axis === 'x' ? 'x' : 'y']: y });
 
     const cells: RowHandle['cells'] = [];
 
@@ -907,7 +919,17 @@ export class TableBlock {
        * or a page turn rebuilds the row.
        */
       nodes.el.dataset['cell'] = cellLayer.id;
-      if (!hasKeyframes(cellLayer)) {
+      if (!hasKeyframes(cellLayer) && drivesTransform(cellLayer)) {
+        /*
+         * A drive moving part of the transform (Wave R) makes GSAP its owner,
+         * for the reason keyframed cells hand theirs over: a hand-written
+         * string beside GSAP's cache is a value about to be discarded.
+         */
+        seedGsapTransform(nodes.el, cellLayer, this.opts.animator);
+        if (cellLayer.opacity !== undefined && cellLayer.opacity !== 1) {
+          nodes.el.style.opacity = String(cellLayer.opacity);
+        }
+      } else if (!hasKeyframes(cellLayer)) {
         nodes.el.style.transform = staticTransform(cellLayer);
         if (cellLayer.opacity !== undefined && cellLayer.opacity !== 1) {
           nodes.el.style.opacity = String(cellLayer.opacity);
@@ -929,14 +951,23 @@ export class TableBlock {
     return { key, el, cells, y };
   }
 
-  /** Write one data row into an existing row element's cells. */
-  private writeRow(handle: RowHandle, row: DataRow): void {
+  /**
+   * Write one data row into an existing row element's cells. `mode` is how
+   * driven cells reach their values (Wave R): a row just built jumps there, a
+   * row already on screen animates.
+   */
+  private writeRow(handle: RowHandle, row: DataRow, mode: DriveMode = 'tween'): void {
     handle.row = row;
     for (const cell of handle.cells) {
       const layer = cell.nodes.layer;
       const value = cell.column ? row[cell.column] : undefined;
+      const counted = layer.type === 'text' && layer.count && cell.nodes.textInner ? countable(value) : null;
 
-      if (cell.column && layer.type === 'text' && cell.nodes.textInner) {
+      if (counted !== null && layer.type === 'text' && layer.count && cell.nodes.textInner) {
+        // Counting to a new number (Wave R) — 38 % rolls up to 41 %.
+        const inner = cell.nodes.textInner;
+        countTo(inner, counted, layer.count, {}, this.opts.animator, () => applyTextFit(inner, layer.fit, layer.size?.width ?? 0));
+      } else if (cell.column && layer.type === 'text' && cell.nodes.textInner) {
         const text = value === null || value === undefined ? '' : String(value);
         if (cell.nodes.textInner.textContent !== text) {
           cell.nodes.textInner.textContent = text;
@@ -950,6 +981,47 @@ export class TableBlock {
         cell.nodes.mediaPlayer.show(src, kind);
       }
       this.applyCellRules(cell, row, value);
+      if (layer.drives?.length) this.driveCell(cell.nodes, row, mode);
+    }
+  }
+
+  /**
+   * A cell's drives against its own row (Wave R, CHARTS.md §3). `max` and
+   * `total` range over every row the table holds after its transforms, not
+   * just this page's, so a bar means the same length on page two.
+   */
+  private driveCell(nodes: LayerNodes, row: DataRow, mode: DriveMode): void {
+    const context = this.opts.ruleContext?.();
+    const ctx = {
+      row,
+      rows: this.view.rows,
+      ...(context ? { source: context.source, field: context.field, ...(context.timer ? { timer: context.timer } : {}) } : {}),
+    };
+    (nodes.layer.drives ?? []).forEach((drive, i) => {
+      const value = driveValue(drive, ctx);
+      if (value !== null) applyDriveValue(nodes, drive, i, value, this.opts.animator, mode);
+    });
+  }
+
+  /**
+   * Grow every driven cell in from the bottom of its range — what PLAY does,
+   * so a results table's bars rise as it comes on air rather than having
+   * finished growing while the graphic was still off.
+   */
+  regrow(): void {
+    if (!this.opts.layer.row.cells.some((c) => c.drives?.some((d) => d.tween))) return;
+    for (const handle of this.rows.values()) {
+      if (!handle.row) continue;
+      for (const cell of handle.cells) if (cell.nodes.layer.drives?.length) this.driveCell(cell.nodes, handle.row, 'grow');
+    }
+  }
+
+  /** Re-drive every cell — a field or a source a drive reads changed, not this table's rows. */
+  redrive(): void {
+    if (!this.opts.layer.row.cells.some((c) => c.drives?.length)) return;
+    for (const handle of this.rows.values()) {
+      if (!handle.row) continue;
+      for (const cell of handle.cells) if (cell.nodes.layer.drives?.length) this.driveCell(cell.nodes, handle.row, 'tween');
     }
   }
 

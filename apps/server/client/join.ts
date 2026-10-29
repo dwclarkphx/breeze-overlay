@@ -40,6 +40,8 @@ export interface PlaybackLike {
   }>;
   /** Rotating tickers: copy and position. Absent from outputs older than 0.75.0. */
   crawls?: Array<{ layer: string; text: string; staged: string | null; offsetMs: number; passMs: number }>;
+  /** Rolls (Wave R): extent and position per scroll. */
+  scrolls?: Array<{ id: string; extent?: number; end?: 'hold' | 'loop' | 'continue'; start?: 'play' | 'operator'; travel: number; running: boolean; rate: number }>;
 }
 
 export interface SourceLike {
@@ -47,6 +49,8 @@ export interface SourceLike {
   page?: string;
   label: string;
   ip: string;
+  /** `matte` for a key-signal page (`?matte=1`, Phase 9 Wave C); absent for a fill. */
+  signal?: 'matte';
   connectedAt: number;
   playback: PlaybackLike | null;
   reportedAt: number | null;
@@ -80,6 +84,12 @@ export type JoinTarget = PlaybackLike & { ageMs: number };
 
 export const SYNC_AUTO = 'auto';
 export const SYNC_OFF = 'off';
+/**
+ * The control panel's third preview mode in cue → take (Phase 9 Wave A): the
+ * frame has no socket and shows the panel's cued values, not air. Never sent
+ * to an output page as `?sync=`; the panel turns it into `?hub=off`.
+ */
+export const SYNC_CUED = 'cued';
 
 const onAir = (p: PlaybackLike | null | undefined): p is PlaybackLike =>
   !!p && (p.state === 'holding' || p.state === 'playing-in');
@@ -138,6 +148,8 @@ export interface RuntimeLike {
     follows?: string;
   }>;
   crawlStates?: Array<{ layer: string; text: string; staged: string | null; offsetMs: number; passMs: number }>;
+  /** Rolls (Wave R): each scroll's extent and position, for the hub's clamp and a panel's position bar. */
+  scrollStates?: Array<{ id: string; extent?: number; end?: 'hold' | 'loop' | 'continue'; start?: 'play' | 'operator'; travel: number; running: boolean; rate: number }>;
 }
 
 /**
@@ -164,6 +176,7 @@ export function reportOf(runtime: RuntimeLike): PlaybackLike & { stepCount: numb
       ...(s.follows ? { follows: s.follows } : {}),
     }));
   const crawls = runtime.crawlStates ?? [];
+  const scrolls = runtime.scrollStates ?? [];
   return {
     state: runtime.playbackState,
     time: runtime.currentTime,
@@ -171,6 +184,7 @@ export function reportOf(runtime: RuntimeLike): PlaybackLike & { stepCount: numb
     stepCount: runtime.stepCount,
     tables,
     ...(crawls.length ? { crawls } : {}),
+    ...(scrolls.length ? { scrolls } : {}),
   };
 }
 
@@ -288,4 +302,85 @@ export function compareReports(output: PlaybackLike, ageMs: number, preview: Pla
     });
   }
   return checks;
+}
+
+/* ------------------------------------------------------------ key pairs */
+
+/**
+ * A matte output and the fill it keys (Phase 9 Wave C).
+ *
+ * A switcher keying fill + matte from two pages needs the two to be showing
+ * the same moment of the same graphic; if the matte page reloaded and missed a
+ * PLAY, the key cuts a hole where nothing is, or nothing where the strap is.
+ * Both pages run the same runtime and late-join the same way, so they should
+ * agree. This is what checks that they do.
+ *
+ * `fill` is null when a matte has nothing to pair with — worth saying, because
+ * a key with no fill is a key cutting black into the programme.
+ */
+export interface KeyPair {
+  matte: SourceLike;
+  fill: SourceLike | null;
+}
+
+/**
+ * Pair every matte output with a fill.
+ *
+ * A fill on the same machine first: the two browser sources keyed together sit
+ * in one vMix or OBS, so they share an address. Failing that, any fill — two
+ * machines feeding one switcher is unusual, not wrong. Among candidates, the
+ * one that reported most recently, the same rule `joinTarget` uses for
+ * "newest". Several mattes may share one fill.
+ */
+export function keyPairs(sources: SourceLike[]): KeyPair[] {
+  const fills = sources.filter((s) => s.signal !== 'matte');
+  const newest = (pool: SourceLike[]): SourceLike | null =>
+    pool.reduce<SourceLike | null>((a, b) => (!a || (b.reportedAt ?? -1) > (a.reportedAt ?? -1) ? b : a), null);
+  return sources
+    .filter((s) => s.signal === 'matte')
+    .map((matte) => {
+      const sameMachine = fills.filter((f) => f.ip === matte.ip);
+      return { matte, fill: newest(sameMachine.length ? sameMachine : fills) };
+    });
+}
+
+/** One row of a key-pair check: the same row as `SyncCheck`, with its sides named for what they are. */
+export interface KeyPairCheck {
+  kind: CheckKind;
+  name: string;
+  ok: boolean;
+  fill: SyncSide | null;
+  matte: SyncSide | null;
+  /** A ticker on the same copy: matte minus fill, milliseconds of scroll. */
+  driftMs?: number;
+}
+
+/**
+ * Are a fill and its matte showing the same thing?
+ *
+ * Two reports made at different moments, so the older one is aged to the
+ * newer one's moment — by the hub's clock at both ends — and compared with
+ * `compareReports`, the same rules and tolerances as preview against output.
+ * Null when either has not reported yet: nothing to compare is not a mismatch.
+ */
+export function compareKeyPair(
+  fill: SourceLike,
+  matte: SourceLike,
+): { ok: boolean; apartMs: number; checks: KeyPairCheck[] } | null {
+  if (!fill.playback || !matte.playback || fill.reportedAt === null || matte.reportedAt === null) return null;
+  const apartMs = Math.abs(fill.reportedAt - matte.reportedAt);
+  const fillOlder = fill.reportedAt <= matte.reportedAt;
+  const raw = fillOlder
+    ? compareReports(fill.playback, apartMs, matte.playback)
+    : compareReports(matte.playback, apartMs, fill.playback);
+  const checks = raw.map((c): KeyPairCheck => ({
+    kind: c.kind,
+    name: c.name,
+    ok: c.ok,
+    fill: fillOlder ? c.output : c.preview,
+    matte: fillOlder ? c.preview : c.output,
+    // `driftMs` is always the newer side minus the older.
+    ...(typeof c.driftMs === 'number' ? { driftMs: fillOlder ? c.driftMs : -c.driftMs } : {}),
+  }));
+  return { ok: checks.every((c) => c.ok), apartMs, checks };
 }

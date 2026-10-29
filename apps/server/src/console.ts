@@ -281,9 +281,12 @@ export function renderFrame(input: FrameInput, width: number, height: number, co
   const panels = input.sockets.filter((p) => p.kind === 'panel' || p.kind === 'editor');
   const monitors = input.sockets.filter((p) => p.kind === 'monitor').length;
   const previews = input.sockets.filter((p) => p.kind === 'preview').length;
+  // OGraf pointer graphics (Phase 9 Wave D) — graphics in another renderer, not panels.
+  const ografs = input.sockets.filter((p) => p.kind === 'ograf').length;
   const extras = [
     monitors > 0 ? `+${monitors} element readout${monitors === 1 ? '' : 's'}` : '',
     previews > 0 ? `+${previews} preview${previews === 1 ? '' : 's'}` : '',
+    ografs > 0 ? `+${ografs} OGraf graphic${ografs === 1 ? '' : 's'}` : '',
   ].filter(Boolean).join(', ');
 
   const sceneW = Math.max(10, w - 2 - 36 - 10);

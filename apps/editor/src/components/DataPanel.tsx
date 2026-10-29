@@ -28,6 +28,8 @@ import {
   WEATHER_PROVIDERS,
   WEATHER_PROVIDER_INFO,
   applyTransforms,
+  attributionShown,
+  isPolledSource,
   type DataGuard,
   MEDIA_CHECK_DEFAULTS,
   type MediaCheck,
@@ -63,6 +65,8 @@ import {
 } from '../state/bracket.js';
 import { parsePlaceLine, placeLine, type PlaceKind } from '../state/places.js';
 import { useEditor } from '../state/store.js';
+import { SportGuide, SportTemplateCreator } from './SportTemplates.js';
+import { PollFeedGuide, PollSourceFields, TextSourceFields } from './LiveSourceFields.js';
 
 const TYPE_LABEL_KEY: Record<DataSourceDef['type'], string> = {
   manual: 'editor.data.typeManual',
@@ -75,6 +79,8 @@ const TYPE_LABEL_KEY: Record<DataSourceDef['type'], string> = {
   ftp: 'editor.data.typeFtp',
   cap: 'editor.data.typeCap',
   'air-quality': 'editor.data.typeAirQuality',
+  text: 'editor.data.typeText',
+  poll: 'editor.data.typePoll',
 };
 
 /**
@@ -84,6 +90,9 @@ const TYPE_LABEL_KEY: Record<DataSourceDef['type'], string> = {
  * a label on a row that already exists. Two tables rather than one because the
  * shorter wording is only right once the operator has already chosen.
  */
+/** The add menu's entry for the sport-template creator — not a source type. */
+const SPORT_OPTION = '@sport';
+
 const MENU: Array<{ type: DataSourceDef['type']; labelKey: string }> = [
   { type: 'manual', labelKey: 'editor.data.menuManual' },
   { type: 'http-csv', labelKey: 'editor.data.menuHttpCsv' },
@@ -95,6 +104,9 @@ const MENU: Array<{ type: DataSourceDef['type']; labelKey: string }> = [
   { type: 'air-quality', labelKey: 'editor.data.menuAirQuality' },
   { type: 'cap', labelKey: 'editor.data.menuCap' },
   { type: 'ftp', labelKey: 'editor.data.menuFtp' },
+  // Wave R: long text for rolls, and an operator-run poll.
+  { type: 'text', labelKey: 'editor.data.menuText' },
+  { type: 'poll', labelKey: 'editor.data.menuPoll' },
 ];
 
 /*
@@ -119,6 +131,8 @@ const NEW_NAME: Record<DataSourceDef['type'], string> = {
   ftp: 'New file drop',  // i18n-ignore
   cap: 'New alerts',  // i18n-ignore
   'air-quality': 'New air quality',  // i18n-ignore
+  text: 'New text',  // i18n-ignore
+  poll: 'New poll',  // i18n-ignore
 };
 
 /** RSS feeds change on a slower clock than a scoreboard; don't poll them like one. */
@@ -202,6 +216,32 @@ function blankSource(type: DataSourceDef['type'], id: string): DataSourceDef {
       url: '',
       times: 'exact',
       pollInterval: 60,
+      enabled: true,
+    };
+  }
+
+  // Wave R. Option labels are poll data, persisted and shown on air — frozen like NEW_NAME.
+  if (type === 'text') {
+    return {
+      id,
+      name: NEW_NAME.text,
+      type: 'text',
+      body: '',
+      split: 'lines',
+      enabled: true,
+    };
+  }
+  if (type === 'poll') {
+    return {
+      id,
+      name: NEW_NAME.poll,
+      type: 'poll',
+      question: '',
+      options: [
+        { id: 'yes', label: 'Yes' },  // i18n-ignore
+        { id: 'no', label: 'No' },  // i18n-ignore
+      ],
+      status: 'open',
       enabled: true,
     };
   }
@@ -304,6 +344,8 @@ export function DataPanel(): JSX.Element {
   const projectId = useEditor((s) => s.projectId);
   const [sources, setSources] = useState<DataSourceSummary[]>([]);
   const [editing, setEditing] = useState<DataSourceDef | null>(null);
+  /** The sport-template creator is open (Phase 9 Wave B). */
+  const [templating, setTemplating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
 
@@ -399,7 +441,8 @@ export function DataPanel(): JSX.Element {
             className="add-source"
             value=""
             onChange={(e) => {
-              if (e.target.value) add(e.target.value as DataSourceDef['type']);
+              if (e.target.value === SPORT_OPTION) setTemplating(true);
+              else if (e.target.value) add(e.target.value as DataSourceDef['type']);
               e.target.value = '';
             }}
           >
@@ -407,6 +450,7 @@ export function DataPanel(): JSX.Element {
             {MENU.map((m) => (
               <option key={m.type} value={m.type}>{t(m.labelKey)}</option>
             ))}
+            <option value={SPORT_OPTION}>{t('editor.data.menuSport')}</option>
           </select>
         </span>
       </div>
@@ -438,7 +482,7 @@ export function DataPanel(): JSX.Element {
                 </div>
                 <div className="source-meta">
                   <span>{t('editor.data.rowCount', { count: rowCount })}</span>
-                  {def.type !== 'manual' && (
+                  {isPolledSource(def) && (
                     <span>{t('editor.data.everySeconds', { seconds: interval })}</span>
                   )}
                   <span title={status.lastFetch}>
@@ -486,7 +530,7 @@ export function DataPanel(): JSX.Element {
                     </select>
                   )}
                   <button onClick={() => setEditing(def)}>{t('editor.data.edit')}</button>
-                  {def.type !== 'manual' && (
+                  {isPolledSource(def) && (
                     <button onClick={() => void api.refreshDataSource(projectId, def.id).then(reload)}>
                       {t('editor.data.refresh')}
                     </button>
@@ -506,6 +550,18 @@ export function DataPanel(): JSX.Element {
         </div>
       )}
 
+      {templating && (
+        <SportTemplateCreator
+          projectId={projectId}
+          existingIds={new Set(sources.map((s) => s.def.id))}
+          onCancel={() => setTemplating(false)}
+          onDone={() => {
+            setTemplating(false);
+            void reload();
+          }}
+        />
+      )}
+
       {editing && (
         <SourceEditor
           projectId={projectId}
@@ -521,6 +577,7 @@ export function DataPanel(): JSX.Element {
 }
 
 const URL_PLACEHOLDER: Record<string, string> = {
+  text: 'https://example.com/lyrics/amazing-grace.txt',
   'http-csv': 'https://docs.google.com/spreadsheets/d/…/pub?output=csv',
   'http-json': 'https://example.com/api/standings.json',
   rss: 'https://example.com/sport/rss',
@@ -579,11 +636,13 @@ function SourceEditor({ projectId, others, def, onChange, onCancel, onSave }: So
     : def.type === 'weather' ? !WEATHER_PROVIDER_INFO[def.provider]?.needsBaseUrl || Boolean(def.baseUrl)
     : def.type === 'air-quality' ? !AIR_QUALITY_PROVIDER_INFO[def.provider]?.needsBaseUrl || Boolean(def.baseUrl)
     : def.type === 'ftp' ? Boolean(def.host && def.pattern)
+    : def.type === 'text' ? Boolean(def.url)
     : hasUrl(def) && !!def.url;
 
   // Weather is rate-floored by its provider's license rather than by this
   // server's scheduler, so the number the field enforces has to follow suit.
   const minInterval = def.type === 'manual' ? MIN_POLL_INTERVAL : pollFloor(def);
+  const showPreview = (data: DataSet, total: number) => <DataPreview data={data} total={total} />;
 
   return (
     <div className="source-editor">
@@ -592,10 +651,22 @@ function SourceEditor({ projectId, others, def, onChange, onCancel, onSave }: So
         <input value={def.name} onChange={(e) => onChange({ ...def, name: e.target.value })} />
       </label>
 
+      {def.template && (
+        <SportGuide
+          template={def.template}
+          data={def.type === 'manual' ? { columns: def.columns, rows: def.rows } : preview?.ok ? preview.data : undefined}
+        />
+      )}
+
       {def.type === 'manual' ? (
         <ManualTableEditor def={def} onChange={onChange} />
+      ) : def.type === 'poll' ? (
+        <PollSourceFields def={def} onChange={onChange} preview={showPreview} />
+      ) : def.type === 'text' && def.url === undefined ? (
+        <TextSourceFields def={def} onChange={onChange} preview={showPreview} />
       ) : (
         <>
+          {def.type === 'text' && <TextSourceFields def={def} onChange={onChange} preview={showPreview} />}
           {def.type === 'weather' ? (
             <WeatherFields def={def} others={others} onChange={onChange} />
           ) : def.type === 'air-quality' ? (
@@ -608,11 +679,16 @@ function SourceEditor({ projectId, others, def, onChange, onCancel, onSave }: So
             <label>
               <span>{t('editor.data.fieldUrl')}</span>
               <input
-                value={def.url}
+                value={def.url ?? ''}
                 placeholder={URL_PLACEHOLDER[def.type]}
                 onChange={(e) => onChange({ ...def, url: e.target.value })}
               />
             </label>
+          )}
+
+          {/* Wave R: a poll arriving as a feed — the columns it needs, and a check of what came back. */}
+          {(def.type === 'http-csv' || def.type === 'http-json' || def.type === 'sheets' || def.type === 'ftp' || def.type === 'xml') && (
+            <PollFeedGuide data={preview?.ok ? preview.data : undefined} />
           )}
 
           {def.type === 'rss' && (
@@ -727,8 +803,8 @@ function SourceEditor({ projectId, others, def, onChange, onCancel, onSave }: So
         </>
       )}
 
-      {/* Any source can be a camera list — a manual table most of all. */}
-      <MediaFields def={def} onChange={onChange} />
+      {/* Any source can be a camera list — a manual table most of all. Not a text or a poll (Wave R). */}
+      {def.type !== 'text' && def.type !== 'poll' && <MediaFields def={def} onChange={onChange} />}
 
       <div className="source-actions">
         <button className="primary" onClick={onSave}>{t('editor.data.saveSource')}</button>
@@ -1167,7 +1243,7 @@ function GuardFields({
   );
 }
 
-function DataPreview({ data, total }: { data: DataSet; total: number }): JSX.Element {
+export function DataPreview({ data, total }: { data: DataSet; total: number }): JSX.Element {
   const t = useT();
   return (
     <div className="data-preview">
@@ -1294,6 +1370,61 @@ function XmlRowPathField({
  * rendered as a blocking-looking warning rather than a hint for the same reason
  * the overflow flag is: the cost of missing it is paid on air, or in a letter.
  */
+/**
+ * **Show attribution** (Phase 9 Wave 0). Off blanks the `attribution` column —
+ * it never drops it — so an `attribution is empty → hide` rule takes the credit
+ * strap off air. Warns, never refuses, where the licence obliges a credit.
+ */
+function AttributionToggle({
+  def,
+  info,
+  onChange,
+}: {
+  def: Extract<DataSourceDef, { type: 'weather' | 'air-quality' }>;
+  info: { creditRequired: boolean; licenseUrl: string; shortNameKey: string } | undefined;
+  onChange: (def: DataSourceDef) => void;
+}): JSX.Element {
+  const t = useT();
+  const rt = useRichT();
+  const shown = attributionShown(def);
+  return (
+    <>
+      <label className="inline">
+        <input
+          type="checkbox"
+          checked={shown}
+          onChange={(e) => {
+            const next = { ...def };
+            // Omitted means shown, so a ticked box writes nothing.
+            if (e.target.checked) delete next.showAttribution;
+            else next.showAttribution = false;
+            onChange(next);
+          }}
+        />
+        <span>{t('editor.data.attribution.show')}</span>
+      </label>
+      {!shown && info?.creditRequired && (
+        <div className="source-warning">
+          {rt('editor.data.attribution.offWarning', {
+            lead: <strong>{t('editor.data.attribution.offWarningLead')}</strong>,
+            provider: t(info.shortNameKey),
+            link: (
+              <a href={info.licenseUrl} target="_blank" rel="noreferrer">
+                {t('editor.data.weather.license')}
+              </a>
+            ),
+          })}
+        </div>
+      )}
+      {!shown && (
+        <p className="hint">
+          {rt('editor.data.attribution.offHint', { column: <code>attribution</code> })}
+        </p>
+      )}
+    </>
+  );
+}
+
 function WeatherFields({
   def,
   others,
@@ -1387,6 +1518,8 @@ function WeatherFields({
           })}
         </p>
       )}
+
+      <AttributionToggle def={def} info={info} onChange={onChange} />
 
       {info?.needsBaseUrl && (
         <label>
@@ -2044,6 +2177,8 @@ function AirQualityFields({
         )
       )}
 
+      <AttributionToggle def={def} info={info} onChange={onChange} />
+
       {info?.needsBaseUrl && (
         <>
           <label>
@@ -2246,13 +2381,14 @@ function FtpFields({
           <select
             value={def.format}
             onChange={(e) =>
-              onChange({ ...def, format: e.target.value as 'csv' | 'json' | 'xml' | 'rss' })
+              onChange({ ...def, format: e.target.value as 'csv' | 'json' | 'xml' | 'rss' | 'text' })
             }
           >
             <option value="csv">{t('editor.data.ftp.formatCsv')}</option>
             <option value="json">{t('editor.data.ftp.formatJson')}</option>
             <option value="xml">{t('editor.data.ftp.formatXml')}</option>
             <option value="rss">{t('editor.data.ftp.formatRss')}</option>
+            <option value="text">{t('editor.data.ftp.formatText')}</option>
           </select>
         </label>
         <label>
@@ -2264,6 +2400,23 @@ function FtpFields({
           />
         </label>
       </div>
+
+      {/* Wave R: a lyrics or credits file dropped in the folder. */}
+      {def.format === 'text' && (
+        <div className="field-row">
+          <label>
+            <span>{t('editor.data.textSplit')}</span>
+            <select value={def.split ?? 'lines'} onChange={(e) => onChange({ ...def, split: e.target.value === 'stanzas' ? 'stanzas' : undefined })}>
+              <option value="lines">{t('editor.data.textSplitLines')}</option>
+              <option value="stanzas">{t('editor.data.textSplitStanzas')}</option>
+            </select>
+          </label>
+          <label className="inline">
+            <input type="checkbox" checked={def.markup !== false} onChange={(e) => onChange({ ...def, markup: e.target.checked ? undefined : false })} />
+            <span>{t('editor.data.textMarkup')}</span>
+          </label>
+        </div>
+      )}
 
       {def.format === 'csv' && (
         <label className="inline">

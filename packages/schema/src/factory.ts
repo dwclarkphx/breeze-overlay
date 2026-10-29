@@ -16,12 +16,14 @@ import {
   type LayerBase,
   type LayerType,
   type Project,
+  type RollLayer,
   type ShapeLayer,
   type Size,
   type Stage,
   type TableLayer,
   type TextLayer,
 } from './types.js';
+import { parseTextBody } from './text.js';
 
 let counter = 0;
 
@@ -272,6 +274,35 @@ export function createTableLayer(init: Partial<TableLayer> = {}): TableLayer {
   };
 }
 
+/**
+ * A credits roll (Wave R, ROLLS.md): placeholder rows from the same parser a
+ * text source uses, so a fresh roll shows a heading, pairs and a gap — every
+ * kind of row it can style — before any source is chosen.
+ */
+export function createRollLayer(): RollLayer {
+  const placeholder = parseTextBody(
+    'placeholder',
+    '# Credits\nProducer | Your Name\nDirector | Your Name\n\nThanks for watching',
+  );
+  return {
+    id: makeId('roll'),
+    type: 'roll',
+    name: 'Roll',
+    direction: 'up',
+    speed: 60,
+    from: 'enter',
+    to: 'exit',
+    end: 'hold',
+    start: 'play',
+    data: { columns: placeholder.columns, rows: placeholder.rows },
+    style: { fontFamily: 'Inter, Arial, sans-serif', fontSize: 36, fill: '#ffffff', align: 'center' },
+    headingStyle: { fontFamily: 'Inter, Arial, sans-serif', fontSize: 44, fontWeight: 700, fill: '#ffffff', align: 'center' },
+    size: { width: 800, height: 600 },
+    transform: { x: 560, y: 240 },
+    opacity: 1,
+  };
+}
+
 export function createLayer(type: LayerType): Layer {
   switch (type) {
     case 'shape':
@@ -311,6 +342,8 @@ export function createLayer(type: LayerType): Layer {
       };
     case 'table':
       return createTableLayer();
+    case 'roll':
+      return createRollLayer();
     case 'group':
       return { id: makeId('grp'), type: 'group', name: 'Group', children: [], transform: { x: 0, y: 0 }, opacity: 1 };
     case 'composition':

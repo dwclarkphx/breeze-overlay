@@ -18,6 +18,7 @@ No coding required. If you have used After Effects, Photoshop or any NLE, the mo
 10. [Easing](#10-easing)
 11. [Text that changes on air](#11-text-that-changes-on-air)
 12. [Data sources and tables](#12-data-sources-and-tables)
+12a. [Rolls, polls and charts](#12a-rolls-polls-and-charts)
 13. [Scenes — several graphics, one browser source](#13-scenes--several-graphics-one-browser-source)
 13a. [Assets and video](#13a-assets-and-video)
 14. [Getting it on air](#14-getting-it-on-air)
@@ -198,12 +199,13 @@ language shipped today.
 
 | | Region | What it is for |
 |---|---|---|
-| **1** | App bar | Pick the project and composition, save, undo, grab the output URL |
-| **2** | Layers | The stack. Top of the list paints on top |
-| **3** | Data sources | Live data feeding tables and tickers |
-| **4** | Stage | The picture. Select, move, scale and rotate here |
-| **5** | Properties | Everything about whatever is selected |
-| **6** | Timeline | When things happen |
+| **1** | [App bar](#4-the-app-bar--projects-saving-undo) | Pick the project and composition, save, undo, grab the output URL |
+| **2** | [Layers](#6-the-layers-panel) | The stack. Top of the list paints on top |
+| **3** | [Data sources](#12-data-sources-and-tables) | Live data feeding tables and tickers |
+| **4** | [Assets](#the-asset-bin) | Images, video and fonts every composition in the project can use. Folded by default |
+| **5** | [Stage](#5-the-stage) | The picture. Select, move, scale and rotate here |
+| **6** | [Properties](#7-the-properties-panel) | Everything about whatever is selected |
+| **7** | [Timeline](#8-the-timeline) | When things happen |
 
 The three dividers between panels are draggable. **Double-click a divider** to reset that panel to its default width. Your layout is remembered between sessions.
 
@@ -331,7 +333,7 @@ Each row has a visibility dot, a lock, a thumbnail of the layer's actual content
 | Move up / down the stack | The `▲` and `▼` arrows |
 | Delete | The red bin button, or press `Delete` with the layer selected. Its tooltip names what it will remove — a group or table takes every layer inside it — and `Ctrl+Z` brings it back |
 
-**Adding a layer.** The `+ Add…` menu offers **Text**, **Shape**, **Image**, **Video**, **Sprite**, **Crawl**, **Table**, **Group** and **Composition** (for nesting another composition — see [section 13](#13-scenes--several-graphics-one-browser-source) for using this to build a scene).
+**Adding a layer.** The `+ Add…` menu offers **Text**, **Shape**, **Image**, **Video**, **Sprite sheet**, **Live media**, **Crawl**, **Roll** (credits and lyrics — see [section 12a](#12a-rolls-polls-and-charts)), **From a .psd file…**, **Table**, **Group** and **Composition** (for nesting another composition — see [section 13](#13-scenes--several-graphics-one-browser-source) for using this to build a scene).
 
 > **Worth knowing:** a new layer starts at the playhead, as it would in After Effects. Add one with the playhead parked at 2 seconds and the layer does not exist before 2 seconds. If that is not what you wanted, drag its bar left in the timeline, or set **In** to `0` in the properties panel.
 
@@ -355,15 +357,19 @@ Select a layer and the panel fills out. The sections you see depend on the layer
 
 **Effects** — Blur, Brightness and blend mode, on every layer type.
 
+**Driven by data** — let a number from a source, a field or a table row move one of the layer's properties: a bar's width, a meter's height, a gauge's sweep. See [Charts](#charts).
+
 ### By layer type
 
-**Shape** — **Kind** (rectangle, ellipse or path), **Fill** and corner **Radius**. A path also has its **Path data** and a list of its points with their coordinates; the quickest way to shape one is on the stage — see [Editing a path on the stage](#5-the-stage).
+**Shape** — **Kind** (rectangle, ellipse or path), **Fill** and corner **Radius**. A path also has its **Path data** and a list of its points with their coordinates; the quickest way to shape one is on the stage — see [Editing a path on the stage](#5-the-stage). An ellipse can **Draw an arc** (a gauge, a donut slice), a path can **Draw from data** (a line chart), and both have **Draw on** to draw their outline in as the graphic plays — see [Charts](#charts).
 
 ![Properties for a shape layer](images/properties-shape.png)
 
-**Text** — **Content** is the text itself. **Binding** is covered in [section 11](#11-text-that-changes-on-air). **Fit width** condenses long text so it fits the box (see below). **Type** covers Font, Size, Weight, Color, Tracking, Align and Case. **Reveal** animates the text on piece by piece. Six presets: **Characters rise**, **Characters fade**, **Words rise**, **Words fade**, **Lines rise**, **Lines fade**. Each brings sensible **Stagger**, **Duration** and **Ease** defaults, scaled to the unit — the defaults show as grayed placeholder values, and typing over one overrides just that field.
+**Text** — **Content** is the text itself. **Binding** is covered in [section 11](#11-text-that-changes-on-air). **Fit width** condenses long text so it fits the box (see below). **Type** covers Font, Size, Weight, Color, Tracking, Align and Case. **Reveal** animates the text on piece by piece. Six presets: **Characters rise**, **Characters fade**, **Words rise**, **Words fade**, **Lines rise**, **Lines fade**. Each brings sensible **Stagger**, **Duration** and **Ease** defaults, scaled to the unit — the defaults show as grayed placeholder values, and typing over one overrides just that field. **Counting** makes a number roll up to its new value instead of jumping (see [Charts](#charts)).
 
 **Crawl** (tickers) — **Speed** in pixels per second, **Direction**, a **Separator** printed between items, and the **Items** list, one per line.
+
+**Roll** (credits, lyrics) — long text from a text source that scrolls through the box, up, down, left or right, and that the operator can pause, reverse and speed up on air. See [The roll layer](#the-roll-layer).
 
 **Image / Video** — Pick from **Asset** (the files uploaded to this project — see [section 13a](#13a-assets-and-video)) or type a **Path** directly, plus an optional binding. Video adds **Start at**, **Loop**, and **At end** — `Hold last frame` or `Clear`. Video is locked to the composition playhead, so it scrubs correctly in the editor and stays in sync on air.
 
@@ -487,6 +493,40 @@ The two controls do different halves of the job, and it is worth being clear abo
 
 The layer's own **Content** becomes a placeholder once the clock is on: the canvas and a still export use it, a renderer never does. And a clock always beats a binding, so if the layer has both, the operator's field will appear to do nothing — clear one or the other.
 
+### A timer the operator runs
+
+A game clock, a speaker timer or a "service starts in" countdown is also a switch on a **text layer**: turn on **Operator timer** in the properties panel. Unlike a clock, the operator runs it: start, pause, set and reset, from the control panel, Companion or a URL.
+
+- **Timer id**: which timer the layer shows (`game`, `shot`, `main`). Two layers with the same id show one clock. Blank means `main`.
+- **Mode**: **Count down** from a time, **Count up** from a time (optionally stopping at a limit), or **Stopwatch** (count up with tenths).
+- **Count down to time of day**: `10:00` or `18:30`, in a **Time zone**. Nobody needs to press start, so this is the one for a church countdown.
+- **Format**: `m:ss` by default. Tokens: `h`/`hh` hours, `m`/`mm` minutes, `s`/`ss` seconds, `S` tenths, `SS` hundredths, `[text]` literal.
+- **Show tenths under**: switches to `59.9` for the last N seconds, as a basketball clock does.
+- **At the end**: **Stop and hold** at zero (or at the limit), or **Keep going** into overtime (`-0:12`).
+- **From a sport template**: when the project has a sport template (§12), its clocks are listed here. Pick **Shot clock — NBA** and every setting above is filled in.
+
+The control panel shows a **Timers** block for every timer the graphic shows: a big readout, **Start/Pause**, **−10 −1 +1 +10**, **Reset**, and a **Set** box that takes `8:00`, `480` or `12.5`.
+
+The time is worked out on each output from the server's record of when the timer started, against the server's clock. Two outputs on two machines show the same time, and a browser source reloaded mid-quarter comes back showing the right clock on its first frame. Timers belong to a channel. Everything taken onto one **output** (§14b) shares that output's timers, so a scorebug and a full-screen recap on the same output run one game clock.
+
+A layer rule can read a timer: **timer `main` ≤ 0 → hide** takes a countdown off screen when it reaches zero, and **timer `game` ≤ 60 → red** recolours the last minute.
+
+### Fields that are more than text
+
+By default a bound field is text the operator types. A composition can say more about a field: with no layer selected, open **Fields** in the properties panel and pick a kind for each one:
+
+| Kind | On the control panel | On air |
+|---|---|---|
+| **Number** | − and + plus your own buttons (`1, 2, 3` gives +1 +2 +3), min/max | Formatted: pad to digits (`07`), decimals, prefix, suffix |
+| **On / off** | A toggle | The **Text when on** / **Text when off** |
+| **Options** | A select (`value` or `value \| label`, one per line) | The option's label |
+| **Colour** | A colour picker | Recolours any text or shape layer whose **Colour field** names it |
+| **Asset from the bin** | A picker of the project's images (or videos) | The image layer bound to it shows the asset |
+
+A field nothing binds to is still a field: add **bonus** as an on/off and give the BONUS badge a rule **field `bonus` is true → show**.
+
+For a sport, prefer a sport template's **game** table (§12) to typed fields: every graphic in the project reads the one score.
+
 ---
 
 ## 12. Data sources and tables
@@ -497,7 +537,7 @@ Click the **▾ Data sources** heading to fold the panel away. Collapsed, it bec
 
 ![The data sources panel](images/data-panel.png)
 
-`+ Add…` offers ten kinds:
+`+ Add…` offers twelve kinds:
 
 - **Manual table** — you type the rows. Good for standings, credits, anything you maintain by hand.
 - **HTTP CSV / Google Sheet** — a URL that returns CSV. A published Google Sheet works directly: use its **Publish to web → CSV** link. No API key.
@@ -509,6 +549,9 @@ Click the **▾ Data sources** heading to fold the panel away. Collapsed, it bec
 - **Air quality — AirNow or CAMS** — the AQI for one place or many, now or forecast. See [Air quality](#air-quality) — AirNow data comes with terms of use.
 - **Alerts (CAP)** — weather warnings, air-quality action days, anything published in the Common Alerting Protocol. See [Alerts](#alerts-cap).
 - **FTP / SFTP file drop** — watch a folder on another machine and use the newest file in it. See [File drops](#file-drops-ftp--sftp).
+- **Text (lyrics, credits)** — long text, typed in or fetched, split into rows by line or by verse, with headings and two-column credits read for you. For rolls and lyric straps. See [Long text](#long-text--lyrics-and-credits).
+- **Poll (counted by the operator)** — a question, its options and their votes, counted from the control panel. See [Polls](#polls).
+- **From a sport template…** — the five tables a sports production needs (teams, players, coaches, venue and the live game), shaped for the sport and its rules, typed in or fed from a Sheet, CSV or JSON. See [below](#sport-templates).
 
 Each source shows how many rows it holds, how often it refreshes, when it last fetched and when the data last *changed*. Sources that are failing are highlighted with the error. A source that is *partly* working — say two of ten cities timed out — shows an amber note naming them; it is still updating the rest.
 
@@ -564,6 +607,8 @@ There are five providers, and the difference between them is mostly legal rather
 > **Read this before going to air commercially.** Open-Meteo's hosted service is free for non-commercial use *only*. If your channel or site carries advertising or subscriptions, that counts as commercial use and you may not use it. The editor shows a warning on that provider for exactly this reason. Outside the United States you have three commercial options: **MET Norway** anywhere, **Bright Sky** in Germany, or your own Open-Meteo instance (choose **Open-Meteo — self-hosted** and give it the address, for example `http://localhost:8282`).
 
 **Most providers require a credit on screen** — MET Norway, Bright Sky and both Open-Meteo options all do. You do not have to remember the wording: every weather source has an **`attribution`** column holding the right line for its provider, so bind a small text layer to it and the credit travels with the graphic wherever it goes.
+
+**Turning the credit off.** Weather and air-quality sources have a **Show attribution** box, ticked by default. Untick it and the `attribution` column comes back blank instead of disappearing, so nothing bound to it breaks. To take the whole credit strap off air (bar and all), give the strap a layer rule: **`attribution` is empty → hide**. For a provider whose licence requires a credit, the editor shows a warning naming the licence when you untick the box. It warns but doesn't stop you, because you may already run the credit elsewhere, on a credits page or your station's site. NWS data is public domain and gets no warning.
 
 **MET Norway wants to know who you are.** Like NWS, it blocks traffic it cannot identify, and it will try to contact you before blocking — but only if there is a contact to reach. Fill in **Contact for User-Agent**, or better, have whoever runs the server set `BREEZE_CONTACT` once for everything.
 
@@ -692,6 +737,31 @@ Use **HTTP CSV** if you can. Publishing a sheet to the web needs no credential, 
 
 If you do need it, someone with access to the server sets up the credential — either an API key (for a sheet shared as "anyone with the link") or a service-account JSON key (for a fully private sheet, which must then be shared with the service account's `client_email`, exactly as you would share it with a person). You put the *name* they gave it into **Credential id**. The credential itself never enters your project file, which is what makes a project safe to copy between machines or hand to someone else.
 
+### Sport templates
+
+**Add → From a sport template…** builds every table a sports production needs, already shaped for the sport:
+
+- **Teams**: home and away, with name, short name, abbreviation, colours, logo, record and the sport's team stats.
+- **Players**: team, number, name, position, headshot, starter and the sport's player stats.
+- **Coaches** and **Venue**: names and roles; ground, city, capacity, attendance, officials, notes.
+- **Game**: one row of live state. It holds the score, the period and its label (`3rd`, `2OT`, `2nd Half`, `Top 7th`, `Set 3`), a line score per period, and whatever the sport tracks: down and distance; balls, strikes, outs and runners; fouls and the bonus; cards; the power play; overs, wickets and run rates; sets, games and points; who serves.
+
+Pick the **Sport** and its **Rules** (the NBA, NCAA, high school, FIBA; the NFL; MLB; FIVB; World Rugby; the AFL; T20 or Test; best of 3 or 5 sets…). The rules set the number of periods, the line-score columns and the clocks the sport runs. There are 21 sports: basketball, American football, baseball, softball and volleyball; soccer, both rugby codes, Australian rules, Gaelic football and hurling; ice hockey, field hockey, lacrosse, handball and water polo; cricket, tennis, badminton, table tennis and pickleball.
+
+**Where the rows come from** is your choice:
+
+- **Typed in here**: five manual tables, seeded with a home and an away team.
+- **A Google Sheet**: one spreadsheet, a tab per table named `teams`, `players`, `coaches`, `venue`, `game`.
+- **A published CSV** or a **JSON feed**: one URL per table. A table you leave without a URL isn't created.
+
+**[The sport templates reference](SPORT-TEMPLATES.md)** lists every sport and rule set with its clocks and scoring, links each rule set to the governing body's own rules, and gives the format of every table with an example row — what to put in a Sheet or a feed before you build anything.
+
+Every source made from a template has a **Format guide**. It lists each column the table should have, its type, whether it is required, and an example or the values it may take. **Download CSV** gives you a header row and starter rows to paste into a Sheet; **Download JSON sample** shows the shape a feed should return. Under the guide, the source is checked against the template each time you preview it. The check names any required columns it is missing, values that should be numbers and aren't, values outside a closed list (`side` must be `home` or `away`), and columns the template doesn't know (those are fine).
+
+**Keeping score.** A graphic that reads any table of a sport gets a **Game** block on its control panel. The buttons are the sport's own: **+1 +2 +3**; **TD PAT 2PT FG SAF**; **TRY CON PEN DG**; **GOAL BEHIND** (the AFL `12.9.81` is worked out for you); **GOAL POINT** (GAA `1-12`); a **Point** button per side for tennis (15/30/40, deuce, advantage and tiebreaks are handled), volleyball, badminton, table tennis and pickleball (side-out scoring and server number); and a keypad for cricket (`0 1 2 3 4 6 WD NB B W`, with overs and run rates worked out). **−** takes the first button's score back (−1 in basketball), for a mistaken tap. Below them are the period arrows, possession, and every counter and toggle the sport tracks. **Reset game** needs a second tap.
+
+The score lives in the game table, not in one graphic. The scorebug, the recap and the lower third all read the same row, so a +2 reaches every one of them at once, on every output.
+
 ### Poll intervals
 
 The minimum is 5 seconds for most sources, and higher for weather (see above). Match it to how fast the data actually changes: a live scoreboard feed wants 5–10 seconds, a standings sheet 30, a news feed several minutes, weather every 15. Polling faster than the data changes costs nothing on screen — a graphic only re-renders when the content actually differs — but it is traffic to somebody else's server, and some of them will start refusing you.
@@ -721,6 +791,7 @@ Add a **Table** layer, then point its **Source** at a data source.
 | **Lookup** | Bring columns across from another data source by a matching value — a city's display name and region onto each forecast row |
 | **Union** | Add another data source's rows underneath — a feed's alerts and your own typed announcements in one crawl |
 | **Compose** | Build a sentence from several columns with a template — one line per alert, ready for a crawl or a text cell |
+| **Share (percent)** | Work out each row's percentage of a column's total, adding up to exactly 100 — and, optionally, where each row starts, for a pie. See [Charts](#charts) |
 
 **Unpivot** is for the sheet somebody built for people rather than for graphics: one row a city, then `Mon`, `Tue`, `Wed` across the top. A table repeats rows, not columns, so it folds those columns into rows:
 
@@ -1009,6 +1080,157 @@ The spacing either side of the glyph is part of the value, which is why the pres
 
 ---
 
+## 12a. Rolls, polls and charts
+
+Three kinds of graphic that run from data an operator controls while it is on air: long text that scrolls (end credits, a lyric sheet, a statement), polls the operator counts, and charts — bars, meters, donuts, gauges and lines — that move when the numbers do.
+
+The **Rolls, Polls & Charts** demo project has one of each, ready to open in the editor and take apart:
+
+![The Rolls, Polls & Charts demo, each graphic on its hold](images/rolls-polls-demo.png)
+
+*Left to right, top to bottom: a credits roll, lyrics a verse at a time, a poll as bars and as a donut, a giving thermometer, an hourly temperature line and a gauge.*
+
+### Long text — lyrics and credits
+
+**+ Add… → Text (lyrics, credits)** in the data panel makes a source of long text. **The text is** either **Kept in this project** — typed or pasted into the box, or loaded from a `.txt` file — or **Fetched from a URL**, polled like any other feed. An FTP or SFTP [file drop](#file-drops-ftp--sftp) can deliver one too: set its format to **Text**.
+
+![A text source holding end credits](images/data-source-text.png)
+
+The text becomes rows. **One row per** decides how:
+
+- **Line**: every line is a row. Right for credits and a scrolling statement.
+- **Verse (blank-line block)**: every block of lines between blank lines is one row, with its line breaks kept. Right for lyrics shown a verse at a time.
+
+With **Read headings and credits** ticked, three things in the text mean something:
+
+| You type | You get |
+|---|---|
+| `# Directed by` | A **heading** row: styled on its own in a roll |
+| `Director \| Alex Lindqvist`, or the two separated by a tab | A **credit** row: role and name side by side, the role right-aligned against the name |
+| A blank line | A **gap** row: a space the height of one line |
+
+Untick it for lyrics that really do start with `#`. Every row carries `n` (its number), `section` (which block it is in), `kind` (`heading`, `pair`, `line` or `gap`), `text`, and for a credit `left` and `right`. The box shows the size, up to 256 KB, and the preview under it shows the rows exactly as a graphic will see them (up to 5,000).
+
+**Operator changeable** is the designer's switch. Ticked, the control panel of every graphic reading this source gets a **Text** block where the operator can correct a name or swap in tonight's set list; nothing changes on air until they press **Update text**, and every graphic reading the source changes together. Unticked, the words are the designer's, and the server refuses a change from anywhere else. A fetched text belongs to whoever publishes it, so the switch only applies to text kept in the project.
+
+### The roll layer
+
+**+ Add… → Roll (credits, lyrics)** in the layers panel adds a layer that scrolls rows of text through its box. Point its **Source** at a text source, or leave it on **Text typed here** and type straight into the layer. With a source, the box holds a placeholder that shows until the source answers.
+
+![Properties for a roll layer](images/properties-roll.png)
+
+| Setting | What it does |
+|---|---|
+| **Direction** | **Up** for end credits; **Down**; **Left** or **Right** for a long crawl of text. Left and right put the rows one after another, with **Between items** printed in between |
+| **Speed** | The designer's speed, in pixels per second at the stage's size. The operator changes it from here as a multiple: ×2 is twice this |
+| **On PLAY** | **Start rolling**, or **Wait for the operator** to press Play on the panel |
+| **Starts** | **Off screen, rolls in**: the first line enters from the edge. **With the first lines showing**: it starts full and moves on |
+| **At the end** | **Stop** where it ends; **Loop** forever, with **Space before it repeats**; or **Carry the graphic on**: once the last line has gone, the graphic runs on to its next STOP marker or its outro, as if the operator had pressed PLAY. That is how end credits take themselves off air |
+| **Ends** | **When the last line has gone**, or **With the last lines showing** — hold the final card on screen |
+| **Scroll id** | Rolls with the same id move together and share one transport on the panel. Blank is `main` |
+| **Space between rows**, **Blank-line height** | Spacing; a blank line is one line of the type by default |
+| **Credit split (%)**, **Credit gutter** | Where a credit row divides between role and name, and the space between them |
+| **Soft edge, entering / leaving** | Fade the text out over this many pixels at each end of the box, so lines don't appear with a hard cut |
+| **Type — lines**, **Type — headings** | The type for ordinary rows, and — with **Style headings separately** ticked — for headings. Otherwise a heading is the line type, bold and a quarter larger |
+
+In the editor the canvas shows the first lines so you can style them; press the timeline's ▶ to watch it roll at the designer's speed.
+
+A roll is for text that *moves*. For lyrics that step a verse at a time, use a **table** layer on a source split by **Verse**, with **Rows per page** set to `1`: **NEXT** turns to the next verse. The demo's *Lyrics — Verse* is built that way.
+
+### Running a roll on air
+
+A graphic with a roll gets a **Scroll** block on its control panel, one row per scroll id:
+
+![The Scroll and Text blocks on a control panel](images/control-panel-roll.png)
+
+- **To start**, **Backward**, **Play / Pause**, **Forward**, **To end**. Backward runs the text back the way it came, at the current speed; Forward runs it on again. The lit button is what it is doing.
+- **Slower**, **×1**, **Faster**: steps of the designer's speed — ¼×, ½×, ¾×, 1×, 1¼×, 1½×, 2×, 3× and 4×. **×1** goes back to the designer's speed.
+- **−3 s** and **+3 s** jog it back or on, a few lines at a time.
+- The **position bar** shows how far through it is, and how long it runs at this speed. *No output has measured this roll yet* means no browser source is showing it — open one and the bar fills in.
+- **Go to** takes a time (`1:30` or `90`, in seconds at the designer's speed) or a percentage (`50%`).
+- **Reset** stops it and puts it back at the start, at ×1.
+
+The position is held by the server, the way a [timer's](#a-timer-the-operator-runs) is: each output works out where the text is from the server's record, against the server's clock. Two outputs show the same line, and a browser source reloaded mid-roll comes back on the line the others are on. A fresh PLAY, a TAKE and a CLEAR put every roll back at the start.
+
+The rundown panel shows a compact transport under each target that has a roll — to start, backward, play/pause, forward, slower, faster — with how far through it is and at what speed. The same verbs are on the [HTTP API](#rolls-polls-and-text) for Companion and a Stream Deck.
+
+### Polls
+
+**+ Add… → Poll (counted by the operator)** makes a poll: a **Question**, the **Options** — each with an id, a label, a bar or slice colour and an optional image — and the count so far. **Voting** is open or closed.
+
+![A poll source](images/data-source-poll.png)
+
+Votes are counted by the operator — from the control panel, Companion or a URL — never by the audience. That is deliberate: there is no public voting page to secure or to flood. A poll run somewhere else (a Google Form, Slido, a text-in service) comes in as an ordinary feed instead; the poll source's **Poll feed format** guide lists the columns such a feed needs, with a starter CSV.
+
+A poll's rows, one per option, in the order you listed them:
+
+| Column | Holds |
+|---|---|
+| `option`, `label` | The option's id and its label |
+| `votes` | Its count |
+| `percent` | Its share as a whole number. The percentages always add up to exactly 100 |
+| `share` | Its share as a fraction, `0.518` |
+| `rank` | 1 for the leader. Ties share a rank: 1, 1, 3 |
+| `leader` | `true` for the option, or options, in front. Nobody leads a poll with no votes |
+| `color`, `image` | What you gave the option |
+| `question`, `total`, `status` | The same on every row: the question, the total votes, `open` or `closed` |
+
+On air, a graphic that reads a poll gets a **Poll** block on its control panel:
+
+![The Poll block](images/control-panel-poll.png)
+
+**+1** and **−1** per option, a box to set a count outright (type the number and press Enter), **Close voting** / **Open voting**, and **Reset count**, which needs a second tap. Taps that land at the same moment from two panels all count. With **Operator changeable** ticked on the source, **Edit the question and options** lets the operator re-word them; the count is always the operator's either way.
+
+Closing a poll is something a graphic can show: a rule **source `poll`, column `status` is `closed` → show** puts a FINAL tag up, as the demo's results bars do.
+
+### Charts
+
+Charts are not a layer type of their own. They are built from the layers there already are, with a few settings that let data move them.
+
+**Driven by data.** Every layer has a **Driven by data** section at the bottom of its properties. **+ Drive a property from data** lets a number move one property of the layer:
+
+![A drive: a gauge's arc follows a field](images/properties-drive.png)
+
+| Setting | What it means |
+|---|---|
+| **Property** | What moves: Width, Height, X, Y, Scale X, Scale Y, Rotation, Opacity, an arc's sweep or a path's draw-on. A property can be keyframed or driven, not both |
+| **Number from** | **This row's column** (a layer inside a table row — each bar reads its own row); **A source's value** (a column of a source's first row, or the row where a column has a given value: `team=HOME`); **A field** the operator types; or **A timer** — its seconds |
+| **Data from**, **Data to** | The input range: a number, the **lowest**, **highest** or **total** of that column across the rows, **another column** of the same row (a meter's `goal`), or another field |
+| **Moves between** | What that range becomes, in the property's own units: pixels, degrees, a scale, 0–1 for opacity and draw-on |
+| **Grows from** | Width and height only: which edge stays put. **End** makes a bar grow leftward, or a thermometer up |
+| **Animate (s)** and **Ease** | How long it takes to get to a new value. 0 jumps |
+| **Keep inside the range** | Ticked, a number past the end of the range stops at the edge |
+
+The default range is 0 to the highest in the rows, so the leading bar fills its track and the rest are in proportion.
+
+**Arcs.** An ellipse can **Draw an arc**: **Arc starts at** an angle (degrees clockwise from twelve o'clock), runs for **Arc sweep**, with a **Ring thickness** (0 draws a filled pie wedge) and **Square** or **Round** ends. Drive the sweep and you have a gauge; a table of arcs is a donut.
+
+![An ellipse drawn as an arc](images/properties-arc.png)
+
+**Draw on.** A path or an arc has **Draw on (0–1)**: how much of its outline is drawn. Keyframe it from 0 to 1 and the line draws itself as the graphic plays.
+
+**Lines from rows.** A path shape can **Draw from data**: pick a source and its **Value column**, and the path becomes a line through the rows — **Straight segments**, or **Smooth (never overshoots)**, which curves without ever drawing a peak higher than the real reading. **Across** spaces the rows evenly, or by another column. **Fill the area under it** closes the line down to the baseline, for an area chart. **Bottom value** and **Top value** fix the vertical range; left on *auto* they follow the lowest and highest readings. The line fills the layer's box, and when the readings change it animates to the new ones.
+
+**Counting numbers.** A text layer bound to a number, or a table cell reading one, can **Count to new numbers**: 38% rolls up to 41% instead of jumping. **Count for** sets how long, **Decimal places** how it reads, and **Before** and **After** add `$` or `%`.
+
+**Rows across.** A table's **Rows run** can be **Across** instead of down: each row steps to the right by the row height. That is a column chart, or a row of labels under a line chart.
+
+**Shares.** The table transform **share (percent)** works out each row's percentage of a column's total, rounded so they add up to exactly 100, and writes it to a column (`percent` unless you name another). Name a **running start** column too and it writes where each row begins — 0, 51.8, 87.9 — which is the angle a pie slice starts at.
+
+**Putting them together** — how the demo builds each one:
+
+| Chart | Built from |
+|---|---|
+| **Results bars** | A table on the poll. Each row: the label, a track, a bar whose **Width** is driven by its row's `percent` (0–100 → 0–640 px), and a counting `percent` |
+| **Donut** | A table on the poll with a **share** step and a running start. Each row is a ring arc whose **Rotation** follows the running start and whose **sweep** follows the share — so each slice starts where the last ended. Rows are a hair apart, so the slices sit on top of each other. A rule per option gives each its colour |
+| **Thermometer** | A one-row table on a giving source: a fill whose **Height** is driven by `raised` from 0 to `goal` and grows from the bottom, and a counting `$` total |
+| **Line** | Two path shapes drawing the same source — a smooth line drawn on with **Draw on**, and a filled area under it — over a table of labels running **Across** |
+| **Gauge** | A ring arc whose **sweep** is driven by a field from 0–100 to 0–270°, over a grey track arc, with a counting number |
+
+The colours of a poll's options reach a chart through [rules](#rules--layers-that-react-to-data): **column `option` is `yes` → colour** on the bar or slice, one rule per option.
+
+---
+
 ## 13. Scenes — several graphics, one browser source
 
 A lower third and a screen bug usually belong to the same show. They share a look, they were designed together, and they are often on air at the same time — but they roll at different moments, so neither one can be part of the other's timeline.
@@ -1150,7 +1372,37 @@ Click **Output URL ↗** in the app bar and copy the address, or open the projec
 
 > **A graphic never appears just because you added the source.** The output page shows nothing until something tells it to play. Adding a browser source in OBS, or opening the URL to check it, will not put a graphic to air. That is deliberate — it is the control panel's job. If you *want* the source appearing in the switcher to be the cue, add `?autoplay=1` to the URL.
 
+> **Feeding a hardware switcher?** An ATEM or any switcher fed over HDMI or SDI gets no transparency. See [Keying into a hardware switcher](#keying-into-a-hardware-switcher).
+
 > **A source that reloads mid-show comes back on air.** If OBS or vMix reloads a browser source while its graphic is holding — a crash, a scene collection reloaded, someone pressing refresh — the page picks up from another output that is still on air: the same hold, the same page of any table that pages, with the same time left before its next turn, so it turns with the others, and every ticker on the same copy at the same point in its scroll. It does not play the intro again. With no other output on air there is nothing to pick up from, and it waits for the next PLAY as before. To have a page always wait instead, add `?sync=off` to its URL.
+
+### Keying into a hardware switcher
+
+HDMI and SDI carry no transparency, so a hardware switcher needs the page shaped for it. Two options on any output URL (`/play/…` or `/out/…`) do that. Neither changes the graphic or its timing.
+
+**Fill and key** — the same graphic on two outputs:
+
+| Signal | URL |
+|---|---|
+| Fill | `http://<host>:7331/play/<project>/<composition>?bg=black` |
+| Key | `http://<host>:7331/play/<project>/<composition>?matte=1` |
+
+The key is white where the graphic is solid, black where it is clear, and grey at its transparency in between. Key it as fill + key with **pre-multiplied** on; the fill on black is already pre-multiplied, which keeps soft edges free of a halo. The control panel's [sync check](#the-control-panel) watches the pair.
+
+**Chroma** — one output with a solid background:
+
+| `?bg=` value | Background |
+|---|---|
+| `green` · `blue` · `magenta` · `black` · `white` | `#00ff00` · `#0000ff` · `#ff00ff` · `#000000` · `#ffffff` |
+| hex, 3 or 6 digits, **without** `#` — `00b140`, `0f0` | that colour |
+| `%23` + hex — `%2300b140` | that colour (a bare `#` in a URL is never sent to the server) |
+| `transparent`, `none`, or empty | the usual transparent page |
+
+Soft edges and shadows mix with the background colour, so chroma keys less cleanly than fill and key.
+
+Rules: `?bg=` is ignored on a matte page. `?matte=` takes `1`, `true` or no value; `0` or `false` is the ordinary fill. A value the page doesn't understand is ignored and reported in the browser console. `bg` and `matte` can't set a field from the URL, the same as `autoplay` and `scale`.
+
+> **Proved, not yet keyed.** In headless Chromium the matte's grey level matches the fill's transparency at every pixel, feathered masks included. Keying it on a real ATEM has not been confirmed yet.
 
 ### The control panel
 
@@ -1168,10 +1420,20 @@ One page per composition, designed to be usable at speed on a laptop or a tablet
 - **Mode** — appears when the project's rules name a mode: a button for each, plus **NORMAL**. The lit one is the mode on air, for the whole project ([rules](#rules--layers-that-react-to-data)).
 - **Data** — every fetched source the graphic reads, including those of graphics mounted in it, and what each is doing: *Live*, *Failing* (last good data still on air), *Expired* or *Frozen* (blank on air), or *On backup*. A source with a [backup](#when-the-data-is-bad) has **AUTO / OWN / BACKUP** buttons.
 - **Dynamic fields** — edit the text and press **UPDATE ON AIR**. Changes apply live; the graphic does not need re-playing.
+- **Timers** — for every [operator timer](#a-timer-the-operator-runs) the graphic shows: start/pause, ±1 and ±10 seconds, set and reset.
+- **Game** — for a graphic built on a [sport template](#sport-templates): the sport's own scoring buttons, the period and every counter it tracks.
+- **Scroll** — for a graphic with a [roll](#running-a-roll-on-air): play, pause, forward, backward, slower, faster, jog, go to a position, and how far through it is.
+- **Poll** — for a graphic that reads a [poll](#polls): +1 and −1 per option, set a count, open or close voting, reset.
+- **Text** — the words of a [text source](#long-text--lyrics-and-credits) its designer made operator changeable, with **Update text** to put a correction on air.
 - **Show preview** — the real output page, embedded and scaled to fit. It follows what you trigger here and is never counted as a connected output. Switched on with the graphic already on air, it picks up where an output is, as a reloaded browser source does. **Sync to** chooses which one: **Newest output** (the one that reported most recently), any connected output by name and address, or **Off**, which waits for the next command. Changing it reloads the preview. An output shown as *off air* is connected but not showing anything, so a preview following it shows nothing either.
 - **Sync check** — under the preview, whether it is showing what the output shows: **In step with Output 1**, or **Out of step** with the rows that differ marked. It compares the hold, every table that pages (its page and the seconds to its next turn) and every ticker (its copy, and how far apart the two are scrolling), against the output the preview follows — or the newest one on air when Sync to is Off. The output's report is a few seconds old at most and the check allows for that. **Resync** puts the preview back where the output is. It reads the graphic's own channel; on a scene, check an independently triggered element from its own panel.
+- **Key pair** — shown when a [key page](#keying-into-a-hardware-switcher) (`?matte=1`) is connected: **Key pair in step — fill Output 1, matte Output 2**, or out of step with the rows that differ. Each matte is paired with a fill on the same machine first. A matte with no fill on the graphic is flagged, because that key would cut black into the programme. In **Sync to**, a key page is marked *matte*.
 
 The indicator at the top right says whether an output page is actually connected. If it says *no output connected*, the browser source is not open — pressing PLAY will do nothing visible.
+
+### Cue first, then take
+
+A control panel edits live by default: type a name, press Enter, and it is on air. When you would rather check first, tick **Cue → take: edits wait for TAKE** on the panel. The fields then become a buffer and nothing you type reaches air. Choose **Show cued** in the preview's **Sync to** menu to see the buffer rendered exactly as it will air, Fit Width included. **TAKE** then sends the values and plays in one go. If the graphic is already on air, it runs its outro first and comes back in with the new values, so a name never changes on a strap that is showing.
 
 ### Checking a graphic without going to air
 
@@ -1293,6 +1555,33 @@ http://<host>:7331/api/projects/<project>/datasources/<source>/media/check
 
 Checks every camera in a camera list now, and answers with each one's state — `ok`, `failed` (with why) or `frozen`. It answers within about four seconds whatever happens; `"done": false` means a slow camera is still being checked, and the list shows the result once it is. GET and POST both work, and both need the API key when one is set: it makes a request to every camera. `GET /api/projects/<project>/datasources/<source>/media` reads the same list without checking, and a source's status in the list of sources carries the counts as `media`.
 
+### Timers, rundowns, outputs and scores
+
+| What | URL (GET or POST, key required) |
+|---|---|
+| Start, pause, set or adjust a timer | `/api/control/<project>/<graphic>/timer?action=toggle&id=game` — `action` is `start`, `pause`, `toggle`, `reset`, `set` (`&value=8:00`) or `add` (`&value=-10`) |
+| The same on an output | `/api/out/<project>/<output>/timer?action=start&id=game` |
+| TAKE new values on a graphic | `/api/control/<project>/<graphic>/take` with the fields as the body or query |
+| Arm, step and take a rundown | `/api/rundown/<project>/<rundown>/cue?item=<id>`, `…/next`, `…/prev`, `…/take`, `…/out` |
+| What a rundown has armed and on air | `/api/rundown/<project>/<rundown>/state` (no key) |
+| Stop, step or clear an output | `/api/out/<project>/<output>/stop` (`&mount=<graphic>` for one), `next`, `prev`, `clear` |
+| Score in a sport's game table | `/api/projects/<project>/datasources/<game source>/game?type=score&side=home&action=three` — `type` is `score`, `unscore`, `point`, `adjust` (`&column=homeFouls&delta=1`), `set` (`&column=possession&value=away`), `period` (`&delta=1`) or `reset` |
+| The sports, their rules, buttons and columns | `/api/sports` (no key) |
+
+`/state` on a graphic also returns its `timers`, even with `?data=0`.
+
+### Rolls, polls and text
+
+| What | URL (GET or POST, key required) |
+|---|---|
+| Drive a roll | `/api/control/<project>/<graphic>/scroll?action=pause` — `action` is `play`, `pause`, `toggle`, `forward`, `backward`, `reverse`, `faster`, `slower`, `speed` (`&value=1.5`), `jog` (`&value=-3`, seconds), `seek` (`&value=1:30` or `&value=50%`), `restart`, `end` or `reset`. `&id=` picks the scroll id; blank is `main` |
+| The same on an output | `/api/out/<project>/<output>/scroll?action=toggle` |
+| Count a vote | `/api/projects/<project>/datasources/<poll>/poll?type=vote&option=yes` — `type` is `vote` (`&delta=-1` takes one off), `set` (`&value=412`), `open`, `close` or `reset` |
+| Re-word a poll | `PUT /api/projects/<project>/datasources/<poll>/poll` with `{ "question": …, "options": [{ "id": "yes", "label": "Yes" }, …] }` — only when the poll is operator changeable |
+| Replace a text's words | `PUT /api/projects/<project>/datasources/<text>/text` with `{ "body": "…" }` — refused unless the text is operator changeable, and above 256 KB |
+
+A scroll command answers with the scroll's new state and what the outputs measured (`extent`, the whole run in seconds at the designer's speed). A poll action answers with the poll's rows. `/state` on a graphic returns `scrolls` beside `timers`: each scroll's state and the server's clock, so a button can show how far through it is.
+
 ### The API key
 
 By default there is none, which suits a closed LAN. Set one with the `BREEZE_API_KEY` environment variable and every mutating call — including the GET verb triggers, because a GET that puts a graphic to air is a write in every sense that matters — needs it.
@@ -1381,6 +1670,11 @@ name gets a toggle preset in the *Modes* section.
 Name each connection after its project when you drive more than one — the module's
 Help page covers this, along with how to wire buttons for nested compositions.
 
+**Not in the module yet.** Rundowns, timers, sport scoring, rolls and polls are planned for
+the module's next version. Until then, drive them with the generic HTTP module below and the
+addresses in [Timers, rundowns, outputs and scores](#timers-rundowns-outputs-and-scores) and
+[Rolls, polls and text](#rolls-polls-and-text).
+
 #### Or the generic HTTP module
 
 If you would rather not install anything, Companion's built-in
@@ -1400,6 +1694,18 @@ http://<host>:7331/api/control/rahb-1k3f9/lower-third/update?name=$(internal:cus
 ```
 
 Remember to URL-encode anything that might contain a space or an ampersand — Companion has a `urlencode` expression function for this.
+
+### OGraf — SPX and other OGraf systems
+
+OGraf is the EBU's open format for HTML graphics. Breeze works with OGraf systems both ways.
+
+**An OGraf controller can drive Breeze.** Give it `http://<server>:7331/ograf/v1`. It sees each project as a renderer and each graphic as an OGraf graphic. To put a graphic on air it picks a render target: the graphic's own channel (the same one its `/play` address follows), or an output such as `@main` (an `/out/<project>/main` browser source, which can show any graphic of the project). Its play, stop and update reach every browser source on that channel, and the control panel shows them, exactly as if Companion had pressed the button. With an API key set, the controller has to send it.
+
+**A Breeze graphic can play in an OGraf renderer.** On the portal, open the project and press **OGraf** beside the graphic. You get a small zip to load into SPX or any OGraf renderer. It does not contain the graphic: it shows the live one from this server. So:
+
+- **Open the portal at the address the renderer's machine uses** before downloading — not `localhost` — because that is the address the package calls back to.
+- The Breeze server has to stay reachable from the renderer for as long as the graphic is on air.
+- The OGraf system runs that copy of the graphic: its names, steps and timers come from there, and pressing PLAY on the Breeze control panel does not move it. Data sources and the project mode still come from Breeze.
 
 ### Reading state back
 
@@ -1461,6 +1767,22 @@ curl "http://graphics-pc:7331/api/control/rahb-1k3f9/lower-third/play"
 ```
 
 If the second returns `"delivered": 0`, the URL is right and the browser source is not open. If it returns `404`, check the project and channel keys against `/channels`. If it returns `401`, the API key is set and missing from your call.
+
+---
+
+## 14b. Rundowns and outputs
+
+A **rundown** is a list prepared before the show: the fifteen speakers of a service, each with their name and title, in order. Open it from the **Rundown** button on the project's tile in the portal (`/rundown/<project>`).
+
+- **Add item**: pick the composition, type its fields, give it a label if you like, and choose where it **Goes to**. **Its own URL (/play)** is the address that graphic already has; an **output** is explained below.
+- **Arm** an item by clicking it. The preview shows it as it will air.
+- **TAKE** (space bar) puts the armed item on air and arms the next one, so one button, or one Companion key, walks the whole list. The arrow keys arm the previous or next item. **Take out** takes what is on air off.
+
+The list is saved on the server, so two panels on two laptops see the same rundown. What is armed and what is on air is held by the server too, so a panel refreshed mid-service comes back on the same item.
+
+**Outputs.** An output is a browser source with no graphic of its own: `/out/<project>/main`. Whatever the rundown takes onto `main` appears there, and several graphics can be up at once (the bug, a lower third, a slate), so one vMix input or OBS source carries them all. An item's **Layer** decides what sits in front: higher is in front. Each graphic on an output keeps its own state, so a reloaded output comes back showing everything that was on it, with the right names.
+
+---
 
 ---
 
@@ -1584,6 +1906,16 @@ If the second returns `"delivered": 0`, the URL is right and the browser source 
 **A file drop is showing yesterday's results.** It takes the newest file that matches. If today's file was written with a different name — a typo, or a different date format — it will not match the pattern and yesterday's will still be the newest match. Widen the pattern, or fix the name.
 
 **A file drop asks for a credential I do not have.** Leave **Credential id** blank for an anonymous drop. If the server needs a login, whoever runs the Breeze server stores the password or SSH key and gives you the *name* to type in — you never enter the password itself.
+
+**A roll doesn't move when I press PLAY.** Check **On PLAY** on the layer: *Wait for the operator* means it sits at the start until someone presses Play in the panel's Scroll block. If it is set to start, check the panel's position bar — *No output has measured this roll yet* means no browser source is showing the graphic.
+
+**The end credits went back to the top.** A fresh PLAY, a TAKE or a CLEAR starts every roll again. PLAY from a hold carries on; PLAY on a graphic that had finished or was leaving air starts a new run.
+
+**The operator's text correction is refused.** The source isn't **Operator changeable**. That is the designer's switch on the source in the editor, and a fetched text can't be changed from the panel at all — correct it where it is published.
+
+**A bar or a slice doesn't move when the numbers change.** Look at the layer's **Driven by data**: the **Number from** must name a column, field or source that holds a number, and the property must not also be keyframed (the editor refuses that on save). If every bar is full width, the range is probably 0 to *highest in the rows* with only one row — set **Data to** to a number, or to another column such as a goal.
+
+**A line chart is flat or missing.** The **Value column** has to hold numbers. A CSV or Sheet column with a note in one cell is read as text; fix the cell or declare the column as a number on the source.
 
 **Nothing animates at all — every graphic sits still, or the page is blank.** Look at the browser source's name in OBS or vMix: if it reads *GSAP problem — Breeze*, the animation engine did not load. See [section 17](#17-upgrading-the-animation-engine); the browser console names the exact problem. This is the one failure that affects every graphic at once, so a single one misbehaving is not this.
 

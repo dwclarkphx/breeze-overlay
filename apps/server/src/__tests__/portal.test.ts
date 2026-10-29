@@ -176,9 +176,23 @@ describe('StatusSampler', () => {
     const sampler = new StatusSampler();
     sampler.report(new ControlHub(), '0.61.0');
 
-    // Burn a measurable slice so the second sample has something to divide.
-    const until = Date.now() + 30;
-    while (Date.now() < until) { /* spin */ }
+    /*
+     * Burn a measurable slice so the second sample has something to divide.
+     *
+     * Measured in CPU time, not wall time. A 30 ms wall-clock spin was flaky on
+     * Windows: process CPU time there is accounted in scheduler ticks (about
+     * 15.6 ms), and on a machine busy running the other test files in parallel
+     * the spinning thread can be descheduled for the whole window and be
+     * charged nothing. Spinning until the process has actually been charged
+     * 30 ms of CPU makes the slice measurable whatever the load, with a wall
+     * cap so a broken `cpuUsage` fails the assertion rather than hanging.
+     */
+    const start = process.cpuUsage();
+    const cap = Date.now() + 2000;
+    while (Date.now() < cap) {
+      const used = process.cpuUsage(start);
+      if (used.user + used.system >= 30_000) break;
+    }
 
     const report = sampler.report(new ControlHub(), '0.61.0');
     expect(report.cpu.percent).toBeGreaterThan(0);

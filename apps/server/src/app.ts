@@ -10,7 +10,7 @@ import websocket from '@fastify/websocket';
 
 import { CompositionValidationError } from '@breeze/schema/validate';
 
-import { DATA_UPDATE_KEY } from '@breeze/schema';
+import { DATA_UPDATE_KEY, channelTakesData } from '@breeze/schema';
 
 import { config } from './config.js';
 import { DataRegistry } from './data/registry.js';
@@ -22,6 +22,10 @@ import { registerAssetRoutes } from './routes/assets.js';
 import { authState, registerAuthRoutes } from './routes/auth.js';
 import { registerBackupRoutes } from './routes/backup.js';
 import { registerControlRoutes } from './routes/control.js';
+import { OGRAF_BASE, ografCors, registerOgrafRoutes } from './routes/ograf.js';
+import { registerRundownRoutes } from './routes/rundowns.js';
+import { registerSportRoutes } from './routes/sports.js';
+import { registerLiveSourceRoutes } from './routes/live-sources.js';
 import { registerDataSourceRoutes } from './routes/datasources.js';
 import { registerDocsRoutes } from './routes/docs.js';
 import { registerModeRoutes } from './routes/mode.js';
@@ -97,6 +101,16 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   /** Sign-in, sign-out and the status read — each checks what it needs itself. */
   const AUTH_ROUTES = new Set(['/api/auth', '/api/auth/login', '/api/auth/logout']);
 
+  /*
+   * CORS on the OGraf routes (Phase 9 Wave D), as the Server API suggests, so a
+   * web-based controller on another origin can call them. Before the key check
+   * below, so a refusal carries the headers too and reads as a 401 in the
+   * browser rather than as a CORS failure.
+   */
+  app.addHook('onRequest', async (req, reply) => {
+    if (req.url.startsWith('/ograf/')) ografCors(reply);
+  });
+
   app.addHook('onRequest', async (req, reply) => {
     if (!config.apiKey) return;
     /*
@@ -108,8 +122,17 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
      * through to its 404.
      */
     const route = req.routeOptions?.url;
-    if (!route || !route.startsWith('/api/')) return;
+    if (!route) return;
+    /*
+     * The OGraf Server API (Phase 9 Wave D): reads open, as on `/api`, and
+     * every action gated — they are all POST or PUT. An OGraf controller has no
+     * session, so the key comes as a header, `?key=`, or `Authorization:
+     * Bearer`, the one header a generic HTTP client is most likely to offer.
+     */
+    const ograf = route === OGRAF_BASE || route.startsWith(`${OGRAF_BASE}/`);
+    if (!ograf && !route.startsWith('/api/')) return;
     if (AUTH_ROUTES.has(route)) return;
+    if (ograf && (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS')) return;
 
     /*
      * Reads stay open so output pages and the editor need no credentials —
@@ -131,7 +154,14 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       route === '/api/projects/:id/datasources/:sourceId/use' ||
       // Checking every camera now makes a request to each of them (Wave 8).
       route === '/api/projects/:id/datasources/:sourceId/media/check' ||
-      route === '/api/projects/:id/mode/set';
+      // A score tapped from a header-less button (Phase 9 Wave B).
+      route === '/api/projects/:id/datasources/:sourceId/game' ||
+      // A poll vote from one, the same (Wave R).
+      route === '/api/projects/:id/datasources/:sourceId/poll' ||
+      route === '/api/projects/:id/mode/set' ||
+      // Rundown verbs and output verbs put things on air (Phase 9 Wave A).
+      (route.startsWith('/api/rundown/:id/:rundownId/') && route !== '/api/rundown/:id/:rundownId/state') ||
+      (route.startsWith('/api/out/:id/:output/') && route !== '/api/out/:id/:output/state');
     if (!isControlAction && req.method === 'GET') return;
 
     /*
@@ -141,7 +171,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
      * guessing through any other route.
      */
     const header = req.headers['x-breeze-key'];
-    const presented = [Array.isArray(header) ? header[0] : header, (req.query as { key?: unknown } | undefined)?.key]
+    const bearer = ograf ? /^Bearer\s+(.+)$/i.exec(req.headers.authorization ?? '')?.[1]?.trim() : undefined;
+    const presented = [Array.isArray(header) ? header[0] : header, (req.query as { key?: unknown } | undefined)?.key, bearer]
       .filter((k) => k !== undefined);
     if (presented.length > 0) {
       if (!sessions.mayTry(req.ip)) return reply.code(429).send(fail('error.tooManyAttempts'));
@@ -276,7 +307,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   data.onPush((projectId, dataset) => {
     const prefix = `${projectId}/`;
     for (const channel of hub.activeChannels) {
-      if (!channel.startsWith(prefix)) continue;
+      // Not an output's routing channel or the rundown channel: neither renders.
+      if (!channel.startsWith(prefix) || !channelTakesData(channel)) continue;
       hub.dispatch(channel, {
         verb: 'update',
         data: { [DATA_UPDATE_KEY]: { [dataset.id]: dataset } },
@@ -318,7 +350,11 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await registerBackupRoutes(app);
   await registerPlayRoutes(app, data);
   await registerControlRoutes(app, hub, data, sessions);
+  const rundowns = await registerRundownRoutes(app, hub, data);
+  await registerOgrafRoutes(app, hub, rundowns);
   await registerDataSourceRoutes(app, data);
+  await registerSportRoutes(app, data);
+  await registerLiveSourceRoutes(app, data);
   await registerModeRoutes(app, hub);
   await registerMediaRoutes(app, data, media);
   await registerStatusRoutes(app, hub, apiClients);

@@ -85,6 +85,8 @@ const options = {
     path.join(appRoot, 'client', 'control.ts'),
     path.join(appRoot, 'client', 'portal.ts'),
     path.join(appRoot, 'client', 'backup.ts'),
+    // Phase 9 Wave A — the rundown panel.
+    path.join(appRoot, 'client', 'rundown.ts'),
   ],
   outdir: path.join(appRoot, 'public'),
   bundle: true,

@@ -30,6 +30,7 @@ import path from 'node:path';
 import { Writable } from 'node:stream';
 
 import {
+  parseTextBody,
   type DataSet,
   type FtpDataSource,
 } from '@breeze/schema';
@@ -352,6 +353,12 @@ export function parseFtpBody(def: FtpDataSource, body: string): DataSet {
       return xmlToDataSet(def.id, body, {
         ...(def.rowPath !== undefined ? { rowPath: def.rowPath } : {}),
         ...(def.columns ? { columns: def.columns } : {}),
+      });
+    case 'text':
+      // Lyrics or credits dropped as a file (Wave R) — the text source's own parser.
+      return parseTextBody(def.id, body, {
+        ...(def.split ? { split: def.split } : {}),
+        ...(def.markup !== undefined ? { markup: def.markup } : {}),
       });
     default: {
       const exhaustive: never = def.format;

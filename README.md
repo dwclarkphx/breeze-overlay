@@ -4,6 +4,22 @@ Self-hosted broadcast overlay/graphics builder. Motion graphics served as live H
 
 Built for the one-person production — school events, church services, community broadcasts — run on your own machine, on your own network.
 
+## The editor at a glance
+
+![The editor, with each region numbered](docs/images/editor-overview-annotated.png)
+
+| | Region | What it is for |
+|---|---|---|
+| **1** | App bar | Pick the project and composition, save, undo, grab the output URL |
+| **2** | Layers | The stack. Top of the list paints on top |
+| **3** | Data sources | Live data feeding tables and tickers |
+| **4** | Assets | Images, video and fonts every composition in the project can use. Folded by default |
+| **5** | Stage | The picture. Select, move, scale and rotate here |
+| **6** | Properties | Everything about whatever is selected |
+| **7** | Timeline | When things happen |
+
+The three dividers between panels are draggable. **Double-click a divider** to reset that panel to its default width. Your layout is remembered between sessions. The [user guide](docs/USER-GUIDE.md#3-the-editor-at-a-glance) walks through each region in turn.
+
 **Status: pre-1.0, and in use.** The editor — stage, layers, properties, timeline, keyframes, easing — the operator control panel and the external-trigger API are all in place and tested. So is the rest of it:
 
 - [Text reveals](#text-reveals): per-character, per-word and per-line entrance presets.
@@ -11,9 +27,11 @@ Built for the one-person production — school events, church services, communit
 - [Layer rules and project mode](#layer-rules-and-project-mode): show, hide, recolour or re-source a layer from the data, or switch every graphic in a project at once.
 - [Live media](#live-media): webcam snapshots, MJPEG, HLS, YouTube and video files as a layer, through a camera proxy, with camera rotations in a paging table.
 - [Masks, effects and paths](#masks-effects-and-paths): feathered and invertible masks, seven keyframable filters and a drop shadow, nested compositions with per-instance overrides, and bezier paths drawn on the stage.
+- [Rolls, polls and charts](#rolls-polls-and-charts): credits and lyrics from a long-text source that the operator can pause, reverse and speed up on air, operator-counted polls, and bars, meters, donuts, gauges and line charts driven by the data.
 - Scenes: several independently triggered graphics on one browser source.
-- Media and assets: an upload bin, ProRes 4444 → VP9/WebM-alpha transcode, PSD import, image sequences and sprites, an asset library with search, tags and folders, and backup bundles.
+- Media and assets: an upload bin, ProRes 4444 → VP9/WebM-alpha transcode (stingers confirmed with clean alpha in a real OBS Browser Source), PSD import, image sequences and sprites, an asset library with search, tags and folders, and backup bundles.
 - Operating: a control panel with PREV/NEXT, page readouts, a live preview that checks itself against air, browser sign-in, a [Bitfocus Companion](#bitfocus-companion) module, and [accessible interface themes](#themes).
+- Shows: [rundowns with cue → take](#rundowns-and-outputs), outputs that carry several graphics on one browser source, operator timers (game, shot and play clocks, countdowns to a time of day), typed fields (numbers with score buttons, toggles, options, colours, assets) and [sport templates](#sport-templates) for 21 sports, with format guides for Sheets and feeds.
 
 The lower-third demo is confirmed working in real OBS: transparent background and live control-panel updates both behave correctly (2026-07-28). vMix and sustained load/reconnect behavior still need a real-world pass — see [Known gaps](#known-gaps), which is an honest list rather than a short one.
 
@@ -143,6 +161,8 @@ this at [About addresses](docs/USER-GUIDE.md#about-addresses).
 | `…/play/demo-1iixd/l3rd-name-2a94g?scale=contain&debug=1` | Preview in a normal browser window, with an FPS/state overlay |
 | `…/play/demo-1iixd/l3rd-name-2a94g?name=Jane&title=Reporter` | Seed dynamic fields straight from the query string |
 | `…/play/demo-1iixd/l3rd-name-2a94g?autoplay=1` | Roll the graphic as soon as the page loads |
+| `…/play/demo-1iixd/l3rd-name-2a94g?matte=1` | **Key signal** for a hardware switcher — white at the graphic's alpha, on black. Pair it with a fill page (`?bg=black`) for an ATEM luma/DSK key, pre-multiplied on |
+| `…/play/demo-1iixd/l3rd-name-2a94g?bg=green` | An opaque background (`green`, `blue`, `magenta`, `black`, `white`, or hex without the `#`) for a chroma keyer |
 
 An output page shows **nothing** until it is told to play. Adding a Browser Source in OBS, or opening the URL to check it, must not put a graphic to air — that is the control panel's job, or a REST trigger's. `?autoplay=1` opts back in for the simple workflow where the source appearing in the switcher *is* the cue.
 
@@ -462,7 +482,24 @@ The panel also carries, where the graphic needs them:
 - **Data** — each source's health (live, failing, expired, frozen, on backup) and buttons to force a source onto its own rows or its backup. **Check cameras** for a media source.
 - **Show preview** — the real output page, embedded. It joins mid-show on the same hold, page and ticker position as the output, and a **sync check** under it says whether it matches air, marks what differs, and offers **Resync**. **Sync to** picks which output it follows.
 
+- **Timers**: start, pause, set and ±1 / ±10 for every operator timer the graphic shows.
+- **Game**: for a graphic built on a sport template, the sport's own score buttons, the period and every counter it tracks.
+- **Rolls**: for a graphic with a credits roll or a crawl of long text, play, pause, run forward or backward, slower and faster in steps of the designer's speed (¼× to 4×), jog, restart and end — with where the text is, as a bar.
+- **Polls**: a vote button per option (and −1), set a count, open, close and reset, with the running tally.
+- **Text**: the words of a lyrics or credits source, editable on air when the designer has made it operator-changeable.
+- **Cue → take**, opt-in per panel: edits wait in a buffer, **Show cued** previews it, and TAKE plays it with the outro of what was on air first.
+
 Outputs and panels join a channel per composition over `/ws/control`. The hub retains each channel's field values, so a browser source that drops mid-show reconnects and comes back showing the name the operator typed rather than the placeholder baked into the composition — and an output page opened while its graphic is on air picks up from an output already there, on the same hold and page, without replaying the intro (`?sync=off` opts one page out).
+
+### Rundowns and outputs
+
+`/rundown/<project>` prepares a list before the show: compositions, their field values, and where each goes. Arm an item and the preview shows it as it will air; **TAKE** (space) puts it up and arms the next, so one button or one Companion key walks fifteen names. The list is `projects/<id>/rundowns.json`. What is armed and on air is held by the server, so a refreshed panel comes back on the same item.
+
+An item can go to its graphic's own `/play` URL or to an **output**, `/out/<project>/<output>`: one browser source that mounts whatever the rundown takes onto it, so the bug, the lower thirds and a slate share one vMix input. Each composition on an output keeps its own channel for late join and retained values, and the output's timers are shared by everything on it.
+
+### Sport templates
+
+**Add → From a sport template…** in the editor's data panel creates five tables shaped for a sport and its rules: teams, players, coaches, venue and a one-row game table that holds the score, the period, the line score and the sport's own state. It covers basketball, American football, baseball, softball and volleyball; soccer, rugby union and league, Australian rules, Gaelic football and hurling; ice hockey, field hockey, lacrosse, handball and water polo; cricket, tennis, badminton, table tennis and pickleball, with rulesets from the NBA, NCAA and high school through FIBA, IFAB, World Rugby, the AFL and T20. Each ruleset brings its clocks as timer presets and its scoring: +1/+2/+3, TD and FG, try and conversion, goal and behind, tennis points through tiebreaks, side-out pickleball, and the cricket keypad. The control panel's **Game** block and `…/datasources/:id/game` act on the shared row, so every graphic shows one score. The tables can be typed in or come from a Google Sheet, a CSV or a JSON feed; every table has a format guide, a starter CSV, and a check of what the feed actually returned. The [sport templates reference](docs/SPORT-TEMPLATES.md) lists every sport's rule sets, clocks, scoring and table formats with examples, and links each rule set to its governing body's rules.
 
 ## Control surface
 
@@ -515,6 +552,7 @@ GET    /api/projects/:id/compositions/:compId
 PUT    /api/projects/:id/compositions/:compId
 DELETE /api/projects/:id/compositions/:compId
 GET    /api/projects/:id/compositions/:compId/bindings
+GET    /api/projects/:id/compositions/:compId/ograf  OGraf pointer package (zip); ?server= sets the address it calls back to
 POST   /api/validate/composition
 GET    /play/:id[/:compId]
 GET    /assets/:id/*
@@ -571,6 +609,34 @@ With `BREEZE_API_KEY` set, every write and every control verb except `state` nee
 
 [companion-module-breeze-overlay](https://github.com/bitfocus/companion-module-breeze-overlay) drives Breeze from a Stream Deck through Companion. It holds a live subscription to the hub rather than polling (`client: 'companion'`, without field data), so buttons light the moment a graphic changes state, and it offers PLAY/STOP/NEXT/PREV/CLEAR, clear-all for a scene, page and cycle actions, project mode, forcing a source onto its backup, and a camera check — with feedbacks and variables for on-air state, pages, held tables, source health and cameras, and presets built from `/api/channels`. It is MIT-licensed and versioned separately; it checks the server's version and offers only what that server supports.
 
+### OGraf
+
+Breeze speaks [OGraf](https://ograf.ebu.io), the EBU's open format for HTML graphics, in both directions.
+
+**An OGraf controller drives Breeze** through the OGraf Server API v1 at `http://<server>:7331/ograf/v1`:
+
+| OGraf | Breeze |
+|---|---|
+| graphic | a composition, id `<project>~<composition>` |
+| renderer | a project, id the project id |
+| render target | `{"channel":"<composition>"}`: that graphic's own channel (scene elements too), showing that composition only. `{"channel":"@<output>"}`: an output, `/out/<project>/<output>`, showing any composition of the project |
+| graphic instance | the channel it plays on: `<composition>`, or `@<output>~<composition>` |
+| `load` | on a graphic's own channel, sends the values (`update`), so on air it is a live edit. On an output, mounts the composition without playing it |
+| `playAction` | goes to the hold `goto`/`delta` names, past any holds in between; past the last, runs the outro. Answers when the outputs report the hold, so `currentStep` is what is on air |
+| `stopAction` | `stop`. With `skipAnimation`, `clear`; on an output the composition stays mounted |
+| `skipAnimation` | cuts |
+| custom actions | `next`, `prev`, `page` and `cycle` on a graphic with a table that pages, `timer` on one with a timer. The renderer's `mode` action sets the project mode |
+| `clear` | `clear` on a channel; unmounts from an output |
+
+Reads are open. Actions need the API key when one is set: `X-Breeze-Key`, `?key=`, or `Authorization: Bearer <key>`. CORS is open on `/ograf/`. `DELETE /graphics/<id>` is refused; compositions are deleted in the editor.
+
+**A Breeze graphic plays in an OGraf renderer** — SPX, or anything that hosts OGraf graphics — from a pointer package. The **OGraf** button on a portal tile downloads `<project>~<composition>.ograf.zip` (`GET /api/projects/:id/compositions/:compId/ograf`): a manifest and a small `graphic.mjs`. The package carries no graphic of its own. It frames `/play/<project>/<composition>?hub=data&ograf=1&scale=contain` from this server and passes each OGraf action to it, so:
+
+- it plays only while the renderer can reach this server, at the address the package was downloaded from. `?server=http://10.0.0.5:7331` on the download sets another, and `v_breezeServer` in `load()` overrides it for one instance;
+- it is its own instance. Its fields, steps and timers belong to the OGraf controller, and the Breeze channel's PLAY does not move it. Data sources and the project mode follow the server;
+- the same two files are served at `/ograf/package/<graphic id>/`, which `GET /ograf/v1/graphics/<id>` lists under `metadata.content`, for a renderer or the OGraf DevTool loading straight from the server;
+- it renders in real time only (`supportsNonRealTime: false`), and has no thumbnail.
+
 ## Data sources and tables
 
 One rule: **one canonical data shape, many source types.** Every source — a pasted table, an HTTP feed, a news RSS URL, a private Google Sheet — normalizes into a `DataSet` before anything downstream sees it. Layers bind to columns and never learn where the rows came from. The source types and their options are covered below; the operator's walkthrough is in [Data sources and tables](docs/USER-GUIDE.md#12-data-sources-and-tables).
@@ -598,6 +664,8 @@ One rule: **one canonical data shape, many source types.** Every source — a pa
 | `ftp` | Host + directory + filename pattern | FTP/FTPS/SFTP. Takes the newest file matching `results-*.csv` and hands it to the CSV/JSON/XML/RSS readers above |
 | `cap` | A CAP alerts URL | CAP XML, Atom/RSS carrying CAP fields, or NWS GeoJSON. Filters by area, event and minimum severity, drops expired and cancelled alerts, and adds `areas` (without the state) and `areaKind` (`counties` or `areas`) for writing a sentence |
 | `air-quality` | A provider + place | AirNow feeds or Open-Meteo (CAMS), current, per-pollutant or forecast, on the US or EU AQI scale |
+| `text` | Long text typed into the editor, or a URL to a `.txt` | Lyrics, credits, a statement. Split by line or by verse; `# Heading` and `Role \| Name` are read as headings and two-column credit lines. Up to 256 KB. The designer decides whether the operator may change the words on air |
+| `poll` | A question and up to 12 options | Counted by the operator from the panel, REST or Companion, never by the audience. Rows carry votes, percent (always adding to 100), rank, leader and status |
 
 Weather and air-quality sources take **one place, a typed list of places, or a table of places read from another source** — one source for every city in a rotation. When only some places fail, the rest stay on air and the failing ones keep their last good rows.
 
@@ -679,6 +747,14 @@ Transforms are stored with the *consumer*, not the source, so two graphics can s
 | `advance` | Bracket progression — see the user guide's [Brackets](docs/USER-GUIDE.md#brackets) |
 
 **Paging.** `rowsPerPage` pages through overflow on `next()` while holding, without spending a stop marker. A table can also **page itself** while the graphic holds — a fixed dwell per page or a per-row duration column — and loop, hold or continue at the end; page turns animate by reversing the row reveal, and tables in one cycle group turn together. Pages are solved from a clock anchor, so every output on a channel turns on the same frame. A table can **follow** another, showing only the rows matching the leader's current page key — the weather panel that turns with the city name above it.
+
+### Rolls, polls and charts
+
+A **roll** layer scrolls a text source through a window: up for end credits, down, or left and right for a long crawl, at the designer's speed in px/s. It can start off screen or at the top, stop at the end, loop, or hand the graphic on to its outro when the last line has gone. The operator drives it while it airs — pause, backward, forward, faster and slower in multiples of that speed — and every output on the channel shows the same line, because the hub holds the transport as it holds a timer. REST: `/api/control/<project>/<composition>/scroll?action=play|pause|toggle|forward|backward|reverse|faster|slower|speed|jog|seek|restart|end|reset` with `value=` for `speed` (`1.5`, `x2`), `jog` (`-3`) and `seek` (`1:30`, `50%`); `/api/out/<project>/<output>/scroll` on an output. Lyrics a verse at a time are a table of one row per page on a source split by verse.
+
+**Polls** are counted at `…/datasources/<source>/poll?type=vote&option=yes` (also `set&value=`, `open`, `close`, `reset`), and the question and options are changed with a `PUT` there. A text source's words are replaced with `PUT …/datasources/<source>/text`, refused unless the designer has made it operator-changeable.
+
+**Charts** are built from the layers there already are. Any layer can carry **drives**: a number from a field, a source or a table cell's own row moves its width, height, position, scale, rotation, opacity, an arc's sweep or a path's trim, from a domain (a number, the column's min, max or total, or another column — `goal`) to a range, with a tween when it changes. A bar chart is a table of driven bars; a goal meter is one driven bar and a counting number; a donut is a table of ring arcs turned by a `share` transform's running total; a line or sparkline is a path that plots a source's rows, straight or smooth, drawn on with `trim`. A table's rows can step across (`axis: x`) for the labels under a chart, and a text layer can **count** to its new number. The **Rolls, Polls & Charts** demo has one of each.
 
 ### Layer rules and project mode
 
@@ -805,14 +881,15 @@ The properties panel reports the measured piece count and the reveal's real tota
 
 ## Known gaps
 
+- **OGraf not yet checked against SPX or the OGraf DevTool.** Generated manifests validate against the EBU's v1 JSON Schemas in the test suite, and the end-to-end tests drive the pointer graphic from a page on another origin and the Server API against a real output page, but SPX 1.4 and the DevTool themselves have not been run against it. A renderer page served over HTTPS cannot frame a Breeze server on plain HTTP (mixed content). A pointer package of a scene plays the scene's own layers; its independently triggered elements are not driven by OGraf actions.
+- **Fill + key not yet keyed on real hardware.** `?matte=1` is proved pixel-exact against the fill's alpha in headless Chromium, feathered masks included, but an ATEM key from two HDMI outputs has not been confirmed. The two pages are kept in step by the hub and late join, not genlocked.
 - **Not validated in real vMix.** OBS is confirmed working (transparency and live control-panel updates both correct, 2026-07-28) — vMix, sustained 60fps under GPU load, and browser-source reconnect behavior still need a real-world pass; headless Chromium cannot prove any of them.
-- **A transcoded stinger has not yet been confirmed in a real OBS Browser Source.** The encode is proven correct at the file level — alpha decodes back 0→255, monotonic — but "clean edges in OBS" is a claim only OBS can settle.
 - **A point can only be added to a straight path segment.** Splitting a curve without changing its shape needs curve subdivision, which is not built; add points on straight edges and curve them afterwards.
 - **`locked` guards the stage only.** A locked layer has no handles on the stage, but the properties panel, the timeline and Delete still edit it.
 - **A light theme puts light chrome around the stage.** The editor's dark default exists because bright surroundings throw off colour judgement on a transparent graphic; the light themes are there for the people who need them, not as the better choice for grading.
 - **Text reveals do not animate out.** A preset covers the entrance; the exit is the layer's own keyframes, as the demos do it.
 - **Reveal pieces are unmasked.** `chars-up` and its siblings slide and fade rather than rising from behind a hard edge.
-- **Layer size cannot be animated.** Only `scaleX`/`scaleY` are keyframable; there is no `width`/`height` track.
+- **Layer size cannot be keyframed.** Only `scaleX`/`scaleY` are keyframable; there is no `width`/`height` track. A drive can move width and height from data, which is what bars and meters use.
 - **Nested composition layers** render correctly in the preview but cannot be edited in place — open the nested project directly instead.
 - **A newly added layer's timeline row isn't scrolled into view**, so it's easy to lose track of if the playhead adds it off-screen.
 - **A dragged layer's position updates on release**, not continuously during the gesture.
@@ -822,7 +899,7 @@ The properties panel reports the measured piece count and the reveal's real tota
 
 ## What's next
 
-Phase 8 — masks, effects, nesting and the on-stage pen — is complete as of 0.78.0. Next is Phase 9, polish: editing a nested composition in place instead of opening it on its own, a template gallery and duplication, multiple output channels per graphic, and a packaged distribution. Before 1.0.0 the project schema has to settle, since that is the release from which an existing project is promised to keep loading.
+Phase 8 — masks, effects, nesting and the on-stage pen — is complete as of 0.78.0. Phase 9 is under way: rundowns with cue → take and multi-graphic outputs, operator timers, typed fields and sport templates, keyable fill/matte outputs, and OGraf interop (the Server API and pointer packages), and rolls, polls and data-driven charts have landed in 0.79.0. Still to come are starter templates and project styles, editing a nested composition in place, persisted hub state, roles, and a packaged distribution. Before 1.0.0 the project schema has to settle, since that is the release from which an existing project is promised to keep loading.
 
 ## License
 

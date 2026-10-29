@@ -299,6 +299,20 @@ describe('counting what a person has open', () => {
     expect(hub.state(CHANNEL).controllers).toBe(0);
     expect(hub.peers()[0]?.kind).toBe('companion');
   });
+
+  it('counts an OGraf pointer graphic as no panel, and sends it state but never a command (Phase 9 Wave D)', () => {
+    // A graphic in another system's renderer, following this channel's data.
+    const hub = new ControlHub();
+    const received: Array<{ type: string }> = [];
+    hub.addClient('og', (m) => received.push(m));
+    hub.handle('og', { type: 'subscribe', channel: CHANNEL, role: 'controller', client: 'ograf' });
+    hub.dispatch(CHANNEL, { verb: 'play' });
+    hub.dispatch(CHANNEL, { verb: 'update', data: { $data: { wx: { rows: [] } } } });
+    expect(hub.state(CHANNEL)).toMatchObject({ renderers: 0, controllers: 0 });
+    expect(hub.peers()[0]?.kind).toBe('ograf');
+    expect(received.map((m) => m.type)).not.toContain('command');
+    expect(received.filter((m) => m.type === 'state').length).toBeGreaterThan(0);
+  });
 });
 
 describe('data-less subscriptions', () => {
@@ -488,6 +502,27 @@ describe('late join (0.74.1)', () => {
     expect(hub.state(CHANNEL).sources[0]!.page).toHaveLength(64);
   });
 
+  it('marks a matte page among the outputs, and only a renderer may say it is one (Phase 9 Wave C)', () => {
+    const hub = new ControlHub();
+    fakeClient(hub, 'fill');
+    fakeClient(hub, 'matte');
+    fakeClient(hub, 'odd');
+    hub.handle('fill', { type: 'subscribe', channel: CHANNEL, role: 'renderer', page: 'p1' });
+    hub.handle('matte', { type: 'subscribe', channel: CHANNEL, role: 'renderer', page: 'p2', signal: 'matte' });
+    // An unknown value reads as a fill, as every page before the field does.
+    hub.handle('odd', {
+      type: 'subscribe', channel: CHANNEL, role: 'renderer', page: 'p3',
+      signal: 'luma' as unknown as 'matte',
+    });
+    const sources = hub.state(CHANNEL).sources;
+    expect(sources.map((s) => s.signal)).toEqual([undefined, 'matte', undefined]);
+    expect('signal' in sources[0]!).toBe(false);
+
+    // Re-subscribing without it — the same socket on another page load — forgets it.
+    hub.handle('matte', { type: 'subscribe', channel: CHANNEL, role: 'renderer', page: 'p2' });
+    expect(hub.state(CHANNEL).sources.find((s) => s.id === 'matte')?.signal).toBeUndefined();
+  });
+
   it('forgets the report time with the report on CLEAR', () => {
     const hub = new ControlHub();
     fakeClient(hub, 'out');
@@ -565,5 +600,118 @@ describe('heartbeats (0.75.0)', () => {
     const before = panel.states().length;
     hub.handle('out', { type: 'state', playback: report(10, 1_200, 3) });
     expect(panel.states()).toHaveLength(before + 1);
+  });
+});
+
+describe('Phase 9 Wave A — take, retain and intercept', () => {
+  it('a take on a graphic is retained like an update', () => {
+    const hub = new ControlHub();
+    fakeClient(hub, 'out');
+    subscribe(hub, 'out', 'renderer');
+    hub.dispatch(CHANNEL, { verb: 'take', data: { name: 'Jane' } });
+    expect(hub.state(CHANNEL).data).toEqual({ name: 'Jane' });
+  });
+
+  it('a take aimed at a mount on an output is not retained on the routing channel', () => {
+    const hub = new ControlHub();
+    hub.dispatch('p/@main', { verb: 'take', mount: 'lt', data: { name: 'Jane' } });
+    expect(hub.state('p/@main').data).toEqual({});
+  });
+
+  it('retain merges values for the next joiner without sending a command', () => {
+    const hub = new ControlHub();
+    const out = fakeClient(hub, 'out');
+    subscribe(hub, 'out', 'renderer');
+    out.received.length = 0;
+    hub.retain(CHANNEL, { name: 'Jane', $data: { a: { id: 'a', columns: [], rows: [] } } });
+    hub.retain(CHANNEL, { $data: { b: { id: 'b', columns: [], rows: [] } } });
+    expect(out.received.filter((m) => m.type === 'command')).toEqual([]);
+    const data = hub.state(CHANNEL).data;
+    expect(data['name']).toBe('Jane');
+    expect(Object.keys(data['$data'] as object)).toEqual(['a', 'b']);
+  });
+
+  it('an interceptor that handles a command stops it being dispatched', () => {
+    const hub = new ControlHub();
+    const out = fakeClient(hub, 'out');
+    subscribe(hub, 'out', 'renderer');
+    fakeClient(hub, 'panel');
+    subscribe(hub, 'panel', 'controller');
+    const seen: string[] = [];
+    const stop = hub.intercept((_channel, command) => {
+      seen.push(command.verb);
+      return command.verb === 'cue';
+    });
+    hub.handle('panel', { type: 'command', command: { verb: 'cue' } });
+    hub.handle('panel', { type: 'command', command: { verb: 'play' } });
+    expect(seen).toEqual(['cue', 'play']);
+    expect(out.received.filter((m) => m.type === 'command').map((m) => (m as { command: { verb: string } }).command.verb)).toEqual(['play']);
+    stop();
+    hub.handle('panel', { type: 'command', command: { verb: 'cue' } });
+    expect(seen).toHaveLength(2);
+  });
+});
+
+describe('timers (Phase 9 Wave B)', () => {
+  type Update = { type: 'command'; command: { verb: string; data?: Record<string, unknown> } };
+  const timersIn = (m: ServerMessage | undefined) =>
+    ((m as Update | undefined)?.command.data?.['$timers'] as { clock: number; timers: Record<string, { running: boolean }> } | undefined);
+
+  it('applies the action and sends renderers an update carrying $timers, never the verb', () => {
+    const hub = new ControlHub();
+    const out = fakeClient(hub, 'out');
+    subscribe(hub, 'out', 'renderer');
+    const delivered = hub.dispatch(CHANNEL, { verb: 'timer', timer: { action: 'start', id: 'game' } });
+    expect(delivered).toBe(1);
+    const sent = out.commands().at(-1) as Update;
+    expect(sent.command.verb).toBe('update');
+    expect(timersIn(sent)?.timers['game']?.running).toBe(true);
+    expect(hub.timerState(CHANNEL, 'game')?.running).toBe(true);
+  });
+
+  it('welcomes a late page with the timers, stamped with the hub clock now', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(Date.parse('2026-10-25T19:00:00Z'));
+      const hub = new ControlHub();
+      hub.dispatch(CHANNEL, { verb: 'timer', timer: { action: 'start' } });
+      vi.setSystemTime(Date.parse('2026-10-25T19:05:00Z'));
+      const late = fakeClient(hub, 'late');
+      subscribe(hub, 'late', 'renderer');
+      const welcome = late.received.find((m) => m.type === 'welcome') as { state: { data: Record<string, unknown> } };
+      const payload = welcome.state.data['$timers'] as { clock: number; timers: Record<string, { anchor: number }> };
+      // A stale clock would read as five minutes of skew on the page.
+      expect(payload.clock).toBe(Date.parse('2026-10-25T19:05:00Z'));
+      expect(payload.timers['main']?.anchor).toBe(Date.parse('2026-10-25T19:00:00Z'));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps timers per channel', () => {
+    const hub = new ControlHub();
+    hub.dispatch(CHANNEL, { verb: 'timer', timer: { action: 'start' } });
+    expect(hub.timerState('demo-1iixd/other', 'main')).toBeUndefined();
+  });
+
+  it('shares one set of timers across every composition mounted on an output', () => {
+    const hub = new ControlHub();
+    const bug = fakeClient(hub, 'bug');
+    const recap = fakeClient(hub, 'recap');
+    hub.handle('bug', { type: 'subscribe', channel: 'p/@main~bug', role: 'renderer' });
+    hub.handle('recap', { type: 'subscribe', channel: 'p/@main~recap', role: 'renderer' });
+    expect(hub.dispatch('p/@main', { verb: 'timer', timer: { action: 'start', id: 'game' } })).toBe(2);
+    expect(timersIn(bug.commands().at(-1))?.timers['game']?.running).toBe(true);
+    expect(timersIn(recap.commands().at(-1))?.timers['game']?.running).toBe(true);
+    expect(hub.timerState('p/@main~bug', 'game')?.running).toBe(true);
+  });
+
+  it('ignores an unknown action or a bad id', () => {
+    const hub = new ControlHub();
+    fakeClient(hub, 'out');
+    subscribe(hub, 'out', 'renderer');
+    expect(hub.dispatch(CHANNEL, { verb: 'timer', timer: { action: 'explode' as 'start' } })).toBe(0);
+    expect(hub.dispatch(CHANNEL, { verb: 'timer', timer: { action: 'start', id: 'Bad Id' } })).toBe(0);
+    expect(hub.timersPayload(CHANNEL)).toBeUndefined();
   });
 });

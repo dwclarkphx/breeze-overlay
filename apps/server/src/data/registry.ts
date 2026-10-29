@@ -36,8 +36,13 @@ import { createHash } from 'node:crypto';
 import {
   GUARD_DROP_CONFIRMATIONS,
   applyGuard,
+  attributionShown,
+  blankAttribution,
   emptyDataSet,
   conform,
+  isInlineSource,
+  parseTextBody,
+  pollDataSet,
   placesFromRows,
   placesSourceOf,
   pollFloor,
@@ -163,6 +168,22 @@ export function hashDataSet(data: DataSet): string {
   return createHash('sha256').update(canonical).digest('hex');
 }
 
+/**
+ * The rows of a source that is its own definition — a manual table, a poll, a
+ * text kept in the project (Wave R). Synchronous: nothing is fetched.
+ */
+export function inlineDataSet(def: DataSourceDef): DataSet {
+  if (def.type === 'manual') return { id: def.id, columns: def.columns, rows: conform(def.rows, def.columns) };
+  if (def.type === 'poll') return pollDataSet(def);
+  if (def.type === 'text') {
+    return parseTextBody(def.id, def.body ?? '', {
+      ...(def.split ? { split: def.split } : {}),
+      ...(def.markup !== undefined ? { markup: def.markup } : {}),
+    });
+  }
+  return emptyDataSet(def.id);
+}
+
 /** Turn a definition plus a fetched body into a DataSet. */
 export async function loadDataSource(def: DataSourceDef, prior?: DataEntry, ctx: LoadContext = {}): Promise<{
   data: DataSet | null;
@@ -179,6 +200,34 @@ export async function loadDataSource(def: DataSourceDef, prior?: DataEntry, ctx:
 }> {
   if (def.type === 'manual') {
     return { data: { id: def.id, columns: def.columns, rows: conform(def.rows, def.columns) } };
+  }
+  // Wave R: a poll's rows are its tally; a text kept in the project is its body.
+  if (def.type === 'poll' || (def.type === 'text' && def.url === undefined)) {
+    return { data: inlineDataSet(def) };
+  }
+  if (def.type === 'text') {
+    // Fetched text: the shared fetcher and its conditional requests, the text parser.
+    const textSecret = def.secretId ? config.dataSecrets[def.secretId] : undefined;
+    if (def.secretId && !textSecret) {
+      throw new Error(
+        `secret "${def.secretId}" is not configured on this server (set BREEZE_DATA_SECRETS or BREEZE_DATA_SECRETS_FILE)`,
+      );
+    }
+    const fetched = await fetchText(def.url!, {
+      headers: { ...(def.headers ?? {}) },
+      etag: prior?.etag,
+      lastModified: prior?.lastModified,
+      bearerToken: textSecret,
+    });
+    if (fetched.body === null) return { data: null, etag: fetched.etag, lastModified: fetched.lastModified };
+    return {
+      data: parseTextBody(def.id, fetched.body, {
+        ...(def.split ? { split: def.split } : {}),
+        ...(def.markup !== undefined ? { markup: def.markup } : {}),
+      }),
+      etag: fetched.etag,
+      lastModified: fetched.lastModified,
+    };
   }
 
   /*
@@ -218,7 +267,10 @@ export async function loadDataSource(def: DataSourceDef, prior?: DataEntry, ctx:
     // expired, and neither is what a failed place should fall back to.
     const placeCtx = { places: resolvePlaces(def, ctx), prior: prior?.ownLoaded ? prior.own : undefined };
     const result = def.type === 'weather' ? await loadWeather(def, placeCtx) : await loadAirQuality(def, placeCtx);
-    return { data: result.data, warning: result.warning };
+    // Show attribution off (Phase 9 Wave 0): the column stays, blank, so an
+    // `attribution is empty` rule can take the credit strap off air.
+    const data = result.data && !attributionShown(def) ? blankAttribution(result.data) : result.data;
+    return { data, warning: result.warning };
   }
 
   if (def.type === 'ftp') {
@@ -385,10 +437,11 @@ export class DataRegistry {
     }
     this.entries.set(key, entry);
 
-    // A manual source needs no fetch — its rows are the definition.
-    if (def.type === 'manual') {
+    // A manual source needs no fetch — its rows are the definition. A poll
+    // and a text kept in the project are the same (Wave R).
+    if (isInlineSource(def)) {
       this.clearTimer(key);
-      this.ingest(entry, { id: def.id, columns: def.columns, rows: conform(def.rows, def.columns) });
+      this.ingest(entry, inlineDataSet(def));
       return entry;
     }
 
@@ -544,7 +597,7 @@ export class DataRegistry {
    * be refused for ever against a last-good that no longer exists anywhere.
    */
   private guard(entry: DataEntry, data: DataSet): { data: DataSet; dropped: number; accepted?: string } {
-    const guardDef = entry.def.type === 'manual' ? undefined : entry.def.guard;
+    const guardDef = isInlineSource(entry.def) ? undefined : entry.def.guard;
     const checked = applyGuard(guardDef, data, entry.ownLoaded ? entry.own : undefined);
     if (checked.ok) {
       delete entry.dropHold;
@@ -622,14 +675,14 @@ export class DataRegistry {
 
   /** Milliseconds until the guard's `maxUnchanged` runs out, or undefined. */
   private stuckDueIn(entry: DataEntry, now = Date.now()): number | undefined {
-    const limit = entry.def.type === 'manual' ? undefined : entry.def.guard?.maxUnchanged;
+    const limit = isInlineSource(entry.def) ? undefined : entry.def.guard?.maxUnchanged;
     if (limit === undefined || entry.status.stuck || !entry.status.lastChange) return undefined;
     return Math.max(1000, Date.parse(entry.status.lastChange) + limit * 1000 - now);
   }
 
   /** Set or clear `stuck`: own content unchanged for longer than the guard allows. */
   private flagStuck(entry: DataEntry, now = Date.now()): void {
-    const limit = entry.def.type === 'manual' ? undefined : entry.def.guard?.maxUnchanged;
+    const limit = isInlineSource(entry.def) ? undefined : entry.def.guard?.maxUnchanged;
     const since = entry.status.lastChange ? Date.parse(entry.status.lastChange) : NaN;
     if (limit !== undefined && Number.isFinite(since) && now - since >= limit * 1000) entry.status.stuck = true;
     else delete entry.status.stuck;
@@ -651,7 +704,7 @@ export class DataRegistry {
 
   /** Whether this source's own rows are fit for air. */
   private ownUsable(entry: DataEntry): boolean {
-    if (entry.def.type === 'manual') return true;
+    if (isInlineSource(entry.def)) return true;
     if (!entry.ownLoaded) return false;
     this.flagExpired(entry);
     this.flagStuck(entry);

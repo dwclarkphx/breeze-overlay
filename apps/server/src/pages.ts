@@ -22,6 +22,13 @@ import {
   type DataSet,
   type Layer,
   type SceneElement,
+  type TimerRef,
+  type ScrollRef,
+  type PollOption,
+  type FieldSpec,
+  type OutputKeying,
+  keyingCss,
+  SPORT_TEMPLATES,
 } from '@breeze/schema';
 
 import { makeTranslator, type Translate } from '@breeze/i18n';
@@ -202,6 +209,31 @@ export interface PlayPageOptions {
   datasets?: Record<string, DataSet>;
   /** The project's mode, inlined for the same reason — first paint is already in it. */
   mode?: string;
+  /**
+   * `?bg=` / `?matte=1` (Phase 9 Wave C), already parsed. Written into the head
+   * rather than applied by the bundle, so the first frame a switcher sees is
+   * already opaque or already a key — never a transparent flash.
+   */
+  keying?: Pick<OutputKeying, 'bg' | 'matte'>;
+}
+
+/**
+ * The page's `<style>` body: the transparent page, then whatever `?bg=` or
+ * `?matte=1` asked for. `keyingCss` only ever emits validated hex, so nothing
+ * from the URL reaches this block unchecked.
+ */
+function outputStyle(keying: Pick<OutputKeying, 'bg' | 'matte'> | undefined): string {
+  const extra = keying ? keyingCss(keying) : '';
+  // i18n-ignore-start — CSS, not text
+  return `  html,body{margin:0;padding:0;width:100%;height:100%;background:transparent!important;overflow:hidden}
+  *{box-sizing:border-box}${extra ? `\n  ${extra}` : ''}`;
+  // i18n-ignore-end
+}
+
+/** ` · matte` on a matte page's title, so the tab and the source list tell the two apart. */
+function signalSuffix(keying: Pick<OutputKeying, 'matte'> | undefined): string {
+  // i18n-ignore-next-line — frozen English, like the rest of /play
+  return keying?.matte ? ' · matte' : '';
 }
 
 export function playPage(opts: PlayPageOptions): string {
@@ -218,11 +250,10 @@ export function playPage(opts: PlayPageOptions): string {
 <html lang="en">  <!-- Frozen: /play is byte-identical on every install (I18N.md §2). -->
 <head>
 <meta charset="utf-8">
-<title>${escapeHtml(displayName(composition.name, composition.id))} — Breeze</title>
+<title>${escapeHtml(displayName(composition.name, composition.id))}${signalSuffix(opts.keying)} — Breeze</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-  html,body{margin:0;padding:0;width:100%;height:100%;background:transparent!important;overflow:hidden}
-  *{box-sizing:border-box}
+${outputStyle(opts.keying)}
 </style>
 </head>
 <body>
@@ -243,6 +274,163 @@ window.__BREEZE__ = {
 </script>
 ${gsapTags()}
 <script src="/public/player.js?v=${encodeURIComponent(cacheBust)}"></script>
+</body>
+</html>`;
+}
+
+export interface OutPageOptions {
+  projectId: string;
+  output: string;
+  /** Every composition in the project: the rundown may take any of them onto this output. */
+  compositions: Composition[];
+  assetBase: string;
+  cacheBust: string;
+  datasets?: Record<string, DataSet>;
+  mode?: string;
+  /** `?bg=` / `?matte=1`, as on `/play`. */
+  keying?: Pick<OutputKeying, 'bg' | 'matte'>;
+}
+
+/**
+ * The output page, `/out/<project>/<output>` (Phase 9 Wave A). Frozen English
+ * like `/play`, and the same bundle: `player.js` sees `output` and mounts what
+ * the rundown takes onto it instead of one composition of its own.
+ */
+export function outPage(opts: OutPageOptions): string {
+  return `<!doctype html>
+<html lang="en">  <!-- Frozen: an output page is byte-identical on every install (I18N.md §2). -->
+<head>
+<meta charset="utf-8">
+<title>${escapeHtml(`@${opts.output}`)}${signalSuffix(opts.keying)} — Breeze</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+${outputStyle(opts.keying)}
+</style>
+</head>
+<body>
+<script>
+window.__BREEZE__ = {
+  projectId: ${escapeJson(opts.projectId)},
+  compositionId: '',
+  output: ${escapeJson(opts.output)},
+  compositions: ${escapeJson(opts.compositions)},
+  dependencies: [],
+  assetBase: ${escapeJson(opts.assetBase)},
+  dataKey: ${escapeJson(DATA_UPDATE_KEY)},
+  datasets: ${escapeJson(opts.datasets ?? {})},
+  mode: ${escapeJson(opts.mode ?? '')},
+  elements: [],
+  hlsScript: ${escapeJson(HLS_SCRIPT)},
+  autoPlay: false
+};
+</script>
+${gsapTags()}
+<script src="/public/player.js?v=${encodeURIComponent(opts.cacheBust)}"></script>
+</body>
+</html>`;
+}
+
+export interface RundownPageOptions {
+  project: { id: string; name: string };
+  /** Every composition, with the fields an item may set on it (`panelBindingsFor`). */
+  compositions: Array<{ id: string; name: string; bindings: ControlPanelBinding[] }>;
+}
+
+/**
+ * The rundown panel, `/rundown/<project>` (Phase 9 Wave A): prepare a list
+ * before the service, see each item cued in the preview, take it with one key.
+ * The page is a shell; `client/rundown.ts` builds it.
+ */
+export function rundownPage(opts: RundownPageOptions): string {
+  const t = pageT();
+  const name = displayName(opts.project.name, opts.project.id);
+  return `<!doctype html>
+${htmlOpen()}
+<head>
+<meta charset="utf-8">
+${THEME_SCRIPT_TAG}
+${FAVICON_LINK}
+<title>${escapeHtml(t('server.pages.rundownTitle', { name }))}</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<style>
+  :root{--ui-tracking:1;--ui-caps:uppercase;${DARK_ROOT_DECLS}
+        --go:var(--success-emphasis);--stop:var(--danger-emphasis);--line:var(--border)}
+  :root:lang(ar),:root:lang(fa),:root:lang(ur),:root:lang(he),:root:lang(zh),:root:lang(ja),:root:lang(ko),:root:lang(hi){--ui-tracking:0;--ui-caps:none}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,"Segoe UI",sans-serif;padding:16px;
+       padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+  header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  h1{font-size:19px;margin:0}
+  .sub{color:var(--muted);font-size:13px}
+  .status{margin-inline-start:auto;display:flex;align-items:center;gap:8px;font-size:13px}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
+  .dot.live{background:var(--success);box-shadow:0 0 8px var(--success)}
+  .dot.off{background:var(--stop)}
+  button,select,input,textarea{font:inherit;color:var(--text)}
+  button{padding:8px 12px;border-radius:7px;border:1px solid var(--border);background:var(--panel2);cursor:pointer}
+  button:disabled{opacity:.5;cursor:default}
+  button.go{background:var(--go);border-color:var(--success-border);color:var(--on-accent)}
+  button.stop{background:var(--stop);border-color:var(--danger-border);color:var(--on-accent)}
+  button.big{min-height:64px;font-size:18px;font-weight:700;padding:14px 18px}
+  select,input,textarea{background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:8px}
+  input:focus,textarea:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
+  fieldset{border:1px solid var(--border);border-radius:8px;padding:12px;margin:0 0 14px;background:var(--panel)}
+  legend{color:var(--muted);font-size:12px;text-transform:var(--ui-caps);letter-spacing:calc(.6px * var(--ui-tracking));padding:0 6px}
+  label{display:block;margin-bottom:10px}
+  label>span{display:block;color:var(--muted);font-size:13px;margin-bottom:4px}
+  label input,label textarea,label select{width:100%}
+  label.inline{display:flex;align-items:center;gap:8px}
+  label.inline input{width:auto}
+  .grid{display:flex;flex-direction:column;gap:14px}
+  @media (min-width:980px){ .grid{flex-direction:row;align-items:flex-start} .grid>.list{flex:1 1 420px;min-width:0}
+    .grid>.side{flex:1 1 520px;position:sticky;top:12px} }
+  .items{list-style:none;margin:0;padding:0}
+  .items li{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--border);border-radius:7px;
+            margin-bottom:6px;background:var(--panel2);cursor:pointer}
+  .items li[data-armed="true"]{outline:3px solid var(--key);outline-offset:-3px}
+  .items li[data-onair="true"]{border-inline-start:6px solid var(--stop)}
+  .items .n{color:var(--muted);font:12px/1 ui-monospace,Consolas,monospace;min-width:2.2em}
+  .items .title{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .items .meta{color:var(--muted);font-size:12px;white-space:nowrap}
+  .items .chip{font-size:11px;border-radius:9px;padding:1px 7px;border:1px solid currentColor;text-transform:var(--ui-caps)}
+  .items .chip.armed{color:var(--key)}
+  .items .chip.onair{color:var(--stop)}
+  .items .tools button{padding:4px 8px;font-size:13px}
+  .transport{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+  .transport .take{grid-column:1 / -1}
+  .preview-frame{position:relative;width:100%;aspect-ratio:16/9;background:#000;
+    background-image:linear-gradient(45deg,#1a1a1a 25%,transparent 25%),linear-gradient(-45deg,#1a1a1a 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#1a1a1a 75%),linear-gradient(-45deg,transparent 75%,#1a1a1a 75%);
+    background-size:16px 16px;background-position:0 0,0 8px,8px -8px,-8px 0;border:1px solid var(--line);border-radius:6px;overflow:hidden;margin-bottom:8px}
+  .preview-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+  .preview-head{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+  .preview-head .sub{margin-inline-start:auto}
+  .hint{color:var(--muted);font-size:12px;margin-top:8px}
+  .err{color:var(--danger);font-size:13px;margin:6px 0}
+  .targets{width:100%;border-collapse:collapse;font-size:13px}
+  .targets td{padding:4px 6px 4px 0;vertical-align:middle}
+  .targets code{font-size:12px}
+  .editor[hidden]{display:none}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+</style>
+</head>
+<body>
+<header>
+  <a class="sub" href="/">${t('server.pages.portalLink')}</a>
+  <h1>${escapeHtml(name)}</h1>
+  <span class="sub">${t('server.pages.rundownHeading')}</span>
+  <span class="status"><span class="dot" id="dot"></span><span id="status">${t('server.pages.connecting')}</span></span>
+</header>
+<div id="app"></div>
+<script>
+window.__BREEZE_RUNDOWN__ = {
+  projectId: ${escapeJson(opts.project.id)},
+  compositions: ${escapeJson(opts.compositions)},
+  locale: ${escapeJson(serverI18n().locale)},
+  messages: ${escapeJson(messagesFor('rundown.', 'control.'))}
+};
+</script>
+<script src="/public/rundown.js"></script>
 </body>
 </html>`;
 }
@@ -270,6 +458,8 @@ export interface ControlPanelBinding {
   sourceName?: string;
   /** Source type — shown so an operator knows why a field is not editable. */
   sourceType?: string;
+  /** Typed-field declaration (Phase 9 Wave B) — picks the control the panel draws. */
+  field?: FieldSpec;
 }
 
 export interface ControlPageOptions {
@@ -290,6 +480,35 @@ export interface ControlPageOptions {
   /** The project's mode, and every mode its rules name — the Mode block (Wave 6). */
   mode?: string;
   modes?: string[];
+  /** Operator timers this graphic shows, its mounts' included — the Timers block (Phase 9 Wave B). */
+  timers?: TimerRef[];
+  /** The bin, for an asset field's picker (Phase 9 Wave B). Only sent when the graphic has one. */
+  assets?: Array<{ path: string; name: string; kind: string }>;
+  /** Sport game tables this graphic reads — the Game block (Phase 9 Wave B). */
+  games?: Array<{ id: string; name: string; sport: string; ruleset: string; teams?: string }>;
+  /** Roll transports this graphic shows, its mounts' included — the Scroll block (Wave R). */
+  scrolls?: ScrollRef[];
+  /** Polls this graphic reads — the Poll block (Wave R). */
+  polls?: ControlPanelPoll[];
+  /** Operator-changeable texts this graphic reads — the Text block (Wave R). */
+  texts?: ControlPanelText[];
+}
+
+/** A poll on the panel (Wave R): what the Poll block draws its buttons from. */
+export interface ControlPanelPoll {
+  id: string;
+  name: string;
+  question: string;
+  options: PollOption[];
+  /** The designer ticked Operator changeable: the question and options can be edited here too. */
+  editable: boolean;
+}
+
+/** A text an operator may change on air (Wave R, decided 2026-10-26). */
+export interface ControlPanelText {
+  id: string;
+  name: string;
+  body: string;
 }
 
 /**
@@ -369,6 +588,9 @@ function sceneElementsBlock(elements: SceneElement[]): string {
  * Deliberately large touch targets and high contrast — it gets used in a dim
  * gallery, in a hurry, often one-handed.
  */
+/** The sport rulesets' names, for the Game block's caption (Phase 9 Wave B). */
+const SPORT_RULESET_KEYS = SPORT_TEMPLATES.flatMap((sport) => sport.rulesets.map((r) => r.labelKey));
+
 export function controlPage(opts: ControlPageOptions): string {
   const { projectId, composition, bindings, schema, stepCount } = opts;
   const datasets = opts.datasets ?? {};
@@ -483,7 +705,80 @@ ${FAVICON_LINK}
   .page-bar{height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:8px}
   .page-bar i{display:block;height:100%;width:0;background:var(--accent)}
   .page-row .verbs button{min-height:44px;padding:10px 8px;font-size:15px}
+  /* The Game block (Phase 9 Wave B): two sides, big scores, buttons for thumbs. */
+  .game{border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:12px;background:var(--panel2)}
+  .game-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  .game-sides{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .game-side{border:1px solid var(--border);border-radius:6px;padding:8px;text-align:center}
+  .game-name{font-weight:600;color:var(--muted)}
+  .game-score{font:700 40px/1.1 ui-monospace,Consolas,monospace;color:var(--key);font-variant-numeric:tabular-nums}
+  .game-detail{font-size:12px;color:var(--muted);min-height:1.2em}
+  .game-buttons{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:6px}
+  .game-buttons button{min-height:48px;min-width:56px;padding:8px 10px;font-size:16px}
+  .game-pad{margin:10px 0}
+  .game-period{display:flex;align-items:center;justify-content:center;gap:10px;margin:10px 0}
+  .game-period button{min-height:44px;min-width:56px;padding:6px}
+  .game-period-label{font:600 20px/1 ui-monospace,Consolas,monospace;min-width:6em;text-align:center}
+  .game-extras{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+  .game-cell{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .game-cell > span:first-child{flex:1 1 100%;color:var(--muted);font-size:12px}
+  .game-cell button{min-height:40px;min-width:44px;padding:6px 10px;font-size:15px}
+  .game-num{font:600 18px/1 ui-monospace,Consolas,monospace;min-width:2.5em;text-align:center}
+  .game-cell input{flex:1 1 8em;padding:8px}
+  .seg{display:flex;gap:4px;flex-wrap:wrap}
+  .seg button[aria-pressed="true"],.game-cell .typed-toggle[aria-pressed="true"]{background:var(--go);border-color:var(--success-border);color:var(--on-accent)}
+  .game-reset{margin-top:10px;width:100%;min-height:40px}
+  /* Typed fields (Phase 9 Wave B): score buttons big enough for a thumb. */
+  .typed{display:flex;gap:8px;align-items:stretch;flex-wrap:wrap}
+  .typed input[type=number]{flex:1 1 6em;min-width:5em;font:600 20px/1 ui-monospace,Consolas,monospace;text-align:center}
+  .typed input[type=color]{width:5em;height:48px;padding:2px}
+  .typed select{flex:1 1 auto;padding:11px;font:inherit;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px}
+  .typed-btn{min-height:48px;min-width:56px;padding:8px 12px;font-size:18px}
+  .typed-toggle{min-height:48px;min-width:96px}
+  .typed-toggle[aria-pressed="true"]{background:var(--go);border-color:var(--success-border);color:var(--on-accent)}
+  /* Timers (Phase 9 Wave B): the readout is the point, big enough to read across a gallery. */
+  .timer-row{border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:10px;background:var(--panel2)}
+  .timer-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  .timer-name{color:var(--muted);font:12px/1 ui-monospace,Consolas,monospace}
+  .timer-value{font:600 34px/1.1 ui-monospace,Consolas,monospace;color:var(--key);font-variant-numeric:tabular-nums}
+  .timer-value[data-running="true"]{color:var(--success)}
+  .timer-row .verbs{grid-template-columns:repeat(auto-fit,minmax(72px,1fr))}
+  .timer-row .verbs button{min-height:44px;padding:10px 6px;font-size:15px}
+  .timer-set{display:flex;gap:8px;margin-top:8px}
+  .timer-set input{flex:1 1 auto;min-width:0}
+  .timer-set button{min-height:44px;padding:8px 14px;width:auto}
   .page-row button[aria-pressed="true"]{outline:2px solid var(--key);outline-offset:-2px}
+  /* Rolls, polls and texts (Wave R). */
+  .scroll-row,.poll,.text-row{border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:10px;background:var(--panel2)}
+  .scroll-head,.poll-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  .scroll-name{color:var(--muted);font:12px/1 ui-monospace,Consolas,monospace}
+  .scroll-speed{font:600 22px/1.1 ui-monospace,Consolas,monospace;color:var(--key);font-variant-numeric:tabular-nums}
+  .scroll-state{color:var(--muted);font-size:13px}
+  .scroll-state[data-running="true"]{color:var(--success)}
+  .scroll-row .verbs{grid-template-columns:repeat(auto-fit,minmax(64px,1fr))}
+  .scroll-row .verbs button{min-height:48px;padding:10px 6px;font-size:16px}
+  .scroll-row .verbs button[aria-pressed="true"]{background:var(--go);border-color:var(--success-border);color:var(--on-accent)}
+  .scroll-bar{width:100%;margin-top:8px}
+  .scroll-seek{display:flex;gap:8px;margin-top:8px}
+  .scroll-seek input{flex:1 1 auto;min-width:0}
+  .scroll-seek button{min-height:44px;padding:8px 14px;width:auto;white-space:nowrap}
+  .poll-question{font-weight:600}
+  .poll-status{font-size:12px;padding:2px 8px;border-radius:10px;border:1px solid var(--border);color:var(--muted)}
+  .poll-status[data-status="closed"]{color:var(--key);border-color:var(--key)}
+  .poll-option{display:grid;grid-template-columns:1fr auto auto auto auto auto;gap:6px;align-items:center;margin:6px 0}
+  .poll-option .poll-label{display:flex;align-items:center;gap:6px;min-width:0}
+  .poll-swatch{width:12px;height:12px;border-radius:3px;flex:none;border:1px solid var(--border)}
+  .poll-count{font:600 22px/1 ui-monospace,Consolas,monospace;min-width:3em;text-align:end;font-variant-numeric:tabular-nums}
+  .poll-pct{color:var(--muted);min-width:3.5em;text-align:end;font-variant-numeric:tabular-nums}
+  .poll-option button{min-height:48px;min-width:56px;font-size:18px}
+  .poll-option input{width:5em;padding:8px}
+  .poll-total{color:var(--muted);margin:6px 0}
+  .poll-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .poll-actions button{min-height:44px;flex:1 1 8em}
+  .poll-edit textarea,.text-row textarea{width:100%;min-height:8em;font:14px/1.4 ui-monospace,Consolas,monospace;padding:8px;box-sizing:border-box;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px}
+  .poll-edit input{width:100%;padding:8px;box-sizing:border-box}
+  .text-row .text-actions{display:flex;gap:8px;margin-top:8px;align-items:center}
+  .text-row .text-actions button{min-height:44px;width:auto;padding:8px 14px}
 
   /*
    * The panel becomes two columns once there is room for the preview beside the
@@ -528,7 +823,10 @@ ${FAVICON_LINK}
   .sync-rows td{padding:2px 6px 2px 0;vertical-align:top;overflow-wrap:anywhere}
   .sync-rows td.mark{width:1.2em}
   .sync-rows tr[data-ok="false"] td{color:var(--attention)}
+  .key-pair{margin-top:8px;padding-top:6px;border-top:1px solid var(--line)}
   .icon-btn[aria-pressed="true"]{outline:2px solid var(--accent);outline-offset:-2px}
+  .cue-toggle{display:flex;align-items:center;gap:8px;margin:4px 0 10px;color:var(--muted);font-size:14px}
+  .cue-toggle input{width:auto}
   @media (min-width:900px){
     .panel-grid{flex-direction:row-reverse;align-items:flex-start}
     .panel-controls{flex:1 1 380px}
@@ -569,6 +867,7 @@ ${FAVICON_LINK}
       <button id="sync-resync" hidden>${t('server.pages.syncCheckResync')}</button>
     </div>
     <table class="sync-rows" id="sync-rows"></table>
+    <div id="key-pairs"></div>
   </div>
   <div class="hint">${t('server.pages.previewHint')}</div>
 </section>
@@ -609,6 +908,36 @@ ${sceneElementsBlock(elements)}
   <div class="hint">${t('server.pages.pagesHint')}</div>
 </fieldset>
 
+<fieldset id="games" hidden>
+  <legend>${t('server.pages.game')}</legend>
+  <div id="game-list"></div>
+  <div class="hint">${t('server.pages.gameHint')}</div>
+</fieldset>
+
+<fieldset id="timers" hidden>
+  <legend>${t('server.pages.timers')}</legend>
+  <div id="timer-list"></div>
+  <div class="hint">${t('server.pages.timersHint')}</div>
+</fieldset>
+
+<fieldset id="scrolls" hidden>
+  <legend>${t('server.pages.scrolls')}</legend>
+  <div id="scroll-list"></div>
+  <div class="hint">${t('server.pages.scrollsHint')}</div>
+</fieldset>
+
+<fieldset id="polls" hidden>
+  <legend>${t('server.pages.polls')}</legend>
+  <div id="poll-list"></div>
+  <div class="hint">${t('server.pages.pollsHint')}</div>
+</fieldset>
+
+<fieldset id="texts" hidden>
+  <legend>${t('server.pages.texts')}</legend>
+  <div id="text-list"></div>
+  <div class="hint">${t('server.pages.textsHint')}</div>
+</fieldset>
+
 <fieldset id="mode" hidden>
   <legend>${t('server.pages.mode')}</legend>
   <div class="verbs" id="mode-list"></div>
@@ -632,7 +961,9 @@ ${sceneElementsBlock(elements)}
      * here for you to send".
      */
     bindings.some((b) => !b.readOnly)
-      ? `<button id="send" style="width:100%">${t('server.pages.updateOnAir')}</button>
+      ? `<label class="cue-toggle" title="${escapeHtml(t('server.pages.cueModeTitle'))}"><input type="checkbox" id="cue-mode"> ${t('server.pages.cueMode')}</label>
+  <button id="take" class="go" style="width:100%" hidden>${t('server.pages.take')}</button>
+  <button id="send" style="width:100%">${t('server.pages.updateOnAir')}</button>
   <div class="hint">${t('server.pages.updateHint', {
     fed: `<span class="fed-tag">${t('server.pages.fedTag')}</span>`,
   })}</div>`
@@ -656,9 +987,15 @@ window.__BREEZE_CONTROL__ = {
   sources: ${escapeJson(opts.sources ?? [])},
   mode: ${escapeJson(opts.mode ?? '')},
   modes: ${escapeJson(opts.modes ?? [])},
+  timers: ${escapeJson(opts.timers ?? [])},
+  assets: ${escapeJson(opts.assets ?? [])},
+  games: ${escapeJson(opts.games ?? [])},
+  scrolls: ${escapeJson(opts.scrolls ?? [])},
+  polls: ${escapeJson(opts.polls ?? [])},
+  texts: ${escapeJson(opts.texts ?? [])},
   elements: ${escapeJson(elements)},
   locale: ${escapeJson(serverI18n().locale)},
-  messages: ${escapeJson(messagesFor('control.'))}
+  messages: ${escapeJson(messagesFor('control.', ...SPORT_RULESET_KEYS))}
 };
 </script>
 <script src="/public/control.js"></script>
@@ -799,6 +1136,8 @@ export function portalPage(
                  title="${escapeHtml(t('server.pages.outputUrlTitle'))}">${t('server.pages.outputUrl')}</a>
               <a class="btn" href="/play/${pid}/${cid}?scale=contain&amp;debug=1" target="_blank" rel="noreferrer"
                  title="${escapeHtml(t('server.pages.debugUrlTitle'))}">${t('server.pages.debugUrl')}</a>
+              <a class="btn" href="/api/projects/${pid}/compositions/${cid}/ograf" download
+                 title="${escapeHtml(t('server.pages.ografPackageTitle'))}">${t('server.pages.ografPackage')}</a>
             </div>
           </div>`;
         })
@@ -812,6 +1151,8 @@ export function portalPage(
           <span class="viewers" data-role="project-viewers" hidden></span>
         </summary>
         <div class="tile-body">
+          ${count ? `<div class="scene-links" style="margin-bottom:10px"><a class="btn primary" href="/rundown/${pid}" target="_blank" rel="noreferrer"
+             title="${escapeHtml(t('server.pages.rundownLinkTitle'))}">${t('server.pages.rundownLink')}</a></div>` : ''}
           ${scenes || `<p class="hint">${t('server.pages.noScenes')}</p>`}
         </div>
       </details>`;
@@ -1313,6 +1654,10 @@ export function peersPage(
   const companions = new Set(
     report.sockets.filter((p) => p.kind === 'companion').map((p) => p.ip),
   ).size;
+  /* OGraf pointer graphics (Phase 9 Wave D): graphics inside someone else's
+     renderer, following this server's data. Not browser sources of ours — no
+     command here reaches them — so counted under the sources, not listed. */
+  const ografs = report.sockets.filter((p) => p.kind === 'ograf').length;
 
   const sourcesSection = `<section>
   <h2>${t('server.pages.peersSources')} <span class="count">${sources.length}</span></h2>
@@ -1333,6 +1678,7 @@ export function peersPage(
     .join('')}
 </table>`
   }
+  ${ografs > 0 ? `<p class="hint">${t('server.pages.peersOgraf', { count: ografs })}</p>` : ''}
 </section>`;
 
   const panelsSection = `<section>

@@ -92,6 +92,9 @@ export function baselineValue(layer: Layer, prop: AnimatableProp): number {
     case 'grayscale': return layer.effects?.grayscale ?? 0;
     case 'sepia': return layer.effects?.sepia ?? 0;
     case 'maskOffset': return 0;
+    // Wave R: shape-only, inert at their defaults on everything else.
+    case 'trim': return layer.type === 'shape' ? (layer.trim ?? 1) : 1;
+    case 'sweep': return layer.type === 'shape' && layer.arc ? layer.arc.sweep : 360;
     default: {
       const exhaustive: never = prop;
       throw new Error(`unhandled prop ${String(exhaustive)}`);
@@ -250,7 +253,10 @@ export function defaultFor(prop: AnimatableProp): number {
     case 'brightness':
     case 'contrast':
     case 'saturate':
+    case 'trim':
       return 1;
+    case 'sweep':
+      return 360;
     case 'x':
     case 'y':
     case 'rotation':

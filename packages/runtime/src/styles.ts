@@ -86,6 +86,19 @@ export const RUNTIME_CSS = `
    FLIP on the compositor rather than a relayout of the whole table. The hidden
    overflow is what makes a page boundary a clean edge instead of a half-row. */
 .bz-table { position: absolute; inset: 0; overflow: hidden; }
+/* Rolls (Wave R). The window clips; the track moves inside it and only the
+   runtime writes its transform. An up or down roll stacks rows the width of
+   the window; a left or right one runs them along one line. */
+.bz-roll { position: absolute; inset: 0; overflow: hidden; }
+.bz-roll-track { position: absolute; left: 0; top: 0; will-change: transform; }
+.bz-roll[data-axis='y'] .bz-roll-track { width: 100%; }
+.bz-roll[data-axis='x'] .bz-roll-track { display: flex; align-items: center; height: 100%; white-space: pre; }
+.bz-roll-copy { display: block; }
+.bz-roll[data-axis='x'] .bz-roll-copy { display: inline-flex; align-items: center; flex: none; white-space: pre; }
+.bz-roll-row { display: block; white-space: pre-line; overflow-wrap: anywhere; }
+.bz-roll-pair { display: flex; align-items: baseline; }
+.bz-roll-pair > span { display: block; white-space: pre-line; }
+.bz-roll[data-axis='x'] .bz-roll-row, .bz-roll[data-axis='x'] .bz-roll-sep { display: inline-block; white-space: pre; }
 .bz-table-row {
   position: absolute;
   left: 0;

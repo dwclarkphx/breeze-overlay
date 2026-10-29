@@ -42,7 +42,7 @@ const SHIP_THRESHOLD = 0.95;
  * carrying display text is a table that has to carry keys instead. The package
  * never translates them; it only names them.
  */
-const KEY_NAMESPACES = ['editor', 'server', 'schema', 'runtime', 'error', 'control', 'portal', 'backup', 'activity', 'docs'];
+const KEY_NAMESPACES = ['editor', 'server', 'schema', 'runtime', 'error', 'control', 'portal', 'backup', 'activity', 'docs', 'rundown'];
 const KEY_RE = new RegExp(`^(?:${KEY_NAMESPACES.join('|')})\\.[A-Za-z0-9_.-]+$`);
 /*
  * Quotes only — no backticks. A key is never written in a template literal

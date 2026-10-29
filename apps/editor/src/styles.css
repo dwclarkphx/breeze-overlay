@@ -1413,3 +1413,14 @@ img.layer-thumb {
 .rules-section .rule-then { margin-top: 6px; }
 .rules-section .rule-then input[type='color'] { width: 28px; padding: 0; }
 .stage-toolbar .stage-mode { background: var(--danger-emphasis); border: 1px solid var(--danger-border); color: var(--on-accent); border-radius: 999px; padding: 1px 10px; font-size: 11px; cursor: pointer; }
+
+/* Sport templates (Phase 9 Wave B). */
+.sport-creator h4 { margin: 0 0 8px; font-size: 13px; }
+.sport-tables { width: 100%; border-collapse: collapse; font-size: 11px; margin: 6px 0; }
+.sport-tables td { padding: 3px 4px; vertical-align: middle; }
+.sport-tables input:not([type]) { width: 100%; min-width: 8em; }
+.sport-guide { border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; margin-bottom: 8px; }
+.sport-guide-head { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; font-size: 12px; }
+.sport-guide-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 4px 0; }
+.sport-guide-table th { text-align: start; color: var(--muted); font-weight: 500; padding: 2px 4px; }
+.sport-guide-table td { padding: 2px 4px; border-top: 1px solid var(--border); vertical-align: top; }

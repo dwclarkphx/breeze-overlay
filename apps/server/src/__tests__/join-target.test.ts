@@ -7,7 +7,17 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { compareReports, joinTarget, onAirSources, reportAgeSeconds, reportOf, SYNC_TOLERANCE, type SourceLike } from '../../client/join.js';
+import {
+  compareKeyPair,
+  compareReports,
+  joinTarget,
+  keyPairs,
+  onAirSources,
+  reportAgeSeconds,
+  reportOf,
+  SYNC_TOLERANCE,
+  type SourceLike,
+} from '../../client/join.js';
 
 const holding = { state: 'holding', time: 1, step: 1 };
 const source = (id: string, over: Partial<SourceLike> = {}): SourceLike => ({
@@ -151,5 +161,75 @@ describe('reportAgeSeconds (0.76.0)', () => {
 
   it('is never negative, whatever order the two stamps come in', () => {
     expect(reportAgeSeconds({ reportedAt: 12_000, now: 10_000 })).toBe(0);
+  });
+});
+
+describe('key pairs (Phase 9 Wave C)', () => {
+  const ticker = { layer: 'al', text: 'Flood Watch • ', staged: null, offsetMs: 1_000, passMs: 20_000 };
+  const paged = {
+    state: 'holding', time: 1, step: 1,
+    tables: [{ table: 'city', page: 2, pageCount: 38, key: 'Buckeye', secondsLeft: 6 }],
+    crawls: [ticker],
+  };
+
+  it('pairs each matte with a fill on the same machine before any other', () => {
+    const fillHere = source('f1', { ip: '10.0.0.5', reportedAt: 8_000 });
+    const fillThere = source('f2', { ip: '10.0.0.9', reportedAt: 9_900 });
+    const matte = source('m', { ip: '10.0.0.5', signal: 'matte' });
+    expect(keyPairs([fillHere, fillThere, matte])).toEqual([{ matte, fill: fillHere }]);
+  });
+
+  it('falls back to the newest fill anywhere, and reports a matte with none', () => {
+    const older = source('f1', { ip: '10.0.0.8', reportedAt: 8_000 });
+    const newer = source('f2', { ip: '10.0.0.9', reportedAt: 9_000 });
+    const matte = source('m', { ip: '10.0.0.5', signal: 'matte' });
+    expect(keyPairs([older, newer, matte])[0]!.fill).toBe(newer);
+    expect(keyPairs([matte])).toEqual([{ matte, fill: null }]);
+  });
+
+  it('has nothing to say on a channel with no matte', () => {
+    expect(keyPairs([source('a'), source('b')])).toEqual([]);
+  });
+
+  it('passes a fill and matte on the same moment, ageing whichever reported first', () => {
+    const fill = source('f', { reportedAt: 10_000, playback: paged });
+    // The matte reported 2 s later: 2 s less on the page, 2 s further along the ticker.
+    const matte = source('m', {
+      signal: 'matte',
+      reportedAt: 12_000,
+      playback: { ...paged, tables: [{ ...paged.tables[0]!, secondsLeft: 4 }], crawls: [{ ...ticker, offsetMs: 3_000 }] },
+    });
+    const result = compareKeyPair(fill, matte)!;
+    expect(result).toMatchObject({ ok: true, apartMs: 2_000 });
+    // The same answer whichever of the two is older.
+    const swapped = compareKeyPair(
+      { ...fill, reportedAt: 12_000, playback: matte.playback },
+      { ...matte, reportedAt: 10_000, playback: fill.playback },
+    )!;
+    expect(swapped.ok).toBe(true);
+  });
+
+  it('names the sides fill and matte, and gives drift as matte minus fill either way round', () => {
+    const fill = source('f', { reportedAt: 10_000, playback: { ...paged, crawls: [{ ...ticker, offsetMs: 1_000 }] } });
+    const matte = source('m', { signal: 'matte', reportedAt: 10_000, playback: { ...paged, crawls: [{ ...ticker, offsetMs: 1_400 }] } });
+    const crawl = compareKeyPair(fill, matte)!.checks.find((c) => c.kind === 'crawl')!;
+    expect(crawl).toMatchObject({ ok: false, driftMs: 400 });
+    // Matte reported first this time, so it is the side that gets aged: by the
+    // fill's moment it has scrolled on to 1 500, and 1 500 − 1 000 is +500.
+    const later = compareKeyPair({ ...fill, reportedAt: 10_100 }, { ...matte, reportedAt: 10_000 })!;
+    expect(later.checks.find((c) => c.kind === 'crawl')!.driftMs).toBe(500);
+    expect(later.checks[0]!.fill).toEqual({ state: 'holding', step: 1 });
+  });
+
+  it('flags a matte that missed the PLAY', () => {
+    const fill = source('f', { reportedAt: 10_000, playback: holding });
+    const matte = source('m', { signal: 'matte', reportedAt: 10_000, playback: { state: 'idle', time: 0, step: 0 } });
+    const result = compareKeyPair(fill, matte)!;
+    expect(result.ok).toBe(false);
+    expect(result.checks[0]).toMatchObject({ kind: 'playback', fill: { state: 'holding' }, matte: { state: 'idle' } });
+  });
+
+  it('waits rather than fails while either side has not reported', () => {
+    expect(compareKeyPair(source('f'), source('m', { signal: 'matte', playback: null, reportedAt: null }))).toBeNull();
   });
 });

@@ -27,6 +27,7 @@
 /* ------------------------------------------------------------------ DataSet */
 
 import type { MediaCheck, MediaSummary } from './media.js';
+import type { SportTemplateRef } from './sports.js';
 import { parseTemplate, renderTemplate, templateUsesClock } from './compose.js';
 import { addDays, localParts, readTime } from './time.js';
 
@@ -303,7 +304,71 @@ export type DataTransform =
   | DateTransform
   | LookupTransform
   | UnionTransform
-  | ComposeTransform;
+  | ComposeTransform
+  | ShareTransform;
+
+/**
+ * Each row's percentage of a column's total (Wave R, CHARTS.md §4.4) — a
+ * poll's share of the vote, a slice of a pie.
+ *
+ * Rounded by **largest remainder** (`largestRemainder`), so the shares add up
+ * to exactly 100 at the precision asked for: three options on 1 vote each
+ * read 34 / 33 / 33, never 33 / 33 / 33. A bar labelled 33 % beside two others
+ * labelled 33 % is the kind of thing a viewer writes in about.
+ */
+export interface ShareTransform {
+  op: 'share';
+  /** The numeric column to share out. Blank, negative and non-numeric values count as 0. */
+  column: string;
+  /** Column written. Default `percent`. */
+  as?: string;
+  /** Decimal places, 0–3. Default 0. */
+  decimals?: number;
+  /**
+   * Also write the running share *before* each row into this column — where a
+   * pie slice starts. Absent: not written.
+   */
+  cumulative?: string;
+}
+
+/** Column `share` writes into when no `as` is given. */
+export const DEFAULT_SHARE_KEY = 'percent';
+
+/**
+ * Share `target` out in proportion to `values`, rounded to `decimals` places so
+ * the parts still add up to exactly `target` (the largest-remainder method).
+ *
+ * Every value is floored, then the units left over go one each to the values
+ * that lost the most to rounding; a tie goes to the earlier value, so the
+ * answer is stable for a given order. All zeros (no votes yet) is all zeros.
+ */
+export function largestRemainder(values: readonly number[], target = 100, decimals = 0): number[] {
+  const clean = values.map((v) => (Number.isFinite(v) && v > 0 ? v : 0));
+  const sum = clean.reduce((a, b) => a + b, 0);
+  if (sum <= 0) return clean.map(() => 0);
+  const places = Math.max(0, Math.min(6, Math.floor(decimals)));
+  const scale = 10 ** places;
+  const units = Math.round(target * scale);
+  const exact = clean.map((v) => (v / sum) * units);
+  const floors = exact.map((x) => Math.floor(x + 1e-9));
+  let left = units - floors.reduce((a, b) => a + b, 0);
+  const order = exact
+    .map((x, i) => ({ i, rem: x - floors[i]! }))
+    .sort((a, b) => b.rem - a.rem || a.i - b.i);
+  for (const { i } of order) {
+    if (left <= 0) break;
+    floors[i]! += 1;
+    left -= 1;
+  }
+  return floors.map((n) => n / scale);
+}
+
+/** A cell value as a number for `share` and drives: blank and non-numeric are null. */
+export function numericValue(value: DataValue | undefined): number | null {
+  if (value === null || value === undefined || value === '' || typeof value === 'boolean') return null;
+  const n = typeof value === 'number' ? value : Number(String(value).trim());
+  return Number.isFinite(n) ? n : null;
+}
 
 /**
  * What a transform may read besides its own rows: the clock, for `date`, and
@@ -780,6 +845,27 @@ export function applyTransforms(data: DataSet, transforms: DataTransform[] = [],
         if (!columns.some((c) => c.key === t.as)) columns = [...columns, { key: t.as, type: 'string' }];
         break;
       }
+      case 'share': {
+        const key = t.as ?? DEFAULT_SHARE_KEY;
+        const decimals = t.decimals ?? 0;
+        const shares = largestRemainder(rows.map((row) => numericValue(row[t.column]) ?? 0), 100, decimals);
+        const scale = 10 ** Math.max(0, Math.min(6, Math.floor(decimals)));
+        let before = 0;
+        rows = mutable().map((row, i) => {
+          const out: DataRow = { ...row, [key]: shares[i]! };
+          if (t.cumulative) {
+            out[t.cumulative] = Math.round(before * scale) / scale;
+            before += shares[i]!;
+          }
+          return out;
+        });
+        copied = true;
+        if (!columns.some((c) => c.key === key)) columns = [...columns, { key, label: '%', type: 'number' }];
+        if (t.cumulative && !columns.some((c) => c.key === t.cumulative)) {
+          columns = [...columns, { key: t.cumulative, type: 'number' }];
+        }
+        break;
+      }
       case 'union': {
         const other = ctx.source?.(t.source);
         if (!other) break;
@@ -823,6 +909,9 @@ export const DATA_SOURCE_TYPES = [
   // Phase 8.6 Wave 3 (CYCLE.md).
   'cap',
   'air-quality',
+  // Phase 9 Wave R (ROLLS.md, CHARTS.md).
+  'text',
+  'poll',
 ] as const;
 export type DataSourceType = (typeof DATA_SOURCE_TYPES)[number];
 
@@ -877,6 +966,13 @@ export interface DataSourceBase {
    * columns (`MEDIA_COLUMNS`), CYCLE.md Wave 8. See `MediaCheck`.
    */
   media?: MediaCheck;
+  /**
+   * The sport template this source was made from (Phase 9 Wave B, sports.ts):
+   * which sport, which rules, which of its five tables. The editor shows that
+   * table's format guide and checks a fetched feed against it; on a manual
+   * `game` table it is what the panel's score buttons act through.
+   */
+  template?: SportTemplateRef;
 }
 
 /* ------------------------------------------------------------------ guard */
@@ -1257,6 +1353,13 @@ export interface WeatherProviderInfo {
   attribution: string | null;
   /** Link the license obliges to sit next to the data, if any. */
   attributionUrl: string | null;
+  /**
+   * The licence obliges a credit (Phase 9 Wave 0). Separate from `attribution`
+   * because NWS has a credit line the adapter fills as good practice while
+   * obliging nothing: unticking **Show attribution** warns for every provider
+   * where this is true and stays quiet for NWS.
+   */
+  creditRequired: boolean;
   licenseUrl: string;
   /** Poll floor in seconds — see the note on WEATHER_POLL_FLOOR below. */
   pollFloor: number;
@@ -1316,6 +1419,7 @@ export const WEATHER_PROVIDER_INFO: Record<WeatherProvider, WeatherProviderInfo>
     // the `attribution` column.
     attribution: 'Data from the US National Weather Service',
     attributionUrl: null,
+    creditRequired: false,
     licenseUrl: 'https://www.weather.gov/disclaimer',
     pollFloor: 300,
     coverageKey: 'schema.weather.provider.nws.coverage',
@@ -1331,6 +1435,7 @@ export const WEATHER_PROVIDER_INFO: Record<WeatherProvider, WeatherProviderInfo>
     commercialUse: 'non-commercial-only',
     attribution: 'Weather data by Open-Meteo.com',
     attributionUrl: 'https://open-meteo.com/',
+    creditRequired: true,
     licenseUrl: 'https://open-meteo.com/en/licence',
     pollFloor: 900,
     coverageKey: 'schema.weather.provider.open-meteo.coverage',
@@ -1350,6 +1455,7 @@ export const WEATHER_PROVIDER_INFO: Record<WeatherProvider, WeatherProviderInfo>
     commercialUse: 'yes',
     attribution: 'Weather data by Open-Meteo.com',
     attributionUrl: 'https://open-meteo.com/',
+    creditRequired: true,
     licenseUrl: 'https://open-meteo.com/en/licence',
     pollFloor: 60,
     coverageKey: 'schema.weather.provider.open-meteo-self.coverage',
@@ -1373,6 +1479,7 @@ export const WEATHER_PROVIDER_INFO: Record<WeatherProvider, WeatherProviderInfo>
     commercialUse: 'yes',
     attribution: 'Weather data from MET Norway',
     attributionUrl: 'https://www.met.no/',
+    creditRequired: true,
     licenseUrl: 'https://api.met.no/doc/License',
     /*
      * MET publish no per-client rate limit — the ceiling is 20 requests/second
@@ -1402,6 +1509,7 @@ export const WEATHER_PROVIDER_INFO: Record<WeatherProvider, WeatherProviderInfo>
     commercialUse: 'yes',
     attribution: 'Weather data from Deutscher Wetterdienst (DWD), via Bright Sky',
     attributionUrl: 'https://brightsky.dev/',
+    creditRequired: true,
     licenseUrl: 'https://www.dwd.de/EN/service/legal_notice/legal_notice.html',
     // No published limit and no key. 900s is politeness towards a service one
     // person runs and funds — MOSMIX updates hourly, so nothing is lost.
@@ -1587,6 +1695,39 @@ export interface WeatherDataSource extends DataSourceBase {
    * why the server-wide setting is the one to reach for first.
    */
   contact?: string;
+  /** See `AttributionSetting`. Absent means shown. */
+  showAttribution?: boolean;
+}
+
+/**
+ * **Show attribution** (Phase 9 Wave 0). Omitted means `true`, so every project
+ * saved before the setting existed reads exactly as it did.
+ *
+ * Off writes `''` into the `attribution` column rather than dropping it: a
+ * binding, the column picker and a layer rule `attribution is empty → hide`
+ * all keep working, and the rule is what takes a credit strap off air bar and
+ * all. The editor warns when the licence obliges a credit and does not refuse
+ * — whether the credit runs somewhere else (a credits page, the station's
+ * site) is the operator's call, the same stance taken on fonts.
+ */
+export interface AttributionSetting {
+  showAttribution?: boolean;
+}
+
+/** Whether a weather or air-quality source puts its credit in the `attribution` column. */
+export function attributionShown(def: AttributionSetting): boolean {
+  return def.showAttribution !== false;
+}
+
+/**
+ * The rows with the `attribution` column blanked. Only rows that carry the
+ * column are touched, so a transform that has already dropped it is left alone.
+ */
+export function blankAttribution(data: DataSet): DataSet {
+  return {
+    ...data,
+    rows: data.rows.map((row) => ('attribution' in row ? { ...row, attribution: '' } : row)),
+  };
 }
 
 /* ------------------------------------------------------------------- FTP */
@@ -1595,7 +1736,7 @@ export const FTP_PROTOCOLS = ['ftp', 'ftps', 'sftp'] as const;
 export type FtpProtocol = (typeof FTP_PROTOCOLS)[number];
 
 /** How to read the file once it has been pulled down. */
-export const FTP_FORMATS = ['csv', 'json', 'xml', 'rss'] as const;
+export const FTP_FORMATS = ['csv', 'json', 'xml', 'rss', 'text'] as const;
 export type FtpFormat = (typeof FTP_FORMATS)[number];
 
 /**
@@ -1630,6 +1771,9 @@ export interface FtpDataSource extends DataSourceBase {
   header?: boolean;
   rowPath?: string;
   columns?: DataColumn[];
+  /** `format: 'text'` (Wave R): how the file splits into rows, as on a text source. */
+  split?: TextSplit;
+  markup?: boolean;
 }
 
 /* ------------------------------------------------------------------- CAP */
@@ -1741,6 +1885,8 @@ export interface AirQualityProviderInfo {
   /** Fixed credit, or null where the feed names its own agency per row. */
   attribution: string | null;
   attributionUrl: string | null;
+  /** See `WeatherProviderInfo.creditRequired`. AirNow's guidelines ask for a credit, so it is true for all three. */
+  creditRequired: boolean;
   licenseUrl: string;
   pollFloor: number;
   coverageKey: string;
@@ -1774,6 +1920,7 @@ export const AIR_QUALITY_PROVIDER_INFO: Record<AirQualityProvider, AirQualityPro
     commercialUse: 'yes',
     attribution: null,
     attributionUrl: 'https://www.airnow.gov/',
+    creditRequired: true,
     licenseUrl: 'https://docs.airnowapi.org/docs/DataUseGuidelines.pdf',
     // Observations are hourly and published around half past; ten minutes is
     // plenty to catch each one without asking again for the same hour.
@@ -1791,6 +1938,7 @@ export const AIR_QUALITY_PROVIDER_INFO: Record<AirQualityProvider, AirQualityPro
     commercialUse: 'non-commercial-only',
     attribution: 'Air quality from CAMS (Copernicus Atmosphere Monitoring Service), via Open-Meteo.com',
     attributionUrl: 'https://open-meteo.com/',
+    creditRequired: true,
     licenseUrl: 'https://open-meteo.com/en/licence',
     pollFloor: 900,
     coverageKey: 'schema.airQuality.provider.open-meteo.coverage',
@@ -1807,6 +1955,7 @@ export const AIR_QUALITY_PROVIDER_INFO: Record<AirQualityProvider, AirQualityPro
     commercialUse: 'yes',
     attribution: 'Air quality from CAMS (Copernicus Atmosphere Monitoring Service), via Open-Meteo.com',
     attributionUrl: 'https://open-meteo.com/',
+    creditRequired: true,
     licenseUrl: 'https://open-meteo.com/en/licence',
     pollFloor: 60,
     coverageKey: 'schema.airQuality.provider.open-meteo-self.coverage',
@@ -1893,6 +2042,8 @@ export interface AirQualityDataSource extends DataSourceBase {
   /** IANA zone for Open-Meteo's timestamps; defaults to `auto`. */
   timezone?: string;
   contact?: string;
+  /** See `AttributionSetting`. Blanks `attribution` only — `agency` is data, not the credit line. */
+  showAttribution?: boolean;
 }
 
 /**
@@ -1918,6 +2069,92 @@ export const AIR_QUALITY_COLUMNS: DataColumn[] = [
   { key: 'attribution', label: 'Attribution', type: 'string' },
 ];
 
+/* ---------------------------------------------------------------- Wave R */
+
+/** How a long text splits into rows: one per line, or one per blank-line-separated block. */
+export const TEXT_SPLITS = ['lines', 'stanzas'] as const;
+export type TextSplit = (typeof TEXT_SPLITS)[number];
+
+/** What each row of a text source is (ROLLS.md §3). */
+export const TEXT_KINDS = ['heading', 'line', 'pair', 'gap'] as const;
+export type TextKind = (typeof TEXT_KINDS)[number];
+
+/** Largest body a text source takes, in UTF-8 bytes — lyrics for a whole service, or a long credit list. */
+export const TEXT_BODY_MAX_BYTES = 256 * 1024;
+/** Most rows a text source makes. */
+export const TEXT_ROWS_MAX = 5000;
+
+/** The fixed columns of a text source, like RSS's: a roll bound to `text` works whatever the text is. */
+export const TEXT_COLUMNS: DataColumn[] = [
+  { key: 'n', label: '#', type: 'number' },
+  { key: 'section', type: 'number' },
+  { key: 'kind', type: 'string' },
+  { key: 'text', type: 'string' },
+  { key: 'left', type: 'string' },
+  { key: 'right', type: 'string' },
+];
+
+/**
+ * Long text — lyrics, credits, a statement — as rows (Wave R, ROLLS.md §3).
+ *
+ * The text lives in the project (`body`: typed, pasted, or filled from an
+ * uploaded .txt) or is fetched (`url`), never both. A file dropped over FTP is
+ * the same thing through `FtpDataSource.format: 'text'`.
+ */
+export interface TextDataSource extends DataSourceBase {
+  type: 'text';
+  body?: string;
+  url?: string;
+  /** Names a secret in the server's config file, as on the HTTP sources. */
+  secretId?: string;
+  headers?: Record<string, string>;
+  /** Default `lines`. */
+  split?: TextSplit;
+  /** Read `# heading` and `Role | Name`. Default true. */
+  markup?: boolean;
+  /**
+   * The designer's switch: may an operator change the text from the control
+   * panel (decided 2026-10-26)? Only meaningful on `body`; a fetched text
+   * belongs to whoever publishes it.
+   */
+  operatorEditable?: boolean;
+}
+
+export const POLL_STATUSES = ['open', 'closed'] as const;
+export type PollStatus = (typeof POLL_STATUSES)[number];
+
+/** A poll option's id: what a vote names, so short and URL-safe. */
+export const POLL_OPTION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
+/** Most options a poll offers. */
+export const POLL_OPTIONS_MAX = 12;
+
+export interface PollOption {
+  id: string;
+  label: string;
+  /** A colour for its bar or slice. */
+  color?: string;
+  /** An asset path: a candidate's photo, a team's crest. */
+  image?: string;
+}
+
+/**
+ * An operator-run poll (Wave R, CHARTS.md §5): the question, the options and
+ * the tally, kept in the project and counted from the panel, REST or
+ * Companion. Votes come from the operator, never the audience (decided
+ * 2026-10-26).
+ */
+export interface PollDataSource extends DataSourceBase {
+  type: 'poll';
+  question: string;
+  options: PollOption[];
+  /** Votes by option id. A missing id is 0. */
+  votes?: Record<string, number>;
+  /** Default `open`. */
+  status?: PollStatus;
+  /** May the operator edit the question and options from the panel? Tallying always is the operator's. */
+  operatorEditable?: boolean;
+}
+
 export type DataSourceDef =
   | ManualDataSource
   | HttpJsonDataSource
@@ -1928,7 +2165,9 @@ export type DataSourceDef =
   | WeatherDataSource
   | FtpDataSource
   | CapDataSource
-  | AirQualityDataSource;
+  | AirQualityDataSource
+  | TextDataSource
+  | PollDataSource;
 
 /** Defs that address an origin by URL — everything the shared fetcher can take. */
 export type UrlDataSource =
@@ -1975,9 +2214,18 @@ export function pollFloor(def: DataSourceDef): number {
   return MIN_POLL_INTERVAL;
 }
 
+/**
+ * Sources whose rows are the definition itself — nothing to fetch, nothing to
+ * guard, nothing to expire: a manual table, a poll, and a text kept in the
+ * project rather than fetched.
+ */
+export function isInlineSource(def: DataSourceDef): boolean {
+  return def.type === 'manual' || def.type === 'poll' || (def.type === 'text' && !def.url);
+}
+
 /** Sources the poller drives. Manual rows are the definition; nothing to fetch. */
 export function isPolledSource(def: DataSourceDef): boolean {
-  return def.type !== 'manual';
+  return !isInlineSource(def);
 }
 
 /** Per-source health, surfaced in the editor so a dead feed is diagnosed there. */

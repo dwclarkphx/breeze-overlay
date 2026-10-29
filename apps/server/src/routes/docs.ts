@@ -8,7 +8,8 @@
 /**
  * The user guide, served from the installation.
  *
- * Rendered from `docs/USER-GUIDE.md` at request time rather than prebuilt into
+ * Rendered from `docs/USER-GUIDE.md` (and the sport templates reference it
+ * links to, `docs/SPORT-TEMPLATES.md`) at request time rather than prebuilt into
  * the bundle. The guide is documentation for the machine it is running on: a
  * station that annotates it with its own house rules — which vMix input, which
  * naming convention — should see those edits on reload, not after a rebuild
@@ -29,7 +30,16 @@ import { fail } from '../errors.js';
 import { docsPage } from '../pages.js';
 
 const DOCS_DIR = path.join(REPO_ROOT, 'docs');
-const GUIDE_FILE = path.join(DOCS_DIR, 'USER-GUIDE.md');
+
+/**
+ * The documents served, by the file name they link to each other with. The
+ * guide links to the sport templates reference as `SPORT-TEMPLATES.md`, which
+ * is what works on GitHub; served, those links are rewritten to these paths.
+ */
+const DOCS: Record<string, string> = {
+  'USER-GUIDE.md': '/docs',
+  'SPORT-TEMPLATES.md': '/docs/sport-templates',
+};
 
 const IMAGE_MIME: Record<string, string> = {
   '.png': 'image/png',
@@ -49,7 +59,7 @@ interface Cached {
   mtimeMs: number;
 }
 
-let cache: Cached | null = null;
+const cache = new Map<string, Cached>();
 
 /**
  * GitHub's heading-anchor slug, reproduced.
@@ -109,43 +119,46 @@ function addHeadingIds(html: string): string {
  * rather than a fault: someone can copy `dist/` to a graphics box and leave the
  * docs behind. It gets a page saying so, not a 500.
  */
-async function renderGuide(): Promise<string | null> {
+async function renderDoc(name: string): Promise<string | null> {
+  const file = path.join(DOCS_DIR, name);
   let stat;
   try {
-    stat = await fs.stat(GUIDE_FILE);
+    stat = await fs.stat(file);
   } catch {
-    cache = null;
+    cache.delete(name);
     return null;
   }
 
-  if (cache && cache.mtimeMs === stat.mtimeMs) return cache.html;
+  const hit = cache.get(name);
+  if (hit && hit.mtimeMs === stat.mtimeMs) return hit.html;
 
-  const source = await fs.readFile(GUIDE_FILE, 'utf8');
+  const source = await fs.readFile(file, 'utf8');
   /*
    * Image paths in the guide are repo-relative (`images/foo.png`) because it is
    * also read on GitHub, where that is what works. Rewritten to `/docs/images/`
    * so the same file renders correctly from a page served at `/docs`.
    */
-  const rendered = (await marked.parse(source, { async: true })).replace(
-    /(<img[^>]+src=")(?!https?:|\/)images\//g,
-    '$1/docs/images/',
-  );
+  const rendered = (await marked.parse(source, { async: true }))
+    .replace(/(<img[^>]+src=")(?!https?:|\/)images\//g, '$1/docs/images/')
+    // `SPORT-TEMPLATES.md#basketball` → `/docs/sport-templates#basketball`.
+    .replace(/(<a[^>]+href=")([A-Z-]+\.md)(?=["#])/g, (match, open: string, doc: string) => (DOCS[doc] ? open + DOCS[doc] : match));
   const html = addHeadingIds(rendered);
 
-  cache = { html, mtimeMs: stat.mtimeMs };
+  cache.set(name, { html, mtimeMs: stat.mtimeMs });
   return html;
 }
 
 export async function registerDocsRoutes(app: FastifyInstance): Promise<void> {
-  const serve = async (reply: import('fastify').FastifyReply) => {
+  const serve = async (reply: import('fastify').FastifyReply, name = 'USER-GUIDE.md') => {
     reply.type('text/html; charset=utf-8');
-    const body = await renderGuide();
+    const body = await renderDoc(name);
     if (body === null) reply.code(404);
     return docsPage(body ?? NOT_FOUND);
   };
 
   app.get('/docs', async (_req, reply) => serve(reply));
   app.get('/docs/', async (_req, reply) => serve(reply));
+  app.get('/docs/sport-templates', async (_req, reply) => serve(reply, 'SPORT-TEMPLATES.md'));
 
   /*
    * Images only, and only from `docs/images`. This route exists to serve

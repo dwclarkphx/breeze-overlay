@@ -24,6 +24,7 @@ import {
   AIR_QUALITY_PROVIDER_INFO,
   BRACKET_SIDES,
   DEFAULT_RANK_KEY,
+  DEFAULT_SHARE_KEY,
   UNPIVOT_DEFAULTS,
   WEATHER_PROVIDER_INFO,
   type DataSourceDef,
@@ -33,10 +34,13 @@ import {
 import { parseTemplate } from './compose.js';
 import { MEDIA_COLUMNS } from './media.js';
 import { MODE_PATTERN } from './rules.js';
+import { fieldSpecProblems } from './fields.js';
 import { compositionDuration, walkLayers } from './duration.js';
 import { KEY_MAX_LENGTH, isValidKey } from './keys.js';
 import { assetsSchema, compositionSchema, dataSourcesSchema, projectSchema } from './schema.js';
 import { CLOCK_TOKENS, type AssetRef, type Composition, type Layer, type MediaLayer, type Project } from './types.js';
+import { textBodyProblem } from './text.js';
+import { pollDefProblems } from './poll.js';
 
 export { compositionDuration, walkLayers };
 
@@ -204,6 +208,87 @@ function checkRules(layer: Layer, path: string, inCell: boolean): ValidationIssu
   return issues;
 }
 
+/**
+ * Drives (Wave R, CHARTS.md §3): what the JSON schema cannot say about one.
+ *
+ * A property both keyframed and driven is refused, not resolved by
+ * precedence: GSAP would own it twice and whichever wrote last would win on
+ * each frame — a bar that flickers between its keyframe and its data.
+ */
+function checkDrives(layer: Layer, path: string, inCell: boolean): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  for (const [d, drive] of (layer.drives ?? []).entries()) {
+    const at = `${path}/drives/${d}`;
+    const f = drive.from;
+    const subjects = [
+      f.timer !== undefined ? 'timer' : null,
+      f.binding !== undefined ? 'binding' : null,
+      f.source !== undefined || f.column !== undefined ? 'data' : null,
+    ].filter(Boolean);
+    if (subjects.length !== 1) {
+      issues.push({ path: `${at}/from`, message: 'a drive reads one thing: a column, a source and column, a field (binding) or a timer' });
+    }
+    if (f.source !== undefined && f.column === undefined) {
+      issues.push({ path: `${at}/from/column`, message: 'a drive reading a source needs the column to read' });
+    }
+    if (f.column !== undefined && f.source === undefined && !inCell) {
+      issues.push({
+        path: `${at}/from/column`,
+        message: `a column on its own reads a table cell's row, and "${layer.id}" is not in a table — name the source it comes from`,
+      });
+    }
+    if (f.where !== undefined && f.source === undefined) {
+      issues.push({ path: `${at}/from/where`, message: '`where` picks a row of a source, so it needs `source`' });
+    }
+    const prop = drive.property;
+    if (prop !== 'width' && prop !== 'height' && (layer.keyframes?.[prop]?.length ?? 0) > 0) {
+      issues.push({ path: `${at}/property`, message: `"${prop}" is keyframed on this layer — keyframe the entrance and drive another property, or remove the keyframes` });
+    }
+    if (prop === 'sweep' && !(layer.type === 'shape' && layer.shape === 'ellipse' && layer.arc)) {
+      issues.push({ path: `${at}/property`, message: 'sweep moves an arc — give an ellipse shape an arc first' });
+    }
+    if (prop === 'trim' && !(layer.type === 'shape' && (layer.shape === 'path' || (layer.shape === 'ellipse' && layer.arc)))) {
+      issues.push({ path: `${at}/property`, message: 'trim draws an outline on — only a path or an arc has one' });
+    }
+    if (drive.grow !== undefined && prop !== 'width' && prop !== 'height') {
+      issues.push({ path: `${at}/grow`, message: 'grow says which edge a width or height grows from', severity: 'warning' });
+    }
+    for (const end of ['min', 'max'] as const) {
+      const v = drive.domain?.[end];
+      if (v !== undefined && typeof v === 'object' && 'column' in v && f.column === undefined) {
+        issues.push({ path: `${at}/domain/${end}`, message: 'a column domain reads the same row as the drive — the drive must read a column too' });
+      }
+    }
+    if (drive.range[0] === drive.range[1]) {
+      issues.push({ path: `${at}/range`, message: 'the range starts and ends at the same value, so the data cannot move anything', severity: 'warning' });
+    }
+  }
+  return issues;
+}
+
+/** Arcs, trims, plots and counts (Wave R, CHARTS.md §4) on the layers they belong to. */
+function checkChartProps(layer: Layer, path: string): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  if (layer.type === 'shape') {
+    if (layer.arc && layer.shape !== 'ellipse') {
+      issues.push({ path: `${path}/arc`, message: `an arc is part of an ellipse — a ${layer.shape} has none` });
+    }
+    if (layer.plot && layer.shape !== 'path') {
+      issues.push({ path: `${path}/plot`, message: 'a plot draws a path — set the shape to path' });
+    }
+    if (layer.plot && layer.plot.source === undefined) {
+      issues.push({ path: `${path}/plot`, message: 'this plot has no rows to draw — give it a source', severity: 'warning' });
+    }
+    if (layer.trim !== undefined && layer.shape === 'rect') {
+      issues.push({ path: `${path}/trim`, message: 'trim draws an outline on — a rectangle is drawn whole', severity: 'warning' });
+    }
+  }
+  if (layer.type === 'text' && layer.count && (layer.clock || layer.timer)) {
+    issues.push({ path: `${path}/count`, message: 'a clock or timer already moves on its own — count does nothing here', severity: 'warning' });
+  }
+  return issues;
+}
+
 /** A warning never blocks a save; only the absence of `severity` or `'error'` does. */
 function isBlocking(issue: ValidationIssue): boolean {
   return issue.severity !== 'warning';
@@ -299,6 +384,11 @@ export function validateCompositionSemantics(
   /** Resolved channel → the layer path that claimed it, for the duplicate check. */
   const claimedChannels = new Map<string, string>();
 
+  // Typed fields (Phase 9 Wave B): what JSON Schema cannot say about one.
+  for (const [name, spec] of Object.entries(comp.fields ?? {})) {
+    for (const message of fieldSpecProblems(spec)) issues.push({ path: `/fields/${name}`, message });
+  }
+
   walkLayers(comp.layers, (layer, path) => {
     if (seenIds.has(layer.id)) {
       issues.push({ path: `${path}/id`, message: `duplicate layer id "${layer.id}"` });
@@ -310,6 +400,8 @@ export function validateCompositionSemantics(
     }
 
     issues.push(...checkRules(layer, path, false));
+    issues.push(...checkDrives(layer, path, false));
+    issues.push(...checkChartProps(layer, path));
 
     if (layer.type === 'composition') {
       /*
@@ -437,7 +529,27 @@ export function validateCompositionSemantics(
       }
     }
 
-    if (layer.type === 'shape' && layer.shape === 'path') {
+    if (layer.type === 'text' && layer.timer) {
+      // Same reasoning as clock + binding: a field nobody can type into.
+      if (layer.binding) {
+        issues.push({
+          path: `${path}/binding`,
+          message: 'a text layer cannot have both `timer` and `binding` — the timer always wins',
+        });
+      }
+      if (layer.clock) {
+        issues.push({ path: `${path}/timer`, message: 'a text layer cannot be both a clock and a timer' });
+      }
+      const zone = layer.timer.timezone;
+      if (zone !== undefined && !isValidTimeZone(zone)) {
+        issues.push({ path: `${path}/timer/timezone`, message: `unknown IANA time zone "${zone}"` });
+      }
+      if (layer.timer.until !== undefined && layer.timer.mode !== 'countdown') {
+        issues.push({ path: `${path}/timer/until`, message: '`until` only applies to a countdown' });
+      }
+    }
+
+    if (layer.type === 'shape' && layer.shape === 'path' && !layer.plot) {
       for (const issue of pathDataIssues(layer.path, `${path}/path`, 'shape')) {
         issues.push(issue);
       }
@@ -478,9 +590,23 @@ export function validateCompositionSemantics(
 
     if (layer.type === 'media') issues.push(...checkMedia(layer, path, false));
 
-    // Tables and crawls share the pipeline, and its checks that need no columns.
-    if (layer.type === 'table' || layer.type === 'crawl') {
+    // Tables, crawls and rolls share the pipeline, and its checks that need no columns.
+    if (layer.type === 'table' || layer.type === 'crawl' || layer.type === 'roll') {
       issues.push(...checkDateTransforms(layer.transforms, path));
+    }
+    if (layer.type === 'shape' && layer.plot) issues.push(...checkDateTransforms(layer.plot.transforms, `${path}/plot`));
+
+    if (layer.type === 'roll') {
+      // A roll with no source and no rows scrolls nothing, silently.
+      if (layer.source === undefined && !(layer.data?.rows.length)) {
+        issues.push({ path, message: 'this roll has no text — give it a source, or rows to show', severity: 'warning' });
+      }
+      if (layer.loopGap !== undefined && layer.end !== 'loop') {
+        issues.push({ path: `${path}/loopGap`, message: 'loopGap is the space before a loop starts again — this roll does not loop', severity: 'warning' });
+      }
+      if (!layer.size || layer.size.width <= 0 || layer.size.height <= 0) {
+        issues.push({ path: `${path}/size`, message: 'a roll scrolls inside its box — give it a width and a height' });
+      }
     }
 
     if (layer.type === 'table') {
@@ -494,7 +620,7 @@ export function validateCompositionSemantics(
       const cellIds = new Set<string>();
       layer.row.cells.forEach((cell, i) => {
         const cellPath = `${path}/row/cells/${i}`;
-        if (cell.type === 'group' || cell.type === 'table' || cell.type === 'composition') {
+        if (cell.type === 'group' || cell.type === 'table' || cell.type === 'composition' || cell.type === 'roll') {
           issues.push({
             path: `${cellPath}/type`,
             message: `a table cell cannot be a ${cell.type} layer`,
@@ -505,6 +631,8 @@ export function validateCompositionSemantics(
         }
         cellIds.add(cell.id);
         issues.push(...checkRules(cell, cellPath, true));
+        issues.push(...checkDrives(cell, cellPath, true));
+        issues.push(...checkChartProps(cell, cellPath));
         if (cell.type === 'media') {
           issues.push(...checkMedia(cell, cellPath, true, (layer.cycle?.dwell ?? 0) > 0));
           // One failed tile would turn a whole grid of cameras (Wave 8).
@@ -538,6 +666,10 @@ export function validateCompositionSemantics(
       for (const [i, t] of (layer.transforms ?? []).entries()) {
         if (t.op === 'rank') declared.add(t.as ?? DEFAULT_RANK_KEY);
         if (t.op === 'compose') declared.add(t.as);
+        if (t.op === 'share') {
+          declared.add(t.as ?? DEFAULT_SHARE_KEY);
+          if (t.cumulative) declared.add(t.cumulative);
+        }
         if (t.op === 'lookup') {
           if (t.columns) for (const c of t.columns) declared.add(c);
           else openColumns = true;
@@ -888,6 +1020,18 @@ export function validateDataSources(doc: unknown): ValidationResult {
         path: `/sources/${i}/timezone`,
         message: 'whole local days need the zone they are local to — e.g. America/Chicago',
       });
+    }
+
+    // Wave R: a text is kept in the project or fetched, never both.
+    if (source.type === 'text') {
+      if (source.body !== undefined && source.url !== undefined) {
+        semantic.push({ path: `/sources/${i}/url`, message: 'a text is kept in the project or fetched from a URL — not both' });
+      }
+      const problem = source.body !== undefined ? textBodyProblem(source.body) : null;
+      if (problem) semantic.push({ path: `/sources/${i}/body`, message: problem });
+    }
+    if (source.type === 'poll') {
+      for (const p of pollDefProblems(source)) semantic.push({ path: `/sources/${i}/${p.path}`, message: p.message });
     }
 
     if (source.type === 'air-quality') {

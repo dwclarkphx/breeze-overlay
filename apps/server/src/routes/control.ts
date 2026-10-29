@@ -19,17 +19,21 @@ import { actorOf, describeAgent, record } from '../audit.js';
 import { config } from '../config.js';
 import { projectModes, readMode } from '../mode.js';
 import { fail } from '../errors.js';
+import { readTimerRequest } from '../timer-request.js';
+import { readScrollRequest } from '../scroll-request.js';
 import { SESSION_COOKIE, keyMatches, readCookie, sameOrigin, type Sessions } from '../session.js';
 import { controlPage, isFedSource, type ControlPanelBinding } from '../pages.js';
 import { channelKey, parseClientMessage, type ControlHub, type ControlVerb } from '../hub.js';
 import type { DataRegistry } from '../data/registry.js';
 import { readDataSources } from '../data/sources.js';
-import { getChannel, getComposition, readProject } from '../store.js';
+import { getChannel, getComposition, listAssets, readProject } from '../store.js';
 import {
   bindingsJsonSchema,
   collectBindings,
   collectOverrideBindings,
+  collectScrolls,
   collectSources,
+  collectTimers,
   sceneElements,
   stepCount,
   type DataSourceDef,
@@ -328,6 +332,78 @@ export async function registerControlRoutes(
   app.post('/api/control/:id/:compId/cycle', cycle);
 
   /**
+   * Operator timers (Phase 9 Wave B): `?action=start|pause|toggle|reset|set|add`,
+   * `&id=` (default `main`), `&value=` for set (`8:00`) and add (`-10`).
+   * Per channel — this graphic's own timers.
+   */
+  const timer = async (
+    req: FastifyRequest<{ Params: { id: string; compId: string } }>,
+    reply: FastifyReply,
+  ) => {
+    await getChannel(req.params.id, req.params.compId);
+    const parsed = readTimerRequest(tableParams(req));
+    if (!parsed.ok) {
+      reply.code(400);
+      return fail(parsed.code, parsed.params);
+    }
+    const channel = channelKey(req.params.id, req.params.compId);
+    const delivered = hub.dispatch(channel, {
+      verb: 'timer',
+      timer: { action: parsed.action, id: parsed.id, ...(parsed.value !== undefined ? { value: parsed.value } : {}) },
+      source: 'rest',
+    });
+    return {
+      ok: true,
+      verb: 'timer',
+      channel,
+      delivered,
+      timer: { id: parsed.id, action: parsed.action, state: hub.timerState(channel, parsed.id) ?? null },
+    };
+  };
+
+  app.get('/api/control/:id/:compId/timer', timer);
+  app.post('/api/control/:id/:compId/timer', timer);
+
+  /**
+   * The roll transport (Wave R, ROLLS.md §5.3): `?action=` one of play, pause,
+   * toggle, forward, backward, reverse, faster, slower, speed, jog, seek,
+   * restart, end, reset; `&id=` (default `main`); `&value=` for speed (`1.5`),
+   * jog (`-3`) and seek (`1:30`, `50%`). Per channel, like timers.
+   */
+  const scroll = async (
+    req: FastifyRequest<{ Params: { id: string; compId: string } }>,
+    reply: FastifyReply,
+  ) => {
+    await getChannel(req.params.id, req.params.compId);
+    const parsed = readScrollRequest(tableParams(req));
+    if (!parsed.ok) {
+      reply.code(400);
+      return fail(parsed.code, parsed.params);
+    }
+    const channel = channelKey(req.params.id, req.params.compId);
+    const delivered = hub.dispatch(channel, {
+      verb: 'scroll',
+      scroll: {
+        action: parsed.action,
+        id: parsed.id,
+        ...(parsed.value !== undefined ? { value: parsed.value } : {}),
+        ...(parsed.percent ? { percent: true } : {}),
+      },
+      source: 'rest',
+    });
+    return {
+      ok: true,
+      verb: 'scroll',
+      channel,
+      delivered,
+      scroll: { id: parsed.id, action: parsed.action, state: hub.scrollState(channel, parsed.id), info: hub.scrollInfo(channel, parsed.id) ?? null },
+    };
+  };
+
+  app.get('/api/control/:id/:compId/scroll', scroll);
+  app.post('/api/control/:id/:compId/scroll', scroll);
+
+  /**
    * Take a whole scene down in one call.
    *
    * A page reload does the same thing far more bluntly — it drops the sockets,
@@ -388,6 +464,27 @@ export async function registerControlRoutes(
   app.post('/api/control/:id/:compId/update', update);
 
   /**
+   * Cue → take (Phase 9 Wave A): field values and PLAY as one command. On air,
+   * the graphic runs its outro and comes back with the new values; off air it
+   * simply plays them in. Body for POST, query string for GET — no fields is
+   * allowed, and is a plain take of what the graphic already holds.
+   */
+  const take = async (
+    req: FastifyRequest<{ Params: { id: string; compId: string }; Body?: Record<string, unknown> }>,
+  ) => {
+    await getChannel(req.params.id, req.params.compId);
+    const query = { ...(req.query as Record<string, unknown>) };
+    delete query['key'];
+    const data = req.method === 'POST' && req.body && typeof req.body === 'object' ? req.body : query;
+    const channel = channelKey(req.params.id, req.params.compId);
+    const delivered = hub.dispatch(channel, { verb: 'take', data, source: 'rest' });
+    return { ok: true, verb: 'take', channel, delivered, data };
+  };
+
+  app.get('/api/control/:id/:compId/take', take);
+  app.post('/api/control/:id/:compId/take', take);
+
+  /**
    * What is this graphic doing right now?
    *
    * `?data=0` leaves out the retained field data — the same opt-out as the
@@ -400,7 +497,15 @@ export async function registerControlRoutes(
       const channel = channelKey(req.params.id, req.params.compId);
       const state = hub.state(channel);
       const lean = req.query.data === '0' || req.query.data === 'false';
-      return { channel, state: lean ? { ...state, data: {} } : state };
+      // Timers and scrolls ride beside the data too, so a lean poller (Companion) still gets them.
+      const timers = hub.timersPayload(channel);
+      const scrolls = hub.scrollSummary(channel);
+      return {
+        channel,
+        state: lean ? { ...state, data: {} } : state,
+        ...(timers ? { timers } : {}),
+        ...(scrolls.length ? { scrolls: { clock: Date.now(), items: scrolls } } : {}),
+      };
     },
   );
 
@@ -493,6 +598,7 @@ export async function registerControlRoutes(
         kind: b.kind,
         label: b.mountLabel,
         defaultValue: b.defaultValue,
+        ...(b.field ? { field: b.field } : {}),
       }));
 
       const bindings = [...feds, ...editable, ...overrides];
@@ -528,6 +634,47 @@ export async function registerControlRoutes(
       };
       walk(composition);
 
+      /*
+       * Sport game tables this graphic reads (Phase 9 Wave B) — the Game
+       * block's score buttons. Any table of a template counts as reading the
+       * sport: a recap that shows only the teams table still wants the score
+       * on its panel, so the game table of the same sport and rules is found.
+       */
+      const sportKeys = new Set<string>();
+      for (const id of visited) {
+        const comp = id === composition.id ? composition : byCompId.get(id);
+        for (const ref of comp ? collectSources(comp) : []) {
+          const def = byId.get(ref.id);
+          if (def?.template) sportKeys.add(`${def.template.sport}/${def.template.ruleset}`);
+        }
+      }
+      const games = defs
+        .filter((d) => d.type === 'manual' && d.template?.table === 'game' && sportKeys.has(`${d.template.sport}/${d.template.ruleset}`))
+        .map((d) => {
+          const teams = defs.find(
+            (o) => o.template?.table === 'teams' && o.template.sport === d.template!.sport && o.template.ruleset === d.template!.ruleset,
+          );
+          return { id: d.id, name: d.name, sport: d.template!.sport, ruleset: d.template!.ruleset, ...(teams ? { teams: teams.id } : {}) };
+        });
+
+      /*
+       * Polls and operator-changeable texts this graphic reads (Wave R) — the
+       * Poll and Text blocks. Read through its mounts too, as the Game block's
+       * sport is: a results board mounted in a full-screen scene still wants
+       * its tally buttons on the scene's panel.
+       */
+      const readIds = new Set<string>();
+      for (const id of visited) {
+        const comp = id === composition.id ? composition : byCompId.get(id);
+        for (const ref of comp ? collectSources(comp) : []) readIds.add(ref.id);
+      }
+      const polls = defs
+        .filter((d): d is Extract<DataSourceDef, { type: 'poll' }> => d.type === 'poll' && readIds.has(d.id))
+        .map((d) => ({ id: d.id, name: d.name, question: d.question, options: d.options, editable: d.operatorEditable === true }));
+      const texts = defs
+        .filter((d): d is Extract<DataSourceDef, { type: 'text' }> => d.type === 'text' && d.url === undefined && d.operatorEditable === true && readIds.has(d.id))
+        .map((d) => ({ id: d.id, name: d.name, body: d.body ?? '' }));
+
       reply.type('text/html; charset=utf-8');
       reply.header('cache-control', 'no-store');
       return controlPage({
@@ -540,6 +687,18 @@ export async function registerControlRoutes(
         sources: watched,
         mode: await readMode(req.params.id),
         modes: projectModes(project),
+        timers: collectTimers(composition.layers, (id) => byCompId.get(id)),
+        games,
+        scrolls: collectScrolls(composition.layers, (id) => byCompId.get(id)),
+        polls,
+        texts,
+        ...(bindings.some((b) => b.kind === 'asset')
+          ? {
+              assets: (await listAssets(req.params.id))
+                .filter((a) => a.state !== 'retired')
+                .map((a) => ({ path: a.path, name: a.title || a.originalName || a.path, kind: a.kind })),
+            }
+          : {}),
       });
     },
   );

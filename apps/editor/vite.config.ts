@@ -183,6 +183,23 @@ const MOVEABLE_PKGS = new Set([
 ]);
 
 /**
+ * PSD import's parser and its private dependencies.
+ *
+ * Unlike the two groups above, this chunk is *lazy*: `state/psd-file.ts`
+ * reaches ag-psd through a dynamic import, so the chunk downloads only when an
+ * operator actually opens a PSD. Naming it changes nothing about that — it only
+ * replaces the generic `dist-<hash>.js` Rolldown derived from ag-psd's entry
+ * path, which told nobody reading the build output what it was.
+ *
+ * The hazard to watch: if anything in the eagerly loaded graph ever imports
+ * `pako` or `base64-js` directly, the entry chunk would have to import this
+ * whole chunk statically to reach it, and ~270 kB of PSD parser would land in
+ * every editor load. After touching this list, check that `vendor-psd` does not
+ * appear in the built `index.html`'s modulepreload links.
+ */
+const PSD_PKGS = new Set(['ag-psd', 'pako', 'base64-js']);
+
+/**
  * Resolve a module id to its owning package name.
  *
  * pnpm ids look like `/…/node_modules/.pnpm/react@19.2.8/node_modules/react/index.js`,
@@ -232,6 +249,19 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     sourcemap: true,
+    /*
+     * Raised from Vite's 500 kB default, which is tuned for sites fetched over
+     * the public internet. The editor is served by the same Breeze process on
+     * the station LAN, where the ~160 kB gzipped app chunk is a few
+     * milliseconds on first load and a cache hit after that. This setting only
+     * controls the build-time notice — it changes nothing in the output.
+     *
+     * 700 rather than off: the app chunk sat at ~580 kB when this was set
+     * (0.79.0), so the warning still fires if it grows by a meaningful amount,
+     * which is the point at which lazy-loading the heavy panels (DataPanel,
+     * ChartsSection, SportTemplates) becomes worth the Suspense states.
+     */
+    chunkSizeWarningLimit: 700,
     rollupOptions: {
       output: {
         banner: LICENSE_BANNER,
@@ -254,6 +284,7 @@ export default defineConfig({
           if (!pkg) return undefined;
           if (REACT_PKGS.has(pkg)) return 'vendor-react';
           if (MOVEABLE_PKGS.has(pkg)) return 'vendor-moveable';
+          if (PSD_PKGS.has(pkg)) return 'vendor-psd';
           return undefined;
         },
       },

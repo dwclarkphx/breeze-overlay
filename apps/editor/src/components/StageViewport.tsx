@@ -344,6 +344,8 @@ export function StageViewport(): JSX.Element {
         hlsScript: HLS_SCRIPT_URL,
         // The picture while authoring, not only once previewed on air.
         mediaWhenIdle: true,
+        // A roll shows its first lines while it is being styled (Wave R).
+        poseRolls: true,
         autoPlay: false,
         data: {
           ...(Object.keys(datasets).length ? { [DATA_UPDATE_KEY]: datasets } : {}),

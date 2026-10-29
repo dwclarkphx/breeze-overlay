@@ -31,6 +31,9 @@ import {
   referencedAssets,
   rewriteAssetReferences,
   sceneElements,
+  validateRundowns,
+  emptyRundowns,
+  type RundownsFile,
   type AssetEdit,
   type AssetRef,
   type AssetUsage,
@@ -49,6 +52,7 @@ import {
   projectAssetsFile,
   projectDir,
   projectFile,
+  projectRundownsFile,
   projectsDir,
 } from './config.js';
 
@@ -612,6 +616,55 @@ export async function updateAssets(
   return withAssetLock(projectId, async () => {
     const current = await readAssets(projectId);
     return writeAssetsFile(projectId, await mutate(current));
+  });
+}
+
+/* -------------------------------------------------------------- rundowns */
+
+export class RundownValidationError extends Error {
+  constructor(readonly issues: Array<{ path: string; message: string }>) {
+    super(`invalid rundowns — ${issues.map((i) => `${i.path}: ${i.message}`).join('; ')}`);
+    this.name = 'RundownValidationError';
+  }
+}
+
+/**
+ * A project's rundowns — `projects/<id>/rundowns.json` (Phase 9 Wave A).
+ *
+ * Missing is an empty list, not an error, and nothing is written until the
+ * first save. A corrupt file reads as empty rather than taking the project
+ * down — the same call `readAssets` and `readDataSources` make.
+ */
+export async function readRundowns(projectId: string): Promise<RundownsFile> {
+  assertSafeId(projectId);
+  let raw: string;
+  try {
+    raw = await fs.readFile(projectRundownsFile(projectId), 'utf8');
+  } catch {
+    return emptyRundowns();
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (validateRundowns(parsed).length) return emptyRundowns();
+    return parsed as RundownsFile;
+  } catch {
+    return emptyRundowns();
+  }
+}
+
+/**
+ * Replace a project's rundowns, under the same per-project lock as the asset
+ * index (ASSETS.md Wave A): two panels saving at once queue rather than race.
+ * Every item must name a composition the project has.
+ */
+export async function writeRundowns(projectId: string, doc: RundownsFile): Promise<RundownsFile> {
+  const project = await readProject(projectId);
+  const issues = validateRundowns(doc, new Set(project.compositions.map((c) => c.id)));
+  if (issues.length) throw new RundownValidationError(issues);
+  return withAssetLock(projectId, async () => {
+    await fs.mkdir(projectDir(projectId), { recursive: true });
+    await writeAtomic(projectRundownsFile(projectId), `${JSON.stringify(doc, null, 2)}\n`);
+    return doc;
   });
 }
 

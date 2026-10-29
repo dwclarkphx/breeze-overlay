@@ -28,8 +28,12 @@
     "apps/server/client/backup.ts",
     "apps/server/client/portal.ts",
     "apps/server/client/control.ts",
+    "apps/server/client/rundown.ts",
     "apps/server/src/pages.ts",
-    "apps/server/src/audit.ts"
+    "apps/server/src/audit.ts",
+    "apps/editor/src/components/SportTemplates.tsx",
+    "apps/editor/src/components/ChartsSection.tsx",
+    "apps/editor/src/components/LiveSourceFields.tsx"
   ],
   "//scan": "Exactly the surfaces the sweep covers (I18N.md §1.1). An include list rather than exclusions, because the things left out are left out for a reason and a new file should have to argue its way in: apps/server/client/player.ts is frozen diagnostics on the /play page, the data and media adapters are developer-facing, and the routes' error strings become codes under §5.1 rather than catalogue entries.",
   "scan": [
@@ -37,6 +41,7 @@
     "apps/server/client/backup.ts",
     "apps/server/client/control.ts",
     "apps/server/client/portal.ts",
+    "apps/server/client/rundown.ts",
     "apps/server/src/audit.ts",
     "apps/server/src/pages.ts"
   ],
@@ -60,6 +65,7 @@
     "apps/server/client/backup.ts": "backup",
     "apps/server/client/control.ts": "control",
     "apps/server/client/portal.ts": "portal",
+    "apps/server/client/rundown.ts": "rundown",
     "apps/server/src/pages.ts": "server.pages"
   },
   "//allow": "Text that is deliberately not translated even inside a swept file — product names, units, and the font sample in the layers panel. Kept short on purpose: every entry is a hole in the rule.",

@@ -249,6 +249,16 @@ describe('GET /docs', () => {
     expect(html).not.toMatch(/<img[^>]+src="images\//);
   });
 
+  it('serves the sport templates reference, and links the two to each other where they are served', async () => {
+    expect(html).toContain('href="/docs/sport-templates"');
+    const res = await app.inject({ method: 'GET', url: '/docs/sport-templates' });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('id="basketball"');
+    expect(res.body).toContain('href="/docs#sport-templates"');
+    const anchors = [...res.body.matchAll(/href="#([^"]+)"/g)].map((m) => m[1]!);
+    expect(anchors.filter((a) => !res.body.includes(`id="${a}"`))).toEqual([]);
+  });
+
   it('refuses to serve anything outside docs/images', async () => {
     const res = await app.inject({
       method: 'GET',

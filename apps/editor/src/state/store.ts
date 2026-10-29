@@ -27,6 +27,7 @@ import {
   type AssetUsage,
   type Composition,
   type DataColumn,
+  type SportTemplateRef,
   type DataSet,
   type Layer,
   type LayerType,
@@ -181,7 +182,7 @@ export interface EditorState {
    * source ids and real column keys instead of a free-text field. Loaded with
    * the project and refreshed when the data panel saves one.
    */
-  dataSources: Array<{ id: string; name: string; columns: DataColumn[] }>;
+  dataSources: Array<{ id: string; name: string; columns: DataColumn[]; template?: SportTemplateRef }>;
 
   /**
    * The rows behind those sources, keyed by source id — what the stage preview
@@ -871,6 +872,8 @@ export const useEditor = create<EditorState>((set, get) => ({
           id: s.def.id,
           name: s.def.name,
           columns: s.columns,
+          // Sport template (Phase 9 Wave B): offers the sport's timers as presets.
+          ...(s.def.template ? { template: s.def.template } : {}),
         })),
         ...(changed
           ? { datasets, datasetRevision: get().datasetRevision + 1 }

@@ -23,6 +23,7 @@ import {
   displayName,
   CRAWL_SEPARATOR_PRESETS,
   DEFAULT_CRAWL_SEPARATOR,
+  DEFAULT_SHARE_KEY,
   FILTER_OPS,
   NAMED_EASES,
   DATE_KEEPS,
@@ -60,6 +61,19 @@ import {
   type TextLayer,
   type TextClock,
   type TextStyle,
+  type TextTimer,
+  type FieldKind,
+  type FieldSpec,
+  FIELD_KINDS,
+  fieldSpecProblems,
+  sportTimersFor,
+  type TimerEnd,
+  type TimerMode,
+  TIMER_ENDS,
+  TIMER_MODES,
+  formatTimer,
+  formatTimerMs,
+  parseTimerInput,
   type LookupTransform,
   type MediaKind,
   type MediaLayer,
@@ -84,6 +98,7 @@ import {
 
 import { LayerThumb } from './LayerThumb.js';
 import { RulesSection } from './RulesSection.js';
+import { CountSection, DrivesSection, RollSection, ShapeChartFields } from './ChartsSection.js';
 import { useEditor } from '../state/store.js';
 import {
   addPoint,
@@ -166,6 +181,7 @@ export function PropertiesPanel(): JSX.Element {
               onChange={(e) => run({ kind: 'setDuration', duration: Number(e.target.value) })}
             />
           </Field>
+          <FieldsSection composition={composition} onChange={(name, spec) => run({ kind: 'setField', name, spec })} />
           <p className="hint">{t('editor.properties.selectALayer')}</p>
         </div>
       </div>
@@ -253,6 +269,19 @@ export function PropertiesPanel(): JSX.Element {
   const overflowing = layer.type === 'text' && overflowingText.includes(layer.id);
 
   const isAnimated = (prop: AnimatableProp) => propIsAnimated(layer, prop);
+
+  /** A keyframable number with its stopwatch — what the effects rows are, for the chart props (Wave R). */
+  const stopwatchField = (prop: AnimatableProp, label: string, step: number): JSX.Element => (
+    <Field label={label}>
+      <button className={`stopwatch${isAnimated(prop) ? ' on' : ''}`} onClick={() => toggleKeyframe(prop)}>⏱</button>
+      <input
+        type="number"
+        step={step}
+        value={round(displayValue(layer, prop, playhead))}
+        onChange={(e) => setValue(prop, Number(e.target.value))}
+      />
+    </Field>
+  );
 
   // Same command the stage dispatches when you drag, so typing a number and
   // dragging on canvas cannot behave differently.
@@ -459,6 +488,14 @@ export function PropertiesPanel(): JSX.Element {
 
         {layer.type === 'shape' && (
           <Section title={t('editor.properties.sectionShape')}>
+            <Field label={t('editor.properties.colorBinding')}>
+              <input
+                value={layer.colorBinding ?? ''}
+                placeholder={t('editor.properties.colorBindingPlaceholder')}
+                title={t('editor.properties.colorBindingTitle')}
+                onChange={(e) => patch({ colorBinding: e.target.value.trim() || undefined } as Partial<Layer>)}
+              />
+            </Field>
             <Field label={t('editor.properties.kind')}>
               <select
                 value={layer.shape}
@@ -547,12 +584,14 @@ export function PropertiesPanel(): JSX.Element {
                 />
               </Field>
             )}
-            {layer.shape === 'path' && (
+            {layer.shape === 'path' && !layer.plot && (
               <PathEditor
                 data={layer.path}
                 onChange={(path) => patch({ path } as Partial<Layer>)}
               />
             )}
+            {/* Wave R: arcs, draw-on and paths plotted from rows (CHARTS.md §4). */}
+            <ShapeChartFields layer={layer} sources={dataSources} stopwatch={stopwatchField} onPatch={patch} />
           </Section>
         )}
 
@@ -574,6 +613,14 @@ export function PropertiesPanel(): JSX.Element {
                   onChange={(e) =>
                     patch({ binding: e.target.value || undefined } as Partial<Layer>)
                   }
+                />
+              </Field>
+              <Field label={t('editor.properties.colorBinding')}>
+                <input
+                  value={layer.colorBinding ?? ''}
+                  placeholder={t('editor.properties.colorBindingPlaceholder')}
+                  title={t('editor.properties.colorBindingTitle')}
+                  onChange={(e) => patch({ colorBinding: e.target.value.trim() || undefined } as Partial<Layer>)}
                 />
               </Field>
             </Section>
@@ -643,6 +690,30 @@ export function PropertiesPanel(): JSX.Element {
               layer={layer}
               onChange={(clock) => patch({ clock } as Partial<Layer>)}
             />
+            <TimerSection
+              layer={layer}
+              onChange={(timer) => patch({ timer } as Partial<Layer>)}
+            />
+            <CountSection layer={layer} onPatch={patch} />
+          </>
+        )}
+
+        {/* Rolls (Wave R, ROLLS.md): long text under the operator's transport. */}
+        {layer.type === 'roll' && (
+          <>
+            <RollSection layer={layer} sources={dataSources} onPatch={patch} />
+            <TextStyleSection
+              title={t('editor.charts.styleLines')}
+              style={layer.style}
+              onChange={(style) => patch({ style } as Partial<Layer>)}
+            />
+            {layer.headingStyle && (
+              <TextStyleSection
+                title={t('editor.charts.styleHeadings')}
+                style={layer.headingStyle}
+                onChange={(headingStyle) => patch({ headingStyle } as Partial<Layer>)}
+              />
+            )}
           </>
         )}
 
@@ -1117,6 +1188,14 @@ export function PropertiesPanel(): JSX.Element {
           cellColumns={cellColumns}
           sources={dataSources}
           modes={projectModeNames}
+          onPatch={patch}
+        />
+
+        <DrivesSection
+          layer={layer}
+          inCell={cellOwner !== null}
+          cellColumns={cellColumns}
+          sources={dataSources}
           onPatch={patch}
         />
 
@@ -1867,15 +1946,18 @@ function MaskSection({
 function TextStyleSection({
   style,
   onChange,
+  title,
 }: {
   style: TextStyle;
   onChange: (style: TextStyle) => void;
+  /** A roll has two (Wave R): its lines and its headings. */
+  title?: string;
 }): JSX.Element {
   const t = useT();
   const set = (patch: Partial<TextStyle>) => onChange({ ...style, ...patch });
 
   return (
-    <Section title={t('editor.properties.sectionType')}>
+    <Section title={title ?? t('editor.properties.sectionType')}>
       <Field label={t('editor.properties.font')}>
         <input value={style.fontFamily} onChange={(e) => set({ fontFamily: e.target.value })} />
       </Field>
@@ -2123,6 +2205,382 @@ function ClockSection({
           {layer.binding && (
             <p className="prop-warning" data-warning="clock-binding">
               {t('editor.properties.clockBindingClash')}
+            </p>
+          )}
+        </>
+      )}
+    </Section>
+  );
+}
+
+/**
+ * Operator timer on a text layer (Phase 9 Wave B) — a game clock, a speaker
+ * timer, a countdown to the service. The layer shows the timer; the operator
+ * runs it from the control panel, Companion or REST, and the hub holds the
+ * state per channel. The preview here is where it starts, from the real
+ * formatter.
+ */
+const FIELD_KIND_LABELS: Record<FieldKind | 'text', string> = {
+  text: 'editor.properties.fieldKind.text',
+  number: 'editor.properties.fieldKind.number',
+  boolean: 'editor.properties.fieldKind.boolean',
+  enum: 'editor.properties.fieldKind.enum',
+  color: 'editor.properties.fieldKind.color',
+  asset: 'editor.properties.fieldKind.asset',
+};
+
+/** `1, 2, 3` → `[1, 2, 3]`; anything that is not a number is dropped. */
+function numberList(text: string): number[] | undefined {
+  const list = text
+    .split(',')
+    .filter((part) => part.trim() !== '')
+    .map((part) => Number(part.trim()))
+    .filter((n) => Number.isFinite(n) && n !== 0);
+  return list.length ? list : undefined;
+}
+
+/** The reverse of `optionLines`, for the box. */
+function optionText(options: ReadonlyArray<{ value: string; label?: string }>): string {
+  // i18n-ignore-next-line — the option syntax, not prose
+  return options.map((o) => (o.label ? `${o.value} | ${o.label}` : o.value)).join('\n');
+}
+
+/** One option per line, `value` or `value | label`. */
+function optionLines(text: string): Array<{ value: string; label?: string }> {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const bar = line.indexOf('|');
+      if (bar === -1) return { value: line };
+      const value = line.slice(0, bar).trim();
+      const label = line.slice(bar + 1).trim();
+      return label && label !== value ? { value, label } : { value };
+    });
+}
+
+/**
+ * Typed fields (Phase 9 Wave B): say what kind of value each field is, so the
+ * control panel draws a number with buttons, a toggle, a select, a colour
+ * picker or an asset picker. Lists every bound field, and takes new ones that
+ * nothing binds to yet — a toggle a layer rule reads.
+ */
+function FieldsSection({
+  composition,
+  onChange,
+}: {
+  composition: Composition;
+  onChange: (name: string, spec: FieldSpec | undefined) => void;
+}): JSX.Element {
+  const t = useT();
+  const [adding, setAdding] = useState('');
+  const declared = composition.fields ?? {};
+  const bound = collectBindings({ ...composition, fields: {} })
+    .filter((b) => b.kind === 'string' || b.kind === 'image' || b.kind === 'color')
+    .map((b) => b.name);
+  const names = [...new Set([...bound, ...Object.keys(declared)])];
+
+  const kindOf = (name: string): FieldKind | 'text' => declared[name]?.kind ?? 'text';
+  const blank = (kind: FieldKind): FieldSpec =>
+    kind === 'enum' ? { kind, options: [{ value: 'A' }] } : ({ kind } as FieldSpec);
+  const set = (name: string, patch: Record<string, unknown>) => {
+    const current = declared[name];
+    if (!current) return;
+    const next = { ...current, ...patch } as Record<string, unknown>;
+    for (const [k, v] of Object.entries(next)) if (v === undefined || v === '') delete next[k];
+    onChange(name, next as unknown as FieldSpec);
+  };
+
+  return (
+    <Section title={t('editor.properties.sectionFields')}>
+      {names.length === 0 && <p className="prop-note">{t('editor.properties.fieldsNone')}</p>}
+      {names.map((name) => {
+        const spec = declared[name];
+        return (
+          <div key={name} className="field-decl" data-field={name}>
+            <Field label={name}>
+              <select
+                value={kindOf(name)}
+                onChange={(e) => {
+                  const kind = e.target.value as FieldKind | 'text';
+                  onChange(name, kind === 'text' ? undefined : blank(kind));
+                }}
+              >
+                {(['text', ...FIELD_KINDS] as const).map((k) => (
+                  <option key={k} value={k}>
+                    {t(FIELD_KIND_LABELS[k])}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            {spec && (
+              <Field label={t('editor.properties.fieldLabel')}>
+                <input value={spec.label ?? ''} onChange={(e) => set(name, { label: e.target.value || undefined })} />
+              </Field>
+            )}
+            {spec?.kind === 'number' && (
+              <>
+                <Field label={t('editor.properties.fieldMin')}>
+                  <input type="number" value={spec.min ?? ''} onChange={(e) => set(name, { min: e.target.value === '' ? undefined : Number(e.target.value) })} />
+                </Field>
+                <Field label={t('editor.properties.fieldMax')}>
+                  <input type="number" value={spec.max ?? ''} onChange={(e) => set(name, { max: e.target.value === '' ? undefined : Number(e.target.value) })} />
+                </Field>
+                <Field label={t('editor.properties.fieldStep')}>
+                  <input type="number" min={0} value={spec.step ?? ''} onChange={(e) => set(name, { step: e.target.value === '' ? undefined : Number(e.target.value) })} />
+                </Field>
+                <Field label={t('editor.properties.fieldButtons')}>
+                  <input
+                    defaultValue={(spec.buttons ?? []).join(', ')}
+                    placeholder="1, 2, 3"
+                    onBlur={(e) => set(name, { buttons: numberList(e.target.value) })}
+                  />
+                </Field>
+                <Field label={t('editor.properties.fieldPad')}>
+                  <input type="number" min={0} max={12} value={spec.pad ?? ''} onChange={(e) => set(name, { pad: e.target.value === '' ? undefined : Number(e.target.value) })} />
+                </Field>
+                <Field label={t('editor.properties.fieldPrefix')}>
+                  <input value={spec.prefix ?? ''} onChange={(e) => set(name, { prefix: e.target.value || undefined })} />
+                </Field>
+                <Field label={t('editor.properties.fieldSuffix')}>
+                  <input value={spec.suffix ?? ''} onChange={(e) => set(name, { suffix: e.target.value || undefined })} />
+                </Field>
+              </>
+            )}
+            {spec?.kind === 'boolean' && (
+              <>
+                <Field label={t('editor.properties.fieldOnText')}>
+                  <input value={spec.onText ?? ''} onChange={(e) => set(name, { onText: e.target.value || undefined })} />
+                </Field>
+                <Field label={t('editor.properties.fieldOffText')}>
+                  <input value={spec.offText ?? ''} onChange={(e) => set(name, { offText: e.target.value || undefined })} />
+                </Field>
+              </>
+            )}
+            {spec?.kind === 'enum' && (
+              <Field label={t('editor.properties.fieldOptions')}>
+                <textarea
+                  rows={4}
+                  defaultValue={optionText(spec.options)}
+                  title={t('editor.properties.fieldOptionsTitle')}
+                  onBlur={(e) => {
+                    const options = optionLines(e.target.value);
+                    if (options.length) set(name, { options, default: undefined });
+                  }}
+                />
+              </Field>
+            )}
+            {spec?.kind === 'asset' && (
+              <Field label={t('editor.properties.fieldAssetKind')}>
+                <select value={spec.assetKind ?? 'image'} onChange={(e) => set(name, { assetKind: e.target.value })}>
+                  <option value="image">{t('editor.properties.fieldAssetImage')}</option>
+                  <option value="video">{t('editor.properties.fieldAssetVideo')}</option>
+                </select>
+              </Field>
+            )}
+            {spec && fieldSpecProblems(spec).length > 0 && (
+              <p className="prop-warning" data-warning="field">{fieldSpecProblems(spec).join('; ')}</p>
+            )}
+          </div>
+        );
+      })}
+      <Field label={t('editor.properties.fieldAdd')}>
+        <input
+          value={adding}
+          placeholder={t('editor.properties.fieldAddPlaceholder')}
+          onChange={(e) => setAdding(e.target.value)}
+          onKeyDown={(e) => {
+            const name = adding.trim();
+            if (e.key !== 'Enter' || !name || name in declared) return;
+            onChange(name, { kind: 'boolean' });
+            setAdding('');
+          }}
+        />
+      </Field>
+      <p className="prop-note">{t('editor.properties.fieldsNote')}</p>
+    </Section>
+  );
+}
+
+const TIMER_MODE_LABELS: Record<TimerMode, string> = {
+  countdown: 'editor.properties.timerMode.countdown',
+  countup: 'editor.properties.timerMode.countup',
+  stopwatch: 'editor.properties.timerMode.stopwatch',
+};
+const TIMER_END_LABELS: Record<TimerEnd, string> = {
+  stop: 'editor.properties.timerEnd.stop',
+  continue: 'editor.properties.timerEnd.continue',
+};
+
+function TimerSection({
+  layer,
+  onChange,
+}: {
+  layer: TextLayer;
+  onChange: (timer: TextTimer | undefined) => void;
+}): JSX.Element {
+  const t = useT();
+  const rt = useRichT();
+  const timer = layer.timer;
+  const [now, setNow] = useState(() => Date.now());
+  // The timers of the sports this project has templates for (Phase 9 Wave B).
+  const dataSources = useEditor((s) => s.dataSources);
+  const presets = useMemo(() => sportTimersFor(dataSources.map((d) => d.template)), [dataSources]);
+  // An `until` countdown moves on its own; nothing else does until it is started.
+  useEffect(() => {
+    if (timer?.until === undefined) return undefined;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [timer?.until]);
+
+  const set = (next: Partial<TextTimer>): void => {
+    if (!timer) return;
+    const merged = { ...timer, ...next } as Record<string, unknown>;
+    for (const [k, v] of Object.entries(merged)) if (v === undefined || v === '') delete merged[k];
+    onChange(merged as unknown as TextTimer);
+  };
+  /** A seconds field typed as `8:00`, `480` or `12.5`. Blank clears it. */
+  const seconds = (text: string): number | undefined => {
+    const ms = parseTimerInput(text);
+    return ms === null ? undefined : ms / 1000;
+  };
+  const shown = (value: number | undefined): string =>
+    value === undefined ? '' : formatTimerMs(value * 1000, value >= 3600 ? 'h:mm:ss' : 'm:ss');
+
+  let preview = '';
+  if (timer) {
+    try {
+      preview = formatTimer(timer, undefined, now);
+    } catch {
+      preview = '';
+    }
+  }
+
+  return (
+    <Section title={t('editor.properties.sectionTimer')}>
+      <Field label={t('editor.properties.operatorTimer')}>
+        <input
+          type="checkbox"
+          checked={Boolean(timer)}
+          title={t('editor.properties.operatorTimerTitle')}
+          onChange={(e) => onChange(e.target.checked ? { mode: 'countdown', duration: 300 } : undefined)}
+        />
+      </Field>
+      {presets.length > 0 && (
+        <Field label={t('editor.properties.timerPreset')}>
+          <select
+            value=""
+            onChange={(e) => {
+              const preset = presets[Number(e.target.value)];
+              if (preset) onChange({ ...preset.spec.timer });
+            }}
+          >
+            <option value="">{t('editor.properties.timerPresetPick')}</option>
+            {presets.map((p, i) => (
+              <option key={`${p.sport.id}/${p.ruleset.id}/${p.spec.id}`} value={i}>
+                {t('editor.properties.timerPresetOption', { timer: t(p.spec.labelKey), rules: t(p.ruleset.labelKey) })}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
+      {timer && (
+        <>
+          <Field label={t('editor.properties.timerId')}>
+            <input
+              value={timer.id ?? ''}
+              placeholder="main"
+              onChange={(e) => set({ id: e.target.value.trim().toLowerCase() || undefined })}
+            />
+          </Field>
+          <Field label={t('editor.properties.timerMode')}>
+            <select
+              value={timer.mode}
+              onChange={(e) => {
+                const mode = e.target.value as TimerMode;
+                set({ mode, ...(mode !== 'countdown' ? { until: undefined, timezone: undefined } : {}) });
+              }}
+            >
+              {TIMER_MODES.map((m) => (
+                <option key={m} value={m}>
+                  {t(TIMER_MODE_LABELS[m])}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {timer.mode === 'countdown' && (
+            <Field label={t('editor.properties.timerUntil')}>
+              <input
+                value={timer.until ?? ''}
+                placeholder="10:00"
+                onChange={(e) => set({ until: e.target.value.trim() || undefined })}
+              />
+            </Field>
+          )}
+          {timer.until !== undefined ? (
+            <Field label={t('editor.properties.timezone')}>
+              <input
+                value={timer.timezone ?? ''}
+                placeholder={t('editor.properties.timezonePlaceholder')}
+                title={t('editor.properties.timezoneTitle')}
+                onChange={(e) => set({ timezone: e.target.value.trim() || undefined })}
+              />
+            </Field>
+          ) : (
+            <Field label={t(timer.mode === 'countdown' ? 'editor.properties.timerFrom' : 'editor.properties.timerStartAt')}>
+              <input
+                defaultValue={shown(timer.duration)}
+                key={`d-${layer.id}-${timer.mode}`}
+                placeholder="8:00"
+                onBlur={(e) => set({ duration: seconds(e.target.value) })}
+              />
+            </Field>
+          )}
+          {timer.mode !== 'countdown' && (
+            <Field label={t('editor.properties.timerLimit')}>
+              <input
+                defaultValue={shown(timer.limit)}
+                key={`l-${layer.id}`}
+                placeholder="—"
+                onBlur={(e) => set({ limit: seconds(e.target.value) })}
+              />
+            </Field>
+          )}
+          <Field label={t('editor.properties.timerFormat')}>
+            <input
+              value={timer.format ?? ''}
+              placeholder={timer.mode === 'stopwatch' ? 'm:ss.S' : 'm:ss'}
+              onChange={(e) => set({ format: e.target.value || undefined })}
+            />
+          </Field>
+          <Field label={t('editor.properties.timerTenthsUnder')}>
+            <input
+              type="number"
+              min={0}
+              value={timer.tenthsUnder ?? ''}
+              placeholder="—"
+              onChange={(e) => set({ tenthsUnder: e.target.value === '' ? undefined : Number(e.target.value) })}
+            />
+          </Field>
+          <Field label={t('editor.properties.timerEnd')}>
+            <select value={timer.end ?? 'stop'} onChange={(e) => set({ end: e.target.value as TimerEnd })}>
+              {TIMER_ENDS.map((end) => (
+                <option key={end} value={end}>
+                  {t(TIMER_END_LABELS[end])}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {preview && (
+            <p className="prop-note" data-preview="timer">
+              {rt('editor.properties.timerPreview', { preview: <strong>{preview}</strong> })}
+            </p>
+          )}
+          <p className="prop-note">{t('editor.properties.timerNote')}</p>
+          {(layer.clock || layer.binding) && (
+            <p className="prop-warning" data-warning="timer-clash">
+              {t('editor.properties.timerClash')}
             </p>
           )}
         </>
@@ -3514,6 +3972,40 @@ function TableSection({
               />
             )}
 
+            {/* Wave R: each row's share of a column's total, summing to exactly 100. */}
+            {transform.op === 'share' && (
+              <>
+                <select
+                  value={transform.column}
+                  title={t('editor.charts.shareColumnTitle')}
+                  onChange={(e) => setTransform(i, { ...transform, column: e.target.value })}
+                >
+                  {stages[i]!.map((c) => <option key={c.key} value={c.key}>{c.key}</option>)}
+                  {!stages[i]!.some((c) => c.key === transform.column) && <option value={transform.column}>{transform.column}</option>}
+                </select>
+                <input
+                  value={transform.as ?? ''}
+                  placeholder={DEFAULT_SHARE_KEY}
+                  title={t('editor.charts.shareAsTitle')}
+                  onChange={(e) => setTransform(i, { ...transform, as: e.target.value || undefined })}
+                />
+                <input
+                  type="number"
+                  min={0}
+                  max={3}
+                  value={transform.decimals ?? 0}
+                  title={t('editor.charts.shareDecimalsTitle')}
+                  onChange={(e) => setTransform(i, { ...transform, decimals: Math.max(0, Math.min(3, Math.round(Number(e.target.value)))) || undefined })}
+                />
+                <input
+                  value={transform.cumulative ?? ''}
+                  placeholder={t('editor.charts.shareCumulativePlaceholder')}
+                  title={t('editor.charts.shareCumulativeTitle')}
+                  onChange={(e) => setTransform(i, { ...transform, cumulative: e.target.value || undefined })}
+                />
+              </>
+            )}
+
             {transform.op === 'unpivot' && (
               <UnpivotFields
                 // Keyed on what is stored, so the typed lists re-seed when the
@@ -3602,6 +4094,8 @@ function TableSection({
                 op === 'sort' ? { op: 'sort', key, dir: 'desc' }
                 : op === 'filter' ? { op: 'filter', key, cmp: 'notEmpty' }
                 : op === 'rank' ? { op: 'rank' }
+                // The first numeric column — a poll's votes, a team's points.
+                : op === 'share' ? { op: 'share', column: columns.find((c) => c.type === 'number')?.key ?? key }
                 // Added bare on purpose. Every column name defaults, so an
                 // ordinary bracket laid out in round order works with no
                 // configuration and the fields below stay optional.
@@ -3627,6 +4121,7 @@ function TableSection({
             <option value="sort">{t('editor.properties.opSort')}</option>
             <option value="filter">{t('editor.properties.opFilter')}</option>
             <option value="rank">{t('editor.properties.opRank')}</option>
+            <option value="share" disabled={noColumns}>{t('editor.charts.opShare')}</option>
             <option value="limit">{t('editor.properties.opLimit')}</option>
             <option value="offset">{t('editor.properties.opOffset')}</option>
             <option value="advance">{t('editor.properties.opAdvance')}</option>
@@ -3667,6 +4162,17 @@ function TableSection({
             title={t('editor.properties.rowsPerPageTitle')}
             onChange={(e) => onPatch({ rowsPerPage: Math.max(0, Number(e.target.value)) || undefined })}
           />
+        </Field>
+        {/* Wave R: rows across for a column chart (CHARTS.md §4.1). */}
+        <Field label={t('editor.charts.axis')}>
+          <select
+            value={layer.axis ?? 'y'}
+            title={t('editor.charts.axisTitle')}
+            onChange={(e) => onPatch({ axis: e.target.value === 'x' ? 'x' : undefined })}
+          >
+            <option value="y">{t('editor.charts.axisY')}</option>
+            <option value="x">{t('editor.charts.axisX')}</option>
+          </select>
         </Field>
 
         {pages && (

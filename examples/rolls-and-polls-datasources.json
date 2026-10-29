@@ -1,0 +1,127 @@
+{
+  "formatVersion": 1,
+  "sources": [
+    {
+      "id": "credits",
+      "name": "End credits",
+      "type": "text",
+      "body": "# Produced by\nExecutive Producer | Morgan Reyes\nProducer | Sam Okafor\nLine Producer | Priya Nand\n\n# Directed by\nDirector | Alex Lindqvist\nTechnical Director | Jordan Bell\n\n# Graphics\nGraphics Operator | Casey Huang\nMotion Designer | Riley Moreau\nBuilt with | Breeze Overlay\n\n# Crew\nCamera 1 | Dana Whitfield\nCamera 2 | Luis Ortega\nAudio | Kim Sato\nFloor Manager | Pat Gallagher\n\nThanks for watching",
+      "split": "lines",
+      "markup": true,
+      "operatorEditable": true
+    },
+    {
+      "id": "lyrics",
+      "name": "Song lyrics",
+      "type": "text",
+      "body": "Morning on the river road,\nthe fog is lifting slow,\nevery window catching light\nfrom somewhere we don't know.\n\nCarry me the long way round,\npast the orchard and the mill,\nI could live a hundred years\nand never see my fill.\n\nEvening on the river road,\nthe swallows flying low,\nevery lantern on the hill\nis telling me to go.",
+      "split": "stanzas",
+      "markup": false,
+      "operatorEditable": true
+    },
+    {
+      "id": "poll",
+      "name": "Viewer poll",
+      "type": "poll",
+      "question": "Should the city build the new stadium downtown?",
+      "options": [
+        {
+          "id": "yes",
+          "label": "Yes",
+          "color": "#2f9e44"
+        },
+        {
+          "id": "no",
+          "label": "No",
+          "color": "#e03131"
+        },
+        {
+          "id": "unsure",
+          "label": "Not sure",
+          "color": "#868e96"
+        }
+      ],
+      "votes": {
+        "yes": 412,
+        "no": 287,
+        "unsure": 96
+      },
+      "status": "open",
+      "operatorEditable": true
+    },
+    {
+      "id": "giving",
+      "name": "Giving total",
+      "type": "manual",
+      "columns": [
+        {
+          "key": "raised",
+          "label": "Raised",
+          "type": "number"
+        },
+        {
+          "key": "goal",
+          "label": "Goal",
+          "type": "number"
+        }
+      ],
+      "rows": [
+        {
+          "raised": 31250,
+          "goal": 50000
+        }
+      ]
+    },
+    {
+      "id": "temps",
+      "name": "Hourly temperature",
+      "type": "manual",
+      "columns": [
+        {
+          "key": "hour",
+          "label": "Hour",
+          "type": "string"
+        },
+        {
+          "key": "temp",
+          "label": "Temp",
+          "type": "number"
+        }
+      ],
+      "rows": [
+        {
+          "hour": "1 PM",
+          "temp": 88
+        },
+        {
+          "hour": "2 PM",
+          "temp": 91
+        },
+        {
+          "hour": "3 PM",
+          "temp": 94
+        },
+        {
+          "hour": "4 PM",
+          "temp": 95
+        },
+        {
+          "hour": "5 PM",
+          "temp": 93
+        },
+        {
+          "hour": "6 PM",
+          "temp": 89
+        },
+        {
+          "hour": "7 PM",
+          "temp": 84
+        },
+        {
+          "hour": "8 PM",
+          "temp": 79
+        }
+      ]
+    }
+  ]
+}

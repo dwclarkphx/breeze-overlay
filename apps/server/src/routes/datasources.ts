@@ -20,6 +20,8 @@ import {
   SOURCE_USES,
   applyGuard,
   applyTransforms,
+  isInlineSource,
+  isPolledSource,
   type DataSourceDef,
   type SourceUse,
   type DataTransform,
@@ -145,7 +147,7 @@ export async function registerDataSourceRoutes(
       // Registered immediately, so a manual table is queryable and an HTTP
       // source has fired its first poll before the editor asks for a preview.
       const entry = await registry.upsert(req.params.id, def);
-      if (def.type !== 'manual') await registry.refresh(req.params.id, def.id);
+      if (isPolledSource(def)) await registry.refresh(req.params.id, def.id);
       return { def: redact(def), status: entry.status, interval: effectiveInterval(def) };
     },
   );
@@ -243,7 +245,7 @@ export async function registerDataSourceRoutes(
          * which needs a last-good a preview does not have. A refusal still
          * shows the rows: the author needs to see what the guard objected to.
          */
-        const guard = def.type === 'manual' ? undefined : def.guard;
+        const guard = isInlineSource(def) ? undefined : def.guard;
         const checked = applyGuard(guard, fetched);
         const data = checked.ok ? checked.data : fetched;
         // A lookup or union in the pipeline reads the project's other live sources.

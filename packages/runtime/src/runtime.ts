@@ -24,6 +24,16 @@ import {
   DATA_UPDATE_KEY,
   DEFAULT_CRAWL_SEPARATOR,
   MODE_UPDATE_KEY,
+  SCROLLS_UPDATE_KEY,
+  TIMERS_UPDATE_KEY,
+  driveValue,
+  plotRows,
+  scrollIdOf,
+  type ScrollReport,
+  type ScrollState,
+  fieldColor,
+  fieldText,
+  type FieldSpec,
   transformSources,
   transformsUseClock,
   resolveRules,
@@ -43,6 +53,9 @@ import {
 } from '@breeze/schema';
 
 import { ClockTicker } from './clock.js';
+import { TimerTicker } from './timer.js';
+import { applyDriveValue, countTo, countable, drawPlot, type ChartAnimator, type DriveMode } from './charts.js';
+import { RollBlock, RollSync, rollRowViews, rollRows, type RollAnimator, type RollTicker } from './roll.js';
 import {
   cycleEnabled,
   cyclePosition,
@@ -55,6 +68,8 @@ import { CrawlLoop, crawlItemsFrom, type CrawlAnimator, type CrawlPhase } from '
 import {
   buildLayerElement,
   composeFilter,
+  setShapeSweep,
+  setShapeTrim,
   type BuildContext,
   type LayerNodes,
 } from './dom.js';
@@ -62,7 +77,7 @@ import type { ExpandWarning } from './expand.js';
 import { playerOf, stopMediaIn } from './media.js';
 import { applyMaskReference, createMask, createMaskHost, type MaskHandle } from './mask.js';
 import { buildPlan, defaultFor, layerMotion, nextHoldAfter, type TimelinePlan } from './plan.js';
-import { applyRuleResult, setRuleBaseSrc } from './rules.js';
+import { applyRuleResult, setFieldColor, setRuleBaseSrc } from './rules.js';
 import { injectRuntimeStyles } from './styles.js';
 import {
   TableBlock,
@@ -251,7 +266,12 @@ export type RuntimeEvent =
    * finished doing so (0.75.0). What an output page reports, so a page joining
    * late takes up the copy on screen rather than the copy in the feed.
    */
-  | 'crawl';
+  | 'crawl'
+  /**
+   * A roll's scroll state or extent changed (Wave R). What an output page
+   * reports, so the hub can clamp the transport and a panel draw its position.
+   */
+  | 'scroll';
 
 export type RuntimeListener = (payload: RuntimePayload) => void;
 
@@ -321,6 +341,12 @@ export interface RuntimeOptions {
    * thumbnail poses it.
    */
   still?: boolean;
+  /**
+   * Show rolls with their first lines in view until something plays (Wave R) —
+   * the editor canvas, where a roll that enters from off screen would
+   * otherwise be an empty box while it is being styled.
+   */
+  poseRolls?: boolean;
 }
 
 /** Which schema props map straight onto GSAP transform/opacity properties. */
@@ -342,6 +368,8 @@ const GSAP_PROP: Partial<Record<AnimatableProp, string>> = {
  */
 const FILTER_PROXY_PROPS = [
   'blur', 'brightness', 'contrast', 'saturate', 'hueRotate', 'grayscale', 'sepia', 'maskOffset',
+  // Wave R: an outline's draw-on and an arc's sweep, written to the shape's SVG.
+  'trim', 'sweep',
 ] as const satisfies readonly AnimatableProp[];
 
 type FilterProxyProp = (typeof FILTER_PROXY_PROPS)[number];
@@ -362,6 +390,7 @@ export class BreezeRuntime {
   private readonly scaleMode: 'none' | 'contain';
   /** Built for one paused frame — see `RuntimeOptions.still`. */
   readonly still: boolean;
+  private readonly poseRolls: boolean;
   private readonly uid: string;
 
   private root!: HTMLElement;
@@ -392,6 +421,12 @@ export class BreezeRuntime {
    * because a composition with no clock should not own a timer at all.
    */
   private clocks: ClockTicker | null = null;
+  /** Operator timers (Phase 9 Wave B) — built on first use, like `clocks`. */
+  private timers: TimerTicker | null = null;
+  /** Rolls and their scroll transport (Wave R) — built only when the graphic has one. */
+  private rolls: RollSync | null = null;
+  /** Typed-field declarations by binding name (Phase 9 Wave B), the root's and its mounts'. */
+  private fieldSpecs = new Map<string, FieldSpec>();
   private listeners = new Map<RuntimeEvent, Set<RuntimeListener>>();
   /** Last DataSet seen per source id, so a late-built table can catch up. */
   private datasets = new Map<string, DataSet>();
@@ -411,6 +446,8 @@ export class BreezeRuntime {
     if (this.mediaLive() !== was) this.syncMediaLive();
   }
   private pendingHold: number | null = null;
+  /** Values a TAKE is waiting to put up once the outro of what is on air has run. See `take`. */
+  private pendingTake: BindingData | null = null;
   /**
    * One timer for every self-paging table, armed for the soonest turn.
    *
@@ -441,7 +478,16 @@ export class BreezeRuntime {
     this.mediaWhenIdle = options.mediaWhenIdle === true;
     this.scaleMode = options.scaleMode ?? 'none';
     this.still = options.still ?? false;
+    this.poseRolls = options.poseRolls === true;
     this.plan = buildPlan(options.composition, { resolve: options.resolveComposition });
+    // Typed fields (Phase 9 Wave B): the root's declarations win over a mounted
+    // composition's for the same name, as its field values do.
+    for (const [name, spec] of Object.entries(options.composition.fields ?? {})) this.fieldSpecs.set(name, spec);
+    for (const instance of this.plan.instances) {
+      if (instance.layer.type !== 'composition') continue;
+      const nested = options.resolveComposition?.(instance.layer.ref);
+      for (const [name, spec] of Object.entries(nested?.fields ?? {})) if (!this.fieldSpecs.has(name)) this.fieldSpecs.set(name, spec);
+    }
     this.data = { ...(options.data ?? {}) };
     // Read before `build()`, like the datasets below: a cell rule on the mode is
     // evaluated as its first row is written.
@@ -611,6 +657,33 @@ export class BreezeRuntime {
     }
 
     /*
+     * Rolls (Wave R), for the crawl's reason: built against a tree in the
+     * document so their text can be measured, and given whatever scroll state
+     * the page was booted with so a reloaded output is on the right line on
+     * its first frame.
+     */
+    for (const [id, node] of this.nodes) {
+      const layer = node.layer;
+      if (layer.type !== 'roll' || !node.rollTrack || !node.rollWindow) continue;
+      const block = new RollBlock({
+        layer,
+        window: node.rollWindow,
+        track: node.rollTrack,
+        animator: gsap as unknown as RollAnimator,
+      });
+      block.setRows(rollRowViews(rollRows(layer, layer.source ? this.datasets.get(layer.source) : undefined, this.transformContext()), layer));
+      this.rollSync().add(id, block);
+    }
+    if (this.rolls && SCROLLS_UPDATE_KEY in this.data) this.rolls.setPayload(this.data[SCROLLS_UPDATE_KEY]);
+
+    // Plotted lines (Wave R): drawn from whatever rows the page booted with.
+    for (const node of this.nodes.values()) {
+      const layer = node.layer;
+      if (layer.type !== 'shape' || !layer.plot?.source) continue;
+      drawPlot(node, plotRows(this.datasets.get(layer.plot.source), layer.plot, this.transformContext()), gsap as unknown as ChartAnimator, false);
+    }
+
+    /*
      * Clocks, before the first paint rather than on the first tick.
      *
      * `add()` writes immediately, so a graphic cued and held for ten minutes
@@ -646,6 +719,31 @@ export class BreezeRuntime {
         },
       });
     }
+
+    /*
+     * Operator timers (Phase 9 Wave B), for the clock's reason: the value is
+     * written before the first paint, from whatever `$timers` state the
+     * runtime was built with — a reloaded output shows the running game clock
+     * on its first frame. With no state yet a timer shows where it would start.
+     */
+    for (const [id, node] of this.nodes) {
+      const layer = node.layer;
+      if (layer.type !== 'text' || !layer.timer || !node.textInner) continue;
+      const inner = node.textInner;
+      this.timerTicker().add(id, {
+        timer: layer.timer,
+        write: (text) => {
+          // Same revert-then-write ordering as the clock above.
+          const handle = this.textAnims.get(id);
+          if (handle) {
+            handle.split.revert();
+            handle.stale = true;
+          }
+          inner.textContent = text;
+        },
+      });
+    }
+    if (this.timers && TIMERS_UPDATE_KEY in this.data) this.timers.setPayload(this.data[TIMERS_UPDATE_KEY]);
 
     /*
      * Tables, for the same reason and one more: a table with no rows is
@@ -727,6 +825,9 @@ export class BreezeRuntime {
     // transforms. Paint frame 0 now or the graphic flashes un-animated for one
     // frame when it goes on air.
     this.renderAt(0);
+    // Drives (Wave R) after the baselines: `buildTimeline` sets every static
+    // transform with gsap.set, which would otherwise put a driven x back.
+    this.refreshDrives('set');
     this.applyVisibilityWindows(0);
     this.videos.syncTo(0);
     this.posters.syncTo(0);
@@ -758,6 +859,7 @@ export class BreezeRuntime {
          * Table blocks are the exception and fit below regardless: a cell
          * overruns its column in a still just as it does on air.
          */
+        this.rolls?.remeasure();
         if (this.still) {
           for (const handle of this.tables.values()) handle.block.refit();
           return;
@@ -1129,6 +1231,7 @@ export class BreezeRuntime {
         return name in overrides ? overrides[name] : this.data[name];
       },
       mode: this.modeValue,
+      timer: (id) => this.timers?.seconds(id),
     };
   }
 
@@ -1190,6 +1293,80 @@ export class BreezeRuntime {
       const own = this.datasets.get(layer.source);
       if (own) this.crawlFor(id)?.setItems(crawlItemsFrom(own, layer, this.transformContext()));
     }
+
+    // Rolls and plotted lines reading it (Wave R).
+    for (const [id, node] of this.nodes) {
+      const layer = node.layer;
+      if (layer.type === 'roll' && layer.source) {
+        if (layer.source !== sourceId && !transformSources(layer.transforms).includes(sourceId)) continue;
+        const block = this.rolls?.block(id);
+        const changed = block?.setRows(rollRowViews(rollRows(layer, this.datasets.get(layer.source), this.transformContext()), layer));
+        if (changed) {
+          this.rolls?.render();
+          this.emit('scroll');
+        }
+      } else if (layer.type === 'shape' && layer.plot?.source) {
+        if (layer.plot.source !== sourceId && !transformSources(layer.plot.transforms).includes(sourceId)) continue;
+        drawPlot(node, plotRows(this.datasets.get(layer.plot.source), layer.plot, this.transformContext()), gsap as unknown as ChartAnimator, true);
+      }
+    }
+  }
+
+  /* -------------------------------------------------------------- drives */
+
+  /**
+   * Put every top-level drive's value on its property (Wave R, CHARTS.md §3).
+   * Table cells are driven by their own table, against their own row.
+   */
+  private refreshDrives(mode: DriveMode): void {
+    for (const node of this.nodes.values()) {
+      const drives = node.layer.drives;
+      if (!drives?.length) continue;
+      const rc = this.ruleContext(node.instance);
+      const ctx = { source: rc.source, field: rc.field, timer: (id: string) => this.timers?.seconds(id) };
+      drives.forEach((drive, i) => {
+        const value = driveValue(drive, ctx);
+        if (value !== null) applyDriveValue(node, drive, i, value, gsap as unknown as ChartAnimator, mode);
+      });
+    }
+  }
+
+  /* --------------------------------------------------------------- rolls */
+
+  /** The roll transport, created on first use. */
+  private rollSync(): RollSync {
+    if (!this.rolls) {
+      this.rolls = new RollSync({
+        animator: gsap as unknown as RollAnimator,
+        ticker: gsap.ticker as unknown as RollTicker,
+        still: this.still,
+        pose: this.poseRolls,
+        onChange: () => {
+          if (!this.destroyed) this.emit('scroll');
+        },
+        onFinished: () => {
+          if (!this.destroyed && this.state === 'holding') this.continueAfterRoll();
+        },
+      });
+    }
+    return this.rolls;
+  }
+
+  /** Every scroll this graphic shows, as an output reports it (Wave R). */
+  get scrollStates(): ScrollReport[] {
+    return this.rolls?.reports ?? [];
+  }
+
+  /** One scroll's state as this graphic understands it now — its own, or what PLAY left it in. */
+  scrollState(id: string): ScrollState {
+    return this.rolls?.state(id) ?? { running: false, anchor: 0, base: 0, rate: 1 };
+  }
+
+  /** The scroll ids this graphic's rolls are driven by. */
+  get scrollIds(): string[] {
+    const out = new Set<string>();
+    for (const node of this.nodes.values()) if (node.layer.type === 'roll') out.add(scrollIdOf(node.layer));
+    return [...out];
   }
 
   /**
@@ -1402,6 +1579,14 @@ export class BreezeRuntime {
     });
 
     this.masks.get(layerId)?.setOffset(proxy.maskOffset);
+
+    // Wave R: a keyframed or static draw-on and arc sweep. A driven one is the drive's.
+    const layer = node.layer;
+    if (layer.type === 'shape' && node.shapePath) {
+      const driven = (prop: string) => (layer.drives ?? []).some((d) => d.property === prop);
+      if (!driven('trim')) setShapeTrim(node.shapePath, proxy.trim);
+      if (layer.arc && !driven('sweep')) setShapeSweep(node.shapePath, layer, proxy.sweep);
+    }
   }
 
   /* ------------------------------------------------------------ playback */
@@ -1423,6 +1608,8 @@ export class BreezeRuntime {
       this.sprites.tick(holdAt);
       this.startCycles();
       this.emit('hold');
+      // A `continue` roll (Wave R) that ran out during the intro carries the graphic on now.
+      if (this.rolls?.continueDone) this.continueAfterRoll();
       return;
     }
 
@@ -1447,9 +1634,46 @@ export class BreezeRuntime {
     this.stopCrawls();
     this.videos.pause();
     this.emit('finished');
+    // A TAKE waiting on this outro (Phase 9 Wave A): the new values go up now,
+    // on a graphic that is off air, and roll straight back in.
+    const waiting = this.pendingTake;
+    if (waiting && !this.destroyed) {
+      this.pendingTake = null;
+      this.update(waiting);
+      this.play();
+    }
+  }
+
+  /**
+   * Cue → take (Phase 9 Wave A): put new values on air without ever showing
+   * them on the old pose.
+   *
+   * Off air (idle or finished) it is `update` then `play`. On air it runs the
+   * outro first and does the same once that completes, so a second name never
+   * replaces the first while the first is still holding on screen. A TAKE
+   * arriving while one is already waiting replaces the waiting values — the
+   * operator's latest is what goes up. CLEAR cancels it.
+   */
+  take(data: BindingData = {}): void {
+    if (this.destroyed) return;
+    if (this.state === 'idle' || this.state === 'finished') {
+      this.pendingTake = null;
+      this.update(data);
+      this.play();
+      return;
+    }
+    this.pendingTake = data;
+    if (this.state !== 'playing-out') this.stop();
+  }
+
+  /** A TAKE is waiting for the outro of what is on air. */
+  get takePending(): boolean {
+    return this.pendingTake !== null;
   }
 
   private applyVisibilityWindows(time: number): void {
+    // A roll that came into view can be measured now (hidden layers measure 0).
+    this.rolls?.remeasureUnmeasured();
     for (const w of this.plan.windows) {
       const node = this.nodes.get(w.layerId);
       if (!node) continue;
@@ -1489,26 +1713,9 @@ export class BreezeRuntime {
      */
     if (this.state === 'playing-in' && !this.tl.paused()) return;
 
-    const atEnd = this.tl.time() >= this.tl.duration() - 1e-4;
-    if (this.state === 'finished' || this.state === 'idle' || this.state === 'playing-out' || atEnd) {
-      /*
-       * A fresh run starts every paged table on its first page, not on
-       * whichever page the last run left it on.
-       *
-       * Not from `idle` or `finished`: CLEAR and the end of the outro have
-       * already put every table back on page one (`onComplete`, `clear`), so a
-       * page it is on now was chosen by an operator, off air, for it to open on
-       * — `page?name=C` before PLAY. Only a run cut short still needs it here:
-       * PLAY pressed during the outro, or at the end of a timeline that never
-       * reached `onComplete`.
-       */
-      if (this.state !== 'idle' && this.state !== 'finished') this.resetTables();
-      this.tl.pause();
-      this.renderAt(0);
-      // Pages reset above rebuilt rows the reveal no longer targets.
-      this.refreshTableTracks();
-      this.applyVisibilityWindows(0);
-    }
+    const fresh = this.state === 'idle' || this.state === 'finished' || this.state === 'playing-out' || this.tl.time() >= this.tl.duration() - 1e-4;
+    this.rewindForRun();
+    if (fresh) this.startRun();
     this.stopCycleTimer();
     this.pendingHold = nextHoldAfter(this.plan, this.tl.time());
     this.state = 'playing-in';
@@ -1809,6 +2016,78 @@ export class BreezeRuntime {
     this.refreshTableTracks();
   }
 
+  /**
+   * Back to the top before a fresh run — from off air, from mid-outro, or from
+   * a timeline parked at its end. A graphic holding or rolling in is left where
+   * it is. Shared by `play()` and `goToStep()`.
+   */
+  private rewindForRun(): void {
+    const atEnd = this.tl.time() >= this.tl.duration() - 1e-4;
+    if (this.state === 'finished' || this.state === 'idle' || this.state === 'playing-out' || atEnd) {
+      /*
+       * A fresh run starts every paged table on its first page, not on
+       * whichever page the last run left it on.
+       *
+       * Not from `idle` or `finished`: CLEAR and the end of the outro have
+       * already put every table back on page one (`onComplete`, `clear`), so a
+       * page it is on now was chosen by an operator, off air, for it to open on
+       * — `page?name=C` before PLAY. Only a run cut short still needs it here:
+       * PLAY pressed during the outro, or at the end of a timeline that never
+       * reached `onComplete`.
+       */
+      if (this.state !== 'idle' && this.state !== 'finished') this.resetTables();
+      this.tl.pause();
+      this.renderAt(0);
+      // Pages reset above rebuilt rows the reveal no longer targets.
+      this.refreshTableTracks();
+      this.applyVisibilityWindows(0);
+    }
+  }
+
+  /**
+   * Go to one hold — `step` counts holds the way `currentStep` does, so 1 is
+   * the first STOP marker (Phase 9 Wave D, for OGraf's `playAction({ goto })`).
+   *
+   * Forward from where the graphic is, it plays there and holds, running
+   * through any holds in between rather than stopping at each: a controller
+   * asking for step 3 wants step 3. From off air that is the intro, from the
+   * top. Backwards — or with `cut` — it is a cut, never the timeline run in
+   * reverse, for the reason `prev()` gives. Holding there already, nothing
+   * happens.
+   *
+   * Unlike `next()` this never turns a table's page: a step is a hold, and a
+   * caller naming a step has said which one. False when there is no such hold.
+   */
+  goToStep(step: number, opts: { cut?: boolean } = {}): boolean {
+    if (this.destroyed) return false;
+    const holds = this.plan.holds;
+    if (!Number.isInteger(step) || step < 1 || step > holds.length) return false;
+    const target = holds[step - 1]!;
+    const now = this.tl.time();
+    const onAir = this.state === 'holding' || this.state === 'playing-in';
+    // A TAKE waiting on an outro would otherwise fire later, over this step.
+    this.pendingTake = null;
+
+    if (this.state === 'holding' && Math.abs(now - target) < 1e-3) return true;
+
+    if (opts.cut || (onAir && target < now - 1e-3)) {
+      return this.joinAt({ state: 'holding', step, time: target }, { force: true });
+    }
+
+    const fresh = this.state === 'idle' || this.state === 'finished' || this.state === 'playing-out';
+    this.rewindForRun();
+    if (fresh) this.startRun();
+    this.stopCycleTimer();
+    this.pendingHold = target;
+    this.state = 'playing-in';
+    this.startCrawls();
+    this.videos.play(this.tl.time());
+    this.sprites.syncTo(this.tl.time());
+    this.tl.play();
+    this.emit('play');
+    return true;
+  }
+
   /** Everything `next()` does to the timeline, without the table step. */
   private advanceTimeline(): void {
     const upcoming = nextHoldAfter(this.plan, this.tl.time());
@@ -1844,6 +2123,7 @@ export class BreezeRuntime {
       this.resetTables();
       this.refreshTableTracks();
     }
+    if (this.state === 'idle' || this.state === 'finished' || this.tl.time() <= 1e-4) this.startRun();
 
     this.stopCycleTimer();
     this.pendingHold = null;
@@ -1855,8 +2135,27 @@ export class BreezeRuntime {
     this.emit('play');
   }
 
+  /**
+   * What a fresh run starts (Wave R): rolls from the top on a page with no hub
+   * (the hub resets them itself on PLAY), and driven bars growing in.
+   */
+  private startRun(): void {
+    this.rolls?.played();
+    this.refreshDrives('grow');
+    for (const handle of this.tables.values()) handle.block.regrow();
+  }
+
+  /** A `continue` roll has run out: on to the next STOP or the outro, once listeners have heard. */
+  private continueAfterRoll(): void {
+    setTimeout(() => {
+      if (!this.destroyed && this.state === 'holding') this.advanceTimeline();
+    }, 0);
+  }
+
   /** Hard reset to frame 0, nothing on screen. */
   clear(): void {
+    this.rolls?.cleared();
+    this.pendingTake = null;
     this.state = 'idle';
     this.pendingHold = null;
     this.tl.pause();
@@ -1889,6 +2188,10 @@ export class BreezeRuntime {
     if (this.destroyed) return;
     this.data = { ...this.data, ...data };
     if (MODE_UPDATE_KEY in data) this.modeValue = String(data[MODE_UPDATE_KEY] ?? '');
+    // Timer state from the hub (Phase 9 Wave B). Not a field: no layer binds it.
+    if (TIMERS_UPDATE_KEY in data) this.timers?.setPayload(data[TIMERS_UPDATE_KEY]);
+    // Scroll state from the hub (Wave R), the same way.
+    if (SCROLLS_UPDATE_KEY in data) this.rolls?.setPayload(data[SCROLLS_UPDATE_KEY]);
 
     /*
      * Data-source pushes ride the same verb as operator field edits — one
@@ -1947,7 +2250,18 @@ export class BreezeRuntime {
       this.applyBinding(node, data[layer.binding]);
     }
 
+    // Colour fields (Phase 9 Wave B): a team colour on a bar or a name.
+    for (const node of this.nodes.values()) {
+      const layer = node.layer;
+      if ((layer.type !== 'text' && layer.type !== 'shape') || !layer.colorBinding) continue;
+      if (!(layer.colorBinding in data)) continue;
+      const color = fieldColor(data[layer.colorBinding]);
+      if (color) setFieldColor(node, color);
+    }
+
     this.refreshRules();
+    this.refreshDrives('tween');
+    for (const handle of this.tables.values()) handle.block.redrive();
     this.refitAfterTextChange();
     // New data can rename the page a leader is on (the rotation's third city
     // is now Yuma), so followers are re-keyed before the tracks are refreshed.
@@ -1989,6 +2303,33 @@ export class BreezeRuntime {
     return this.clocks;
   }
 
+  /**
+   * The operator-timer ticker, created on first use. Its `onChange` refits and
+   * re-runs rules — `game lte 30 → red` has to follow the clock — but, like a
+   * clock tick, is not an `update()`.
+   */
+  private timerTicker(): TimerTicker {
+    if (!this.timers) {
+      this.timers = new TimerTicker(
+        () => {
+          if (this.destroyed) return;
+          this.refreshRules();
+          // A drive reading a timer — a shot-clock bar emptying (Wave R).
+          this.refreshDrives('tween');
+          this.refitAfterTextChange();
+        },
+        undefined,
+        this.still,
+      );
+    }
+    return this.timers;
+  }
+
+  /** A timer's state as this graphic last heard it from the hub, for panels and tests. */
+  timerSeconds(id: string): number | undefined {
+    return this.timers?.seconds(id);
+  }
+
   private applyBinding(node: LayerNodes, value: unknown): void {
     const layer = node.layer;
     switch (layer.type) {
@@ -2002,12 +2343,29 @@ export class BreezeRuntime {
          * put the old name back and quietly discard what the operator just typed,
          * live on air.
          */
+        // A typed field (Phase 9 Wave B): a colour recolours rather than retypes,
+        // and a number, option or toggle shows formatted.
+        const spec = layer.binding ? this.fieldSpecs.get(layer.binding) : undefined;
+        if (spec?.kind === 'color') {
+          const color = fieldColor(value);
+          if (color) setFieldColor(node, color);
+          break;
+        }
         const handle = this.textAnims.get(node.instance.id);
         if (handle) {
           handle.split.revert();
           handle.stale = true;
         }
-        node.textInner.textContent = stringify(value);
+        // Counting to a new number (Wave R), formatted as its number field would be.
+        const counted = layer.count ? countable(value) : null;
+        if (counted !== null && layer.count) {
+          const format = spec?.kind === 'number' ? spec : {};
+          countTo(node.textInner, counted, layer.count, format, gsap as unknown as ChartAnimator, () => {
+            if (!this.destroyed) this.refitAfterTextChange();
+          });
+          break;
+        }
+        node.textInner.textContent = spec ? (fieldText(spec, value) ?? '') : stringify(value);
         break;
       }
       case 'image':
@@ -3014,6 +3372,10 @@ export class BreezeRuntime {
     // element is the editor's rebuild-per-keystroke leak, one timer at a time.
     this.clocks?.destroy();
     this.clocks = null;
+    this.timers?.destroy();
+    this.timers = null;
+    this.rolls?.destroy();
+    this.rolls = null;
     this.videos.destroy();
     // A capture in flight holds a `<video>` of its own. Cancelling drops its
     // source now rather than whenever the decode happens to finish, which for a

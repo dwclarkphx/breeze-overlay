@@ -26,6 +26,9 @@ import {
   FTP_PROTOCOLS,
   GUARD_BAD_ROWS,
   MAX_PLACES,
+  POLL_OPTIONS_MAX,
+  POLL_STATUSES,
+  TEXT_SPLITS,
   WEATHER_MODES,
   WEATHER_PROVIDERS,
   WEATHER_UNITS,
@@ -33,10 +36,23 @@ import {
 import { LEGACY_KEY_PATTERN } from './keys.js';
 import { MEDIA_CHECK_DEFAULTS, MEDIA_KINDS, MEDIA_ON_ERROR } from './media.js';
 import { RULE_OPS } from './rules.js';
+import { TIMER_ENDS, TIMER_ID_PATTERN, TIMER_MODES } from './timer.js';
+import { SCROLL_ID_PATTERN } from './scroll.js';
+import { SPORT_TABLES } from './sports.js';
 import {
   ANIMATABLE_PROPS,
+  ARC_CAPS,
+  DRIVE_GROWS,
+  DRIVE_PROPS,
   FORMAT_VERSION,
+  PLOT_CURVES,
+  ROLL_DIRECTIONS,
+  ROLL_ENDS,
+  ROLL_FROMS,
+  ROLL_STARTS,
+  ROLL_TOS,
   ROW_ANIM_PRESET_IDS,
+  TABLE_AXES,
   TABLE_CYCLE_ENDS,
   TEXT_ANIM_PRESET_IDS,
 } from './types.js';
@@ -221,6 +237,19 @@ const dataTransformSchema = {
       additionalProperties: false,
     },
     {
+      // Each row's share of a column's total (Wave R, CHARTS.md §4.4).
+      type: 'object',
+      required: ['op', 'column'],
+      properties: {
+        op: { const: 'share' },
+        column: { type: 'string', minLength: 1 },
+        as: { type: 'string', minLength: 1 },
+        decimals: { type: 'integer', minimum: 0, maximum: 3 },
+        cumulative: { type: 'string', minLength: 1 },
+      },
+      additionalProperties: false,
+    },
+    {
       // Text from a template over other columns (0.76.0).
       type: 'object',
       required: ['op', 'as', 'template'],
@@ -229,6 +258,90 @@ const dataTransformSchema = {
         as: { type: 'string', minLength: 1 },
         template: { type: 'string', minLength: 1, maxLength: 2000 },
         timezone: { type: 'string', pattern: '^[A-Za-z0-9_/+-]+$' },
+      },
+      additionalProperties: false,
+    },
+  ],
+} as const;
+
+/** What a data source made from a sport template remembers (Phase 9 Wave B, sports.ts). */
+const sportTemplateRefSchema = {
+  type: 'object',
+  required: ['sport', 'ruleset', 'table'],
+  properties: {
+    sport: { type: 'string', pattern: '^[a-z0-9-]{1,40}$' },
+    ruleset: { type: 'string', pattern: '^[a-z0-9-]{1,40}$' },
+    table: { enum: [...SPORT_TABLES] },
+  },
+  additionalProperties: false,
+} as const;
+
+/** One typed field (Phase 9 Wave B, fields.ts). `kind` picks the branch; anything else is refused. */
+const fieldLabel = { type: 'string', maxLength: 120 } as const;
+const fieldSpecSchema = {
+  type: 'object',
+  required: ['kind'],
+  oneOf: [
+    {
+      properties: {
+        kind: { const: 'number' },
+        label: fieldLabel,
+        min: { type: 'number' },
+        max: { type: 'number' },
+        step: { type: 'number', exclusiveMinimum: 0 },
+        buttons: { type: 'array', maxItems: 8, items: { type: 'number' } },
+        decimals: { type: 'integer', minimum: 0, maximum: 6 },
+        pad: { type: 'integer', minimum: 0, maximum: 12 },
+        prefix: { type: 'string', maxLength: 32 },
+        suffix: { type: 'string', maxLength: 32 },
+        default: { type: 'number' },
+      },
+      additionalProperties: false,
+    },
+    {
+      properties: {
+        kind: { const: 'boolean' },
+        label: fieldLabel,
+        onText: { type: 'string', maxLength: 120 },
+        offText: { type: 'string', maxLength: 120 },
+        default: { type: 'boolean' },
+      },
+      additionalProperties: false,
+    },
+    {
+      properties: {
+        kind: { const: 'enum' },
+        label: fieldLabel,
+        options: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 64,
+          items: {
+            type: 'object',
+            required: ['value'],
+            properties: { value: { type: 'string', maxLength: 120 }, label: { type: 'string', maxLength: 120 } },
+            additionalProperties: false,
+          },
+        },
+        default: { type: 'string' },
+      },
+      required: ['options'],
+      additionalProperties: false,
+    },
+    {
+      properties: {
+        kind: { const: 'color' },
+        label: fieldLabel,
+        default: { type: 'string', pattern: '^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$' },
+      },
+      additionalProperties: false,
+    },
+    {
+      properties: {
+        kind: { const: 'asset' },
+        label: fieldLabel,
+        assetKind: { enum: ['image', 'video'] },
+        default: { type: 'string' },
       },
       additionalProperties: false,
     },
@@ -370,11 +483,82 @@ const ruleConditionSchema = {
     },
     binding: { type: 'string', minLength: 1 },
     mode: { const: true },
+    // Phase 9 Wave B: a timer's value in seconds — `game lte 30`.
+    timer: { type: 'string', pattern: TIMER_ID_PATTERN.source },
     cmp: { enum: [...RULE_OPS] },
     value: { anyOf: [...dataValueSchema.anyOf, { type: 'array', items: dataValueSchema }] },
   },
   additionalProperties: false,
 } as const;
+
+/** `LayerBase.drives` — Wave R, CHARTS.md §3. */
+const domainEndSchema = {
+  anyOf: [
+    { type: 'number' },
+    { enum: ['min', 'max', 'total'] },
+    {
+      type: 'object',
+      required: ['column'],
+      properties: { column: { type: 'string', minLength: 1 } },
+      additionalProperties: false,
+    },
+    {
+      type: 'object',
+      required: ['binding'],
+      properties: { binding: { type: 'string', minLength: 1 } },
+      additionalProperties: false,
+    },
+  ],
+} as const;
+
+const tweenSchema = {
+  type: 'object',
+  required: ['duration'],
+  properties: {
+    duration: { type: 'number', minimum: 0, maximum: 60 },
+    ease: { $ref: '#/$defs/ease' },
+  },
+  additionalProperties: false,
+} as const;
+
+const drivesSchema = {
+  type: 'array',
+  items: {
+    type: 'object',
+    required: ['property', 'from', 'range'],
+    properties: {
+      property: { enum: [...DRIVE_PROPS] },
+      from: {
+        type: 'object',
+        properties: {
+          column: { type: 'string', minLength: 1 },
+          source: { type: 'string', minLength: 1 },
+          where: {
+            type: 'object',
+            required: ['column', 'value'],
+            properties: { column: { type: 'string', minLength: 1 }, value: dataValueSchema },
+            additionalProperties: false,
+          },
+          binding: { type: 'string', minLength: 1 },
+          timer: { type: 'string', pattern: TIMER_ID_PATTERN.source },
+        },
+        additionalProperties: false,
+      },
+      domain: {
+        type: 'object',
+        properties: { min: domainEndSchema, max: domainEndSchema },
+        additionalProperties: false,
+      },
+      range: { type: 'array', minItems: 2, maxItems: 2, items: { type: 'number' } },
+      clamp: { type: 'boolean' },
+      grow: { enum: [...DRIVE_GROWS] },
+      tween: tweenSchema,
+    },
+    additionalProperties: false,
+  },
+} as const;
+
+const plotDomainEndSchema = { anyOf: [{ type: 'number' }, { enum: ['min', 'max'] }] } as const;
 
 const rulesSchema = {
   type: 'array',
@@ -458,6 +642,7 @@ const layerBaseProps = {
     additionalProperties: false,
   },
   cell: { type: 'string', minLength: 1 },
+  drives: drivesSchema,
 } as const;
 
 const layerSchema = {
@@ -476,6 +661,44 @@ const layerSchema = {
         // path data" is not a thing JSON Schema can say, and the semantic
         // validator gives a message an author can act on instead.
         path: { type: 'string' },
+        // A colour field that fills this shape (Phase 9 Wave B).
+        colorBinding: { type: 'string', minLength: 1, maxLength: 64 },
+        // Wave R (CHARTS.md §4): arcs on an ellipse, draw-on, paths from rows.
+        arc: {
+          type: 'object',
+          required: ['sweep'],
+          properties: {
+            start: { type: 'number' },
+            sweep: { type: 'number', minimum: 0, maximum: 360 },
+            thickness: { type: 'number', exclusiveMinimum: 0 },
+            cap: { enum: [...ARC_CAPS] },
+          },
+          additionalProperties: false,
+        },
+        trim: { type: 'number', minimum: 0, maximum: 1 },
+        plot: {
+          type: 'object',
+          required: ['y'],
+          properties: {
+            source: { type: 'string', minLength: 1 },
+            transforms: { type: 'array', items: { $ref: '#/$defs/dataTransform' } },
+            y: { type: 'string', minLength: 1 },
+            x: { type: 'string', minLength: 1 },
+            domain: {
+              type: 'object',
+              properties: {
+                min: plotDomainEndSchema,
+                max: plotDomainEndSchema,
+                pad: { type: 'number', minimum: 0, maximum: 0.5 },
+              },
+              additionalProperties: false,
+            },
+            curve: { enum: [...PLOT_CURVES] },
+            area: { type: 'boolean' },
+            tween: tweenSchema,
+          },
+          additionalProperties: false,
+        },
       },
       required: ['shape'],
       additionalProperties: false,
@@ -486,6 +709,8 @@ const layerSchema = {
         type: { const: 'text' },
         text: { type: 'string' },
         binding: { type: 'string' },
+        // A colour field that colours this text (Phase 9 Wave B).
+        colorBinding: { type: 'string', minLength: 1, maxLength: 64 },
         style: { $ref: '#/$defs/textStyle' },
         fit: {
           type: 'object',
@@ -530,6 +755,37 @@ const layerSchema = {
             // have nothing to do with each other.
             locale: { type: 'string' },
             tickSeconds: { type: 'number', exclusiveMinimum: 0, maximum: 3600 },
+          },
+          additionalProperties: false,
+        },
+        // Phase 9 Wave B — see timer.ts.
+        timer: {
+          type: 'object',
+          required: ['mode'],
+          properties: {
+            id: { type: 'string', pattern: TIMER_ID_PATTERN.source },
+            mode: { enum: [...TIMER_MODES] },
+            duration: { type: 'number', minimum: 0, maximum: 864000 },
+            limit: { type: 'number', minimum: 0, maximum: 864000 },
+            until: { type: 'string', pattern: '^\\d{1,2}:\\d{2}(:\\d{2})?$' },
+            timezone: { type: 'string' },
+            format: { type: 'string', minLength: 1, maxLength: 40 },
+            tenthsUnder: { type: 'number', minimum: 0, maximum: 3600 },
+            tenthsFormat: { type: 'string', minLength: 1, maxLength: 40 },
+            end: { enum: [...TIMER_ENDS] },
+          },
+          additionalProperties: false,
+        },
+        // Wave R (CHARTS.md §4.5): count to a new number.
+        count: {
+          type: 'object',
+          required: ['duration'],
+          properties: {
+            duration: { type: 'number', minimum: 0, maximum: 60 },
+            ease: { $ref: '#/$defs/ease' },
+            decimals: { type: 'integer', minimum: 0, maximum: 6 },
+            prefix: { type: 'string', maxLength: 20 },
+            suffix: { type: 'string', maxLength: 20 },
           },
           additionalProperties: false,
         },
@@ -652,6 +908,7 @@ const layerSchema = {
         },
         rowsPerPage: { type: 'integer', minimum: 0 },
         layout: { enum: ['rows'] },
+        axis: { enum: [...TABLE_AXES] },
         rowAnim: {
           type: 'object',
           required: ['id'],
@@ -698,6 +955,56 @@ const layerSchema = {
         },
       },
       required: ['row'],
+      additionalProperties: false,
+    },
+    {
+      // Wave R (ROLLS.md §4).
+      properties: {
+        ...layerBaseProps,
+        type: { const: 'roll' },
+        source: { type: 'string' },
+        data: {
+          type: 'object',
+          required: ['columns', 'rows'],
+          properties: {
+            columns: { type: 'array', items: { $ref: '#/$defs/dataColumn' } },
+            rows: { type: 'array', items: { $ref: '#/$defs/dataRow' } },
+          },
+          additionalProperties: false,
+        },
+        transforms: { type: 'array', items: { $ref: '#/$defs/dataTransform' } },
+        column: { type: 'string', minLength: 1 },
+        direction: { enum: [...ROLL_DIRECTIONS] },
+        speed: { type: 'number', exclusiveMinimum: 0, maximum: 5000 },
+        scrollId: { type: 'string', pattern: SCROLL_ID_PATTERN.source },
+        from: { enum: [...ROLL_FROMS] },
+        to: { enum: [...ROLL_TOS] },
+        end: { enum: [...ROLL_ENDS] },
+        loopGap: { type: 'number', minimum: 0 },
+        start: { enum: [...ROLL_STARTS] },
+        style: { $ref: '#/$defs/textStyle' },
+        headingStyle: { $ref: '#/$defs/textStyle' },
+        pairStyle: {
+          type: 'object',
+          properties: {
+            left: { $ref: '#/$defs/textStyle' },
+            right: { $ref: '#/$defs/textStyle' },
+            split: { type: 'number', exclusiveMinimum: 0, exclusiveMaximum: 1 },
+            gutter: { type: 'number', minimum: 0 },
+          },
+          additionalProperties: false,
+        },
+        gapSize: { type: 'number', minimum: 0 },
+        spacing: { type: 'number', minimum: 0 },
+        separator: { type: 'string' },
+        fade: {
+          type: 'object',
+          required: ['start', 'end'],
+          properties: { start: { type: 'number', minimum: 0 }, end: { type: 'number', minimum: 0 } },
+          additionalProperties: false,
+        },
+      },
+      required: ['direction', 'speed', 'style'],
       additionalProperties: false,
     },
     {
@@ -779,6 +1086,12 @@ export const compositionSchema = {
     // `duration` here: duration is optional and derived when absent, so the
     // relation cannot be stated in JSON Schema. `posterTimeOf` clamps instead.
     posterTime: { type: 'number', minimum: 0 },
+    // Typed fields, Phase 9 Wave B — see fields.ts.
+    fields: {
+      type: 'object',
+      propertyNames: { type: 'string', minLength: 1, maxLength: 64 },
+      additionalProperties: fieldSpecSchema,
+    },
     meta: { type: 'object' },
   },
   additionalProperties: false,
@@ -913,6 +1226,7 @@ export const dataSourcesSchema = {
               id: { type: 'string', minLength: 1 },
               name: { type: 'string' },
               type: { const: 'manual' },
+              template: sportTemplateRefSchema,
               pollInterval: { type: 'number', minimum: 0 },
               enabled: { type: 'boolean' },
               expireAfter: { type: 'number', minimum: 60 },
@@ -928,6 +1242,7 @@ export const dataSourcesSchema = {
               id: { type: 'string', minLength: 1 },
               name: { type: 'string' },
               type: { const: 'http-json' },
+              template: sportTemplateRefSchema,
               pollInterval: { type: 'number', minimum: 0 },
               enabled: { type: 'boolean' },
               expireAfter: { type: 'number', minimum: 60 },
@@ -951,6 +1266,7 @@ export const dataSourcesSchema = {
               id: { type: 'string', minLength: 1 },
               name: { type: 'string' },
               type: { const: 'http-csv' },
+              template: sportTemplateRefSchema,
               pollInterval: { type: 'number', minimum: 0 },
               enabled: { type: 'boolean' },
               expireAfter: { type: 'number', minimum: 60 },
@@ -995,6 +1311,7 @@ export const dataSourcesSchema = {
               id: { type: 'string', minLength: 1 },
               name: { type: 'string' },
               type: { const: 'xml' },
+              template: sportTemplateRefSchema,
               pollInterval: { type: 'number', minimum: 0 },
               enabled: { type: 'boolean' },
               expireAfter: { type: 'number', minimum: 60 },
@@ -1017,6 +1334,7 @@ export const dataSourcesSchema = {
               id: { type: 'string', minLength: 1 },
               name: { type: 'string' },
               type: { const: 'sheets' },
+              template: sportTemplateRefSchema,
               pollInterval: { type: 'number', minimum: 0 },
               enabled: { type: 'boolean' },
               expireAfter: { type: 'number', minimum: 60 },
@@ -1071,6 +1389,7 @@ export const dataSourcesSchema = {
               // schema caught up. The pattern's job is to catch a pasted URL or
               // a stray space, not to validate the id.
               models: { type: 'string', pattern: '^[a-z0-9_]+(,[a-z0-9_]+)*$' },
+              showAttribution: { type: 'boolean' },
               timezone: { type: 'string', pattern: '^[A-Za-z0-9_/+-]+$' },
               // Free text: it goes into a header, and every origin that asks
               // for one documents a different shape. Length-capped only, since
@@ -1089,6 +1408,7 @@ export const dataSourcesSchema = {
               id: { type: 'string', minLength: 1 },
               name: { type: 'string' },
               type: { const: 'ftp' },
+              template: sportTemplateRefSchema,
               pollInterval: { type: 'number', minimum: 0 },
               enabled: { type: 'boolean' },
               expireAfter: { type: 'number', minimum: 60 },
@@ -1109,6 +1429,9 @@ export const dataSourcesSchema = {
               header: { type: 'boolean' },
               rowPath: { type: 'string' },
               columns: { type: 'array', items: { $ref: '#/$defs/dataColumn' } },
+              // `format: 'text'` (Wave R).
+              split: { enum: [...TEXT_SPLITS] },
+              markup: { type: 'boolean' },
             },
             required: ['protocol', 'host', 'pattern', 'format'],
             additionalProperties: false,
@@ -1165,8 +1488,63 @@ export const dataSourcesSchema = {
               count: { type: 'number', minimum: 1, maximum: 7 },
               timezone: { type: 'string', pattern: '^[A-Za-z0-9_/+-]+$' },
               contact: contactSchema,
+              showAttribution: { type: 'boolean' },
             },
             required: ['provider'],
+            additionalProperties: false,
+          },
+          /* ------------------------------------------ Phase 9 Wave R */
+          {
+            // Long text — lyrics, credits (ROLLS.md §3). In the project or fetched, never both (validate.ts).
+            properties: {
+              id: { type: 'string', minLength: 1 },
+              name: { type: 'string' },
+              type: { const: 'text' },
+              pollInterval: { type: 'number', minimum: 0 },
+              enabled: { type: 'boolean' },
+              expireAfter: { type: 'number', minimum: 60 },
+              guard: guardSchema,
+              fallback: { type: 'string', minLength: 1 },
+              fallbackOn: { enum: [...FALLBACK_TRIGGERS] },
+              body: { type: 'string' },
+              url: { type: 'string', minLength: 1 },
+              secretId: { type: 'string' },
+              headers: { type: 'object', additionalProperties: { type: 'string' } },
+              split: { enum: [...TEXT_SPLITS] },
+              markup: { type: 'boolean' },
+              operatorEditable: { type: 'boolean' },
+            },
+            additionalProperties: false,
+          },
+          {
+            // An operator-run poll (CHARTS.md §5).
+            properties: {
+              id: { type: 'string', minLength: 1 },
+              name: { type: 'string' },
+              type: { const: 'poll' },
+              enabled: { type: 'boolean' },
+              question: { type: 'string', maxLength: 500 },
+              options: {
+                type: 'array',
+                minItems: 1,
+                maxItems: POLL_OPTIONS_MAX,
+                items: {
+                  type: 'object',
+                  required: ['id', 'label'],
+                  properties: {
+                    id: { type: 'string', minLength: 1, maxLength: 32 },
+                    label: { type: 'string', maxLength: 200 },
+                    color: { type: 'string', maxLength: 64 },
+                    image: { type: 'string', maxLength: 512 },
+                  },
+                  additionalProperties: false,
+                },
+              },
+              votes: { type: 'object', additionalProperties: { type: 'integer', minimum: 0 } },
+              status: { enum: [...POLL_STATUSES] },
+              operatorEditable: { type: 'boolean' },
+            },
+            required: ['question', 'options'],
             additionalProperties: false,
           },
         ],

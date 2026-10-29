@@ -51,6 +51,16 @@ function shapeTarget(nodes: LayerNodes): HTMLElement | SVGElement | null {
   return nodes.content.querySelector<SVGElement>('path') ?? nodes.content.querySelector<HTMLElement>('.bz-shape');
 }
 
+/**
+ * Which SVG paint a recolour sets. A ring arc or a plotted line is drawn with
+ * its stroke and `fill="none"` (Wave R) — painting its fill would flood the
+ * wedge it encloses, so the stroke takes the colour instead.
+ */
+function paintOf(path: Element): 'fill' | 'stroke' {
+  const stroke = path.getAttribute('stroke');
+  return path.getAttribute('fill') === 'none' && stroke && stroke !== 'none' ? 'stroke' : 'fill';
+}
+
 function applyColor(nodes: LayerNodes, color: string | undefined): void {
   const o = memo(nodes.el);
   if (nodes.layer.type === 'text' && nodes.textInner) {
@@ -72,16 +82,46 @@ function applyColor(nodes: LayerNodes, color: string | undefined): void {
     const target = shapeTarget(nodes);
     if (!target) return;
     const isPath = target.tagName.toLowerCase() === 'path';
-    const current = isPath ? target.getAttribute('fill') ?? '' : (target as HTMLElement).style.background;
+    const paint = isPath ? paintOf(target) : 'fill';
+    const current = isPath ? target.getAttribute(paint) ?? '' : (target as HTMLElement).style.background;
     if (color === undefined) {
       if (o.fill === undefined) return;
-      if (isPath) target.setAttribute('fill', o.fill);
+      if (isPath) target.setAttribute(paint, o.fill);
       else (target as HTMLElement).style.background = o.fill;
       delete o.fill;
       return;
     }
     o.fill ??= current;
-    if (isPath) target.setAttribute('fill', color);
+    if (isPath) target.setAttribute(paint, color);
+    else (target as HTMLElement).style.background = color;
+  }
+}
+
+/**
+ * A colour from a typed field (Phase 9 Wave B) — the layer's *own* colour, a
+ * team colour an operator picked. Under a rule's recolour it becomes what the
+ * layer goes back to when the rule stops, the way `setRuleBaseSrc` treats a
+ * new picture; otherwise it is painted now.
+ */
+export function setFieldColor(nodes: LayerNodes, color: string): void {
+  const o = memo(nodes.el);
+  if (nodes.layer.type === 'text' && nodes.textInner) {
+    if (o.color) {
+      o.color = { color, backgroundImage: 'none' };
+      return;
+    }
+    nodes.textInner.style.backgroundImage = 'none';
+    nodes.textInner.style.color = color;
+    return;
+  }
+  if (nodes.layer.type === 'shape') {
+    if (o.fill !== undefined) {
+      o.fill = color;
+      return;
+    }
+    const target = shapeTarget(nodes);
+    if (!target) return;
+    if (target.tagName.toLowerCase() === 'path') target.setAttribute(paintOf(target), color);
     else (target as HTMLElement).style.background = color;
   }
 }

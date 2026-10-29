@@ -83,6 +83,7 @@ export interface Demo {
 export const DEMOS: Demo[] = [
   { file: 'world-cup-scene.json', sources: 'world-cup-datasources.json', formerly: ['wc26-scene-demo'] },
   { file: 'world-cup-bracket.json', sources: 'world-cup-datasources.json', formerly: ['wc26-demo'] },
+  { file: 'rolls-and-polls.json', sources: 'rolls-and-polls-datasources.json' },
   { file: 'breeze-demo.json', sources: 'datasources.json', formerly: ['demo'] },
 ];
 

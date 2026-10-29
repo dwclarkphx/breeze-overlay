@@ -238,6 +238,7 @@ export function LayersPanel(): JSX.Element {
             <option value="sprite">{t('editor.layers.typeSprite')}</option>
             <option value="media">{t('editor.layers.typeMedia')}</option>
             <option value="crawl">{t('editor.layers.typeCrawl')}</option>
+            <option value="roll">{t('editor.layers.typeRoll')}</option>
             {/*
               Import sits in the add menu rather than beside it, because from
               the operator's side "put a PSD in this composition" is a way of

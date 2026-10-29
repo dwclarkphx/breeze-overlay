@@ -22,6 +22,7 @@ import {
   type AnimatableProp,
   type Composition,
   type Ease,
+  type FieldSpec,
   type Keyframe,
   type Layer,
   type Marker,
@@ -81,7 +82,9 @@ export type Command =
   | { kind: 'deleteMarker'; index: number }
   | { kind: 'setStage'; patch: Partial<Composition['stage']> }
   | { kind: 'setDuration'; duration: number }
-  | { kind: 'renameComposition'; name: string };
+  | { kind: 'renameComposition'; name: string }
+  /** Declare, change or (with no `spec`) remove a typed field — Phase 9 Wave B. */
+  | { kind: 'setField'; name: string; spec?: FieldSpec };
 
 /**
  * Label for the history UI, as a `Message` the caller translates.
@@ -125,6 +128,7 @@ export function describeCommand(command: Command): Message {
     case 'setStage': return msg('editor.commands.changeStage');
     case 'setDuration': return msg('editor.commands.changeDuration');
     case 'renameComposition': return msg('editor.commands.renameComposition');
+    case 'setField': return msg('editor.commands.changeField', { name: command.name });
   }
 }
 
@@ -145,6 +149,7 @@ export function coalesceKey(command: Command): string | null {
     case 'moveMarker': return `moveMarker:${command.index}`;
     case 'renameLayer': return `renameLayer:${command.layerId}`;
     case 'renameComposition': return 'renameComposition';
+    case 'setField': return `setField:${command.name}`;
     default: return null;
   }
 }
@@ -551,6 +556,21 @@ export function applyCommand(comp: Composition, command: Command): Composition {
 
     case 'renameComposition':
       return command.name === comp.name ? comp : { ...comp, name: command.name };
+
+    case 'setField': {
+      const current = comp.fields ?? {};
+      if (!command.spec) {
+        if (!(command.name in current)) return comp;
+        const { [command.name]: _gone, ...rest } = current;
+        if (Object.keys(rest).length === 0) {
+          const { fields: _drop, ...without } = comp;
+          return without as Composition;
+        }
+        return { ...comp, fields: rest };
+      }
+      if (JSON.stringify(current[command.name]) === JSON.stringify(command.spec)) return comp;
+      return { ...comp, fields: { ...current, [command.name]: command.spec } };
+    }
   }
 }
 
@@ -606,6 +626,13 @@ function applyValues(
       // Not a static field at all — `baselineValue` always reads 0 for it,
       // so a non-animated edit here has nothing to write to. The stopwatch
       // is the only way this property does anything (MASKS.md §2.1).
+      continue;
+    } else if (prop === 'trim') {
+      // Wave R: a shape's own field, not part of the transform.
+      if (next.type === 'shape') next = { ...next, trim: Math.min(1, Math.max(0, value)) };
+      continue;
+    } else if (prop === 'sweep') {
+      if (next.type === 'shape' && next.arc) next = { ...next, arc: { ...next.arc, sweep: Math.min(360, Math.max(0, value)) } };
       continue;
     } else transform[prop] = value;
   }

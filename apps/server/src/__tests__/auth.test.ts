@@ -421,3 +421,38 @@ describe('checking a camera list requires the key (Wave 8)', () => {
     expect(keyed.json().rows[0].error).toMatch(/private address/);
   });
 });
+
+describe('the OGraf Server API requires the key for actions (Phase 9 Wave D)', () => {
+  const LOAD = '/ograf/v1/renderers/demo-1iixd/target/graphicInstance/load';
+  const body = {
+    renderTarget: { channel: 'l3rd-name-2a94g' },
+    graphicId: 'demo-1iixd~l3rd-name-2a94g',
+    params: { data: { name: 'Jane Doe' } },
+  };
+
+  it('leaves the reads open', async () => {
+    for (const url of ['/ograf/v1', '/ograf/v1/graphics', '/ograf/v1/renderers/demo-1iixd', '/ograf/package/demo-1iixd~l3rd-name-2a94g/graphic.mjs']) {
+      expect((await app.inject({ method: 'GET', url })).statusCode, url).toBe(200);
+    }
+    // A browser's preflight carries no key and must not be refused for it.
+    expect((await app.inject({ method: 'OPTIONS', url: LOAD })).statusCode).toBe(204);
+  });
+
+  it('refuses an action without the key — with the CORS headers, so a browser sees the 401', async () => {
+    const res = await app.inject({ method: 'POST', url: LOAD, payload: body });
+    expect(res.statusCode).toBe(401);
+    expect(res.headers['access-control-allow-origin']).toBe('*');
+    expect((await app.inject({ method: 'PUT', url: '/ograf/v1/renderers/demo-1iixd/target/graphicInstance/clear', payload: { filters: [] } })).statusCode).toBe(401);
+  });
+
+  it('takes the key as X-Breeze-Key, ?key= or Authorization: Bearer', async () => {
+    expect((await app.inject({ method: 'POST', url: LOAD, payload: body, headers: { 'x-breeze-key': 's3cret' } })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'POST', url: `${LOAD}?key=s3cret`, payload: body })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'POST', url: LOAD, payload: body, headers: { authorization: 'Bearer s3cret' } })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'POST', url: LOAD, payload: body, headers: { authorization: 'Bearer nope' } })).statusCode).toBe(401);
+  });
+
+  it('does not take a Bearer key anywhere else', async () => {
+    expect((await app.inject({ method: 'POST', url: PLAY, headers: { authorization: 'Bearer s3cret' } })).statusCode).toBe(401);
+  });
+});

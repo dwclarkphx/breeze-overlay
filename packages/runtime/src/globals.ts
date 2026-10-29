@@ -48,6 +48,11 @@ export interface BreezeGlobals {
    */
   mode: (value?: string) => string;
   update: (payload: string | Record<string, unknown>) => void;
+  /**
+   * Cue → take (Phase 9 Wave A): new values and PLAY as one step. On air, the
+   * outro runs first, so the new values never appear on the old pose.
+   */
+  take: (payload?: string | Record<string, unknown>) => void;
   /** Non-standard but universally useful for debugging in a browser source. */
   seek: (time: number) => void;
   runtime: BreezeRuntime;
@@ -86,6 +91,10 @@ export function makeGlobals(runtime: BreezeRuntime): BreezeGlobals {
     update: (payload) => {
       const data = typeof payload === 'string' ? safeParse(payload) : payload;
       if (data) runtime.update(data);
+    },
+    take: (payload) => {
+      const data = payload === undefined ? {} : typeof payload === 'string' ? safeParse(payload) : payload;
+      if (data) runtime.take(data);
     },
     seek: (time) => runtime.seek(time),
     runtime,

@@ -19,10 +19,12 @@
 
 import {
   DEFAULT_TRANSFORM,
+  arcPath,
   type CrawlLayer,
   type Fill,
   type ImageLayer,
   type Layer,
+  type RollLayer,
   type ShapeLayer,
   type SpriteLayer,
   type TextLayer,
@@ -59,6 +61,15 @@ export interface LayerNodes {
   sprite?: HTMLElement;
   /** Media-only (Wave 8): the player filling the layer. */
   mediaPlayer?: MediaPlayer;
+  /**
+   * The drawn outline of a path or arc shape (Wave R) — what `trim` dashes and
+   * what an arc's `sweep` and a plot's rows rewrite. Absent on rects and plain
+   * ellipses, which CSS draws.
+   */
+  shapePath?: SVGPathElement;
+  /** A roll's window (overflow hidden) and the track that moves inside it (Wave R). */
+  rollWindow?: HTMLElement;
+  rollTrack?: HTMLElement;
 }
 
 export interface BuildContext {
@@ -91,7 +102,7 @@ export function fillToCss(fill: Fill | undefined, fallback = 'transparent'): str
   return `linear-gradient(${fill.angle ?? 180}deg, ${stops})`;
 }
 
-function applyTextStyle(el: HTMLElement, style: TextStyle): void {
+export function applyTextStyle(el: HTMLElement, style: TextStyle): void {
   const s = el.style;
   s.fontFamily = style.fontFamily;
   s.fontSize = `${style.fontSize}px`;
@@ -138,8 +149,9 @@ function vAlignToFlex(v: TextStyle['verticalAlign']): string {
 
 /* ------------------------------------------------------------ layer types */
 
-function buildShape(layer: ShapeLayer, ctx: BuildContext): Element {
+function buildShape(layer: ShapeLayer, ctx: BuildContext): { el: Element; path?: SVGPathElement } {
   if (layer.shape === 'path') return buildPathShape(layer, ctx);
+  if (layer.shape === 'ellipse' && layer.arc) return buildArcShape(layer, ctx);
 
   const el = ctx.doc.createElement('div');
   el.className = 'bz-shape';
@@ -152,7 +164,7 @@ function buildShape(layer: ShapeLayer, ctx: BuildContext): Element {
   if (layer.stroke && layer.stroke.width > 0) {
     el.style.border = `${layer.stroke.width}px solid ${layer.stroke.color}`;
   }
-  return el;
+  return { el };
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -175,7 +187,7 @@ let gradientCounter = 0;
  * which is the same rule Wave A settled for masks: the box only has to exist,
  * the geometry lives in the shape.
  */
-function buildPathShape(layer: ShapeLayer, ctx: BuildContext): SVGSVGElement {
+function buildPathShape(layer: ShapeLayer, ctx: BuildContext): { el: SVGSVGElement; path: SVGPathElement } {
   const svg = ctx.doc.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('class', 'bz-shape bz-path');
   svg.setAttribute('width', '100%');
@@ -183,7 +195,10 @@ function buildPathShape(layer: ShapeLayer, ctx: BuildContext): SVGSVGElement {
   svg.style.overflow = 'visible';
 
   const path = ctx.doc.createElementNS(SVG_NS, 'path');
-  path.setAttribute('d', layer.path ?? '');
+  // A plotted path's `d` comes from its rows, which the runtime writes once it has them.
+  path.setAttribute('d', layer.plot ? '' : (layer.path ?? ''));
+  // One unit of length for the whole outline, so `trim` is a plain fraction (Wave R).
+  path.setAttribute('pathLength', '1');
 
   /*
    * Unlike a rect, a path with no authored fill is left unfilled rather than
@@ -208,7 +223,70 @@ function buildPathShape(layer: ShapeLayer, ctx: BuildContext): SVGSVGElement {
   }
 
   svg.appendChild(path);
-  return svg;
+  setShapeTrim(path, layer.trim ?? 1);
+  return { el: svg, path };
+}
+
+/**
+ * An ellipse drawn as an arc (Wave R, CHARTS.md §4.2): a ring segment stroked
+ * in the fill, or a filled wedge. An SVG for the same reason a path is one —
+ * CSS has no arc — and sized to the layer box with no viewBox, so the geometry
+ * is in the layer's own pixels and `arcPath` can be redrawn as `sweep` moves.
+ */
+function buildArcShape(layer: ShapeLayer, ctx: BuildContext): { el: SVGSVGElement; path: SVGPathElement } {
+  const svg = ctx.doc.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', 'bz-shape bz-arc');
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('height', '100%');
+  svg.style.overflow = 'visible';
+  const path = ctx.doc.createElementNS(SVG_NS, 'path');
+  path.setAttribute('pathLength', '1');
+  const arc = layer.arc!;
+  const paint = layer.fill === undefined ? '#ffffff' : typeof layer.fill === 'string' ? layer.fill : svgGradient(layer.fill, svg, ctx);
+  if (arc.thickness !== undefined && arc.thickness > 0) {
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', paint);
+    path.setAttribute('stroke-width', String(arc.thickness));
+    path.setAttribute('stroke-linecap', arc.cap ?? 'butt');
+  } else {
+    path.setAttribute('fill', paint);
+    if (layer.stroke && layer.stroke.width > 0) {
+      path.setAttribute('stroke', layer.stroke.color);
+      path.setAttribute('stroke-width', String(layer.stroke.width));
+      path.setAttribute('stroke-linejoin', 'round');
+    }
+  }
+  svg.appendChild(path);
+  setShapeSweep(path, layer, arc.sweep);
+  setShapeTrim(path, layer.trim ?? 1);
+  return { el: svg, path };
+}
+
+/**
+ * Draw an outline on to `t` (0–1) of its length (Wave R, CHARTS.md §4.3).
+ *
+ * The path carries `pathLength="1"`, so the dash is the fraction itself. At
+ * zero the stroke is made transparent rather than dashed to nothing: a round
+ * cap on a zero-length dash still paints a dot, and an area chart's fill must
+ * stay while its line has not started.
+ */
+export function setShapeTrim(path: SVGPathElement, t: number): void {
+  const v = Math.min(1, Math.max(0, Number.isFinite(t) ? t : 1));
+  if (v >= 1) {
+    path.removeAttribute('stroke-dasharray');
+    path.style.removeProperty('stroke-opacity');
+    return;
+  }
+  path.setAttribute('stroke-dasharray', `${v} 1`);
+  if (v <= 0) path.style.setProperty('stroke-opacity', '0');
+  else path.style.removeProperty('stroke-opacity');
+}
+
+/** Redraw an arc at `sweep` degrees — what a `sweep` keyframe or drive moves. */
+export function setShapeSweep(path: SVGPathElement, layer: ShapeLayer, sweep: number): void {
+  if (!layer.arc) return;
+  const size = layer.size ?? { width: 0, height: 0 };
+  path.setAttribute('d', arcPath(size.width, size.height, layer.arc, sweep).d);
 }
 
 /**
@@ -281,6 +359,10 @@ function buildText(layer: TextLayer, ctx: BuildContext): { el: HTMLElement; inne
   const inner = ctx.doc.createElement('span');
   inner.className = 'bz-text-inner';
   applyTextStyle(inner, layer.style);
+  // The flex box places the block; this places each line inside it, so a
+  // centred verse is centred line by line rather than as a ragged-left block.
+  // `start`/`end` to match the flex box's, which follow the page's direction.
+  inner.style.textAlign = layer.style.align === 'center' ? 'center' : layer.style.align === 'right' ? 'end' : 'start';
   inner.style.transformOrigin =
     layer.style.align === 'center' ? 'center center'
     : layer.style.align === 'right' ? 'right center'
@@ -383,6 +465,33 @@ function buildVideoPoster(layer: VideoLayer, ctx: BuildContext): HTMLImageElemen
   return img;
 }
 
+/**
+ * A roll (Wave R, ROLLS.md §4): a window clipping a track. The rows are the
+ * runtime's to fill (`RollBlock`), as a crawl's blocks are `CrawlLoop`'s. The
+ * soft edges are a mask on the *window*, never on the layer element, so they
+ * compose with a layer mask rather than replace it.
+ */
+function buildRoll(layer: RollLayer, ctx: BuildContext): { el: HTMLElement; track: HTMLElement } {
+  const el = ctx.doc.createElement('div');
+  el.className = 'bz-roll';
+  const fade = layer.fade;
+  if (fade && (fade.start > 0 || fade.end > 0)) {
+    // `start` is the edge the text enters from; `end` the one it leaves by.
+    const toward =
+      layer.direction === 'up' ? 'to top'
+      : layer.direction === 'down' ? 'to bottom'
+      : layer.direction === 'left' ? 'to left'
+      : 'to right';
+    const g = `linear-gradient(${toward}, transparent 0, #000 ${fade.start}px, #000 calc(100% - ${fade.end}px), transparent 100%)`;
+    el.style.setProperty('mask-image', g);
+    el.style.setProperty('-webkit-mask-image', g);
+  }
+  const track = ctx.doc.createElement('div');
+  track.className = 'bz-roll-track';
+  el.appendChild(track);
+  return { el, track };
+}
+
 function buildCrawl(layer: CrawlLayer, ctx: BuildContext): { el: HTMLElement; track: HTMLElement } {
   const el = ctx.doc.createElement('div');
   el.className = 'bz-crawl';
@@ -426,9 +535,12 @@ export function buildLayerElement(instance: LayerInstance, ctx: BuildContext): L
   const nodes: LayerNodes = { instance, layer, el, content };
 
   switch (layer.type) {
-    case 'shape':
-      content.appendChild(buildShape(layer, ctx));
+    case 'shape': {
+      const shape = buildShape(layer, ctx);
+      content.appendChild(shape.el);
+      if (shape.path) nodes.shapePath = shape.path;
       break;
+    }
     case 'text': {
       const { el: textEl, inner } = buildText(layer, ctx);
       content.appendChild(textEl);
@@ -480,6 +592,13 @@ export function buildLayerElement(instance: LayerInstance, ctx: BuildContext): L
       // element once it has data. Building anything here would only be torn out.
       content.classList.add('bz-table');
       break;
+    case 'roll': {
+      const { el: rollEl, track } = buildRoll(layer, ctx);
+      content.appendChild(rollEl);
+      nodes.rollWindow = rollEl;
+      nodes.rollTrack = track;
+      break;
+    }
     case 'group':
       content.classList.add('bz-group');
       break;

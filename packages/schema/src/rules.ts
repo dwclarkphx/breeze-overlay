@@ -48,6 +48,12 @@ export interface RuleCondition {
   where?: { column: string; value: DataValue };
   binding?: string;
   mode?: true;
+  /**
+   * A timer on this graphic's channel, by id (Phase 9 Wave B): its value in
+   * seconds — time left for a countdown — so `game lte 30` recolours the clock
+   * for the last thirty seconds and `service lte 0` hides a finished countdown.
+   */
+  timer?: string;
   cmp: RuleOp;
   /** What to compare with. A list — or a comma-separated string — for `in`. */
   value?: DataValue | DataValue[];
@@ -80,6 +86,8 @@ export interface RuleContext {
   source: (id: string) => DataSet | undefined;
   field: (name: string) => unknown;
   mode: string;
+  /** A timer's value in seconds, or undefined when the graphic has no such timer. */
+  timer?: (id: string) => number | undefined;
 }
 
 /** The outcome for one layer: whether rules hide it, and any recolour or new source. */
@@ -108,6 +116,7 @@ function sourceRow(ctx: RuleContext, c: RuleCondition): DataRow | undefined {
 
 function subject(ctx: RuleContext, c: RuleCondition): DataValue {
   if (c.mode) return ctx.mode;
+  if (c.timer !== undefined) return ctx.timer?.(c.timer) ?? null;
   if (c.binding !== undefined) return asValue(ctx.field(c.binding));
   if (c.source !== undefined && c.column === undefined) return ctx.source(c.source)?.rows.length ?? 0;
   if (c.source !== undefined) return sourceRow(ctx, c)?.[c.column!] ?? null;

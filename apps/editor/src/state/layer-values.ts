@@ -34,6 +34,9 @@ export function baselineOf(layer: Layer, prop: AnimatableProp): number {
   if (prop === 'grayscale') return layer.effects?.grayscale ?? 0;
   if (prop === 'sepia') return layer.effects?.sepia ?? 0;
   if (prop === 'maskOffset') return 0;
+  // Wave R: a shape's draw-on and an arc's sweep.
+  if (prop === 'trim') return layer.type === 'shape' ? (layer.trim ?? 1) : 1;
+  if (prop === 'sweep') return layer.type === 'shape' && layer.arc ? layer.arc.sweep : 360;
   return t[prop as keyof typeof t] ?? 0;
 }
 

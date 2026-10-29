@@ -94,13 +94,17 @@ function hostOf(value: string | undefined): string | null {
 }
 
 /**
- * Is this an `/api/*` call from something other than one of our own pages?
+ * Is this an `/api/*` or OGraf (`/ograf/v1`) call from something other than one
+ * of our own pages?
  *
  * `Sec-Fetch-Site: same-origin` is the direct answer and every current browser
  * sends it. `Referer` / `Origin` matching `Host` covers the rest.
  */
 export function isExternalApiCall(req: RequestLike): boolean {
-  if (!stripQuery(req.url).startsWith('/api/')) return false;
+  const path = stripQuery(req.url);
+  // The OGraf Server API (Phase 9 Wave D) is an API like any other: an SPX on
+  // the next desk calling it is exactly the caller this list exists to show.
+  if (!path.startsWith('/api/') && !path.startsWith('/ograf/v1')) return false;
   if (header(req, 'sec-fetch-site') === 'same-origin') return false;
   const host = header(req, 'host');
   if (host) {

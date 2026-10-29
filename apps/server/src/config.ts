@@ -202,3 +202,5 @@ export const projectDataSourcesFile = (id: string) =>
   path.join(projectDir(id), 'datasources.json');
 /** The asset index. Split out of project.json in Phase 7.5 — see ASSETS.md §6. */
 export const projectAssetsFile = (id: string) => path.join(projectDir(id), 'assets.json');
+/** Rundowns (Phase 9 Wave A) — beside the asset index, under the same write lock. */
+export const projectRundownsFile = (id: string) => path.join(projectDir(id), 'rundowns.json');

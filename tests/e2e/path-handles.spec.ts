@@ -42,6 +42,34 @@ async function pathLayer(page: Page): Promise<void> {
   await page.locator('.add-layer').selectOption('shape');
   await page.locator(SHAPE_KIND).selectOption('path');
   await expect(anchors(page)).toHaveCount(3);
+  /*
+   * The anchors are drawn from the document, at once; the preview is rebuilt
+   * from it 60 ms later (StageViewport's debounce). Until then the selected
+   * layer is still the old rect, and the rebuild detaches it from under any
+   * measurement — `boundingBox()` then answers null (2026-10-26, Windows run).
+   * The rebuilt layer is the one with a path in it.
+   */
+  await expect(page.locator('.stage-host [data-selected="1"] path')).toBeAttached();
+}
+
+/**
+ * A layer's box once the preview has stopped rebuilding it: two reads a frame
+ * apart that agree. A rebuild replaces the element, so a single read can land
+ * on one that is about to be detached.
+ */
+async function settledBox(loc: Locator): Promise<{ x: number; y: number; width: number; height: number }> {
+  let last: { x: number; y: number; width: number; height: number } | null = null;
+  await expect
+    .poll(async () => {
+      const box = await loc.boundingBox();
+      const same = box !== null && last !== null && ['x', 'y', 'width', 'height'].every(
+        (k) => Math.abs(box[k as 'x'] - last![k as 'x']) < 0.5,
+      );
+      last = box;
+      return same;
+    }, { intervals: [50] })
+    .toBe(true);
+  return last!;
 }
 
 /**
@@ -84,7 +112,7 @@ test('anchors sit on the layer they belong to, rotated or not', async ({ page })
     expect(Math.abs(p.y - y), `y ${p.y} vs ${y}`).toBeLessThan(1.5);
   };
 
-  let box = (await layer.boundingBox())!;
+  let box = await settledBox(layer);
   near(await centreOf(anchors(page).nth(0)), box.x, box.y + box.height);
   near(await centreOf(anchors(page).nth(1)), box.x + box.width / 2, box.y);
   near(await centreOf(anchors(page).nth(2)), box.x + box.width, box.y + box.height);
@@ -97,9 +125,8 @@ test('anchors sit on the layer they belong to, rotated or not', async ({ page })
     .first();
   await rotation.fill('90');
   await rotation.press('Tab');
-  await expect.poll(async () => (await layer.boundingBox())!.height).toBeGreaterThan(box.height + 1);
-  await page.waitForTimeout(150);
-  box = (await layer.boundingBox())!;
+  await expect.poll(async () => (await layer.boundingBox())?.height ?? 0).toBeGreaterThan(box.height + 1);
+  box = await settledBox(layer);
   near(await centreOf(anchors(page).nth(0)), box.x, box.y);
   near(await centreOf(anchors(page).nth(2)), box.x, box.y + box.height);
 });
@@ -182,7 +209,7 @@ test('double-click on a straight segment adds a point; Alt-click removes one', a
 test('the layer body still moves the whole layer — the overlay only owns its own marks', async ({ page }) => {
   await pathLayer(page);
   const layer = page.locator('.stage-host [data-selected="1"]');
-  const box = (await layer.boundingBox())!;
+  const box = await settledBox(layer);
   // Inside the triangle, away from every anchor and edge.
   const at = { x: box.x + box.width / 2, y: box.y + box.height * 0.7 };
   const target = await page.evaluate((p) => document.elementFromPoint(p.x, p.y)?.className.toString() ?? '', at);
@@ -192,7 +219,7 @@ test('the layer body still moves the whole layer — the overlay only owns its o
   await page.mouse.down();
   await page.mouse.move(at.x + 60, at.y, { steps: 6 });
   await page.mouse.up();
-  await expect.poll(async () => (await layer.boundingBox())!.x).toBeGreaterThan(box.x + 50);
+  await expect.poll(async () => (await layer.boundingBox())?.x ?? -Infinity).toBeGreaterThan(box.x + 50);
 });
 
 test('a locked layer offers no handles, and says why', async ({ page }) => {

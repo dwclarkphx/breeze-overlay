@@ -1,0 +1,2068 @@
+{
+  "formatVersion": 1,
+  "id": "rolls-polls-7k2qd",
+  "name": "Rolls, Polls & Charts",
+  "createdAt": "2026-10-26T00:00:00.000Z",
+  "updatedAt": "2026-10-26T00:00:00.000Z",
+  "assets": [],
+  "compositions": [
+    {
+      "formatVersion": 1,
+      "id": "credits-roll-4m8tq",
+      "name": "Credits Roll",
+      "duration": 1.4,
+      "stage": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 60,
+        "background": "transparent"
+      },
+      "markers": [
+        {
+          "type": "stop",
+          "time": 0.6,
+          "name": "Hold on air"
+        }
+      ],
+      "layers": [
+        {
+          "id": "credits-bg",
+          "name": "Backdrop",
+          "type": "shape",
+          "shape": "rect",
+          "fill": "rgba(2,8,15,0.82)",
+          "size": {
+            "width": 1920,
+            "height": 1080
+          },
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.5,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 0.8,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 1.3,
+                "v": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "credits-roll",
+          "name": "Credits",
+          "type": "roll",
+          "source": "credits",
+          "direction": "up",
+          "speed": 90,
+          "from": "enter",
+          "to": "exit",
+          "end": "continue",
+          "start": "play",
+          "style": {
+            "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+            "fontSize": 30,
+            "fontWeight": 500,
+            "fill": "#dde6ef",
+            "align": "center",
+            "verticalAlign": "top"
+          },
+          "headingStyle": {
+            "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+            "fontSize": 26,
+            "fontWeight": 700,
+            "fill": "#ff3b30",
+            "align": "center",
+            "verticalAlign": "top",
+            "letterSpacing": 3,
+            "textTransform": "uppercase"
+          },
+          "pairStyle": {
+            "left": {
+              "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+              "fontSize": 26,
+              "fontWeight": 400,
+              "fill": "#9fb3c8",
+              "align": "right",
+              "verticalAlign": "top"
+            },
+            "right": {
+              "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+              "fontSize": 30,
+              "fontWeight": 600,
+              "fill": "#ffffff",
+              "align": "left",
+              "verticalAlign": "top"
+            },
+            "split": 0.5,
+            "gutter": 40
+          },
+          "spacing": 8,
+          "fade": {
+            "start": 140,
+            "end": 140
+          },
+          "size": {
+            "width": 1100,
+            "height": 1080
+          },
+          "transform": {
+            "x": 410,
+            "y": 0,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0.2,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.6,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 0.8,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 1.2,
+                "v": 0
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "formatVersion": 1,
+      "id": "lyrics-verse-8p2hw",
+      "name": "Lyrics - Verse",
+      "duration": 1.4,
+      "stage": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 60,
+        "background": "transparent"
+      },
+      "markers": [
+        {
+          "type": "stop",
+          "time": 0.6,
+          "name": "Hold on air"
+        }
+      ],
+      "layers": [
+        {
+          "id": "lyr-bg",
+          "name": "Panel",
+          "type": "shape",
+          "shape": "rect",
+          "fill": "rgba(2,8,15,0.7)",
+          "size": {
+            "width": 1400,
+            "height": 300
+          },
+          "transform": {
+            "x": 260,
+            "y": 700,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "cornerRadius": 12,
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.4,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 0.9,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 1.3,
+                "v": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "lyr-table",
+          "name": "Verse",
+          "type": "table",
+          "source": "lyrics",
+          "transforms": [
+            {
+              "op": "filter",
+              "key": "kind",
+              "cmp": "ne",
+              "value": "gap"
+            }
+          ],
+          "rowsPerPage": 1,
+          "row": {
+            "height": 260,
+            "cells": [
+              {
+                "id": "lyr-line",
+                "name": "lyr-line",
+                "type": "text",
+                "text": "",
+                "style": {
+                  "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+                  "fontSize": 40,
+                  "fontWeight": 600,
+                  "fill": "#ffffff",
+                  "align": "center",
+                  "verticalAlign": "middle",
+                  "lineHeight": 1.35
+                },
+                "size": {
+                  "width": 1300,
+                  "height": 260
+                },
+                "transform": {
+                  "x": 0,
+                  "y": 0,
+                  "anchorX": 0,
+                  "anchorY": 0
+                },
+                "cell": "text"
+              }
+            ]
+          },
+          "size": {
+            "width": 1300,
+            "height": 260
+          },
+          "transform": {
+            "x": 310,
+            "y": 720,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0.1,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.5,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 0.9,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 1.2,
+                "v": 0
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "formatVersion": 1,
+      "id": "poll-bars-6v3nj",
+      "name": "Poll - Results Bars",
+      "duration": 1.6,
+      "stage": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 60,
+        "background": "transparent"
+      },
+      "markers": [
+        {
+          "type": "stop",
+          "time": 0.9,
+          "name": "Hold on air"
+        }
+      ],
+      "layers": [
+        {
+          "id": "pb-bg",
+          "name": "Panel",
+          "type": "shape",
+          "shape": "rect",
+          "fill": "rgba(11,31,51,0.94)",
+          "size": {
+            "width": 1100,
+            "height": 300
+          },
+          "transform": {
+            "x": 120,
+            "y": 680,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "cornerRadius": 6,
+          "keyframes": {
+            "x": [
+              {
+                "t": 0,
+                "v": -1100,
+                "ease": "power3.out"
+              },
+              {
+                "t": 0.6,
+                "v": 120,
+                "ease": "none"
+              },
+              {
+                "t": 0.9,
+                "v": 120,
+                "ease": "power3.in"
+              },
+              {
+                "t": 1.5,
+                "v": -1100
+              }
+            ]
+          }
+        },
+        {
+          "id": "pb-question",
+          "name": "Question",
+          "type": "table",
+          "source": "poll",
+          "transforms": [
+            {
+              "op": "limit",
+              "n": 1
+            }
+          ],
+          "row": {
+            "height": 60,
+            "cells": [
+              {
+                "id": "pb-q",
+                "name": "pb-q",
+                "type": "text",
+                "text": "",
+                "style": {
+                  "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+                  "fontSize": 30,
+                  "fontWeight": 700,
+                  "fill": "#ffffff",
+                  "align": "left",
+                  "verticalAlign": "middle"
+                },
+                "size": {
+                  "width": 900,
+                  "height": 60
+                },
+                "transform": {
+                  "x": 0,
+                  "y": 0,
+                  "anchorX": 0,
+                  "anchorY": 0
+                },
+                "cell": "question"
+              }
+            ]
+          },
+          "size": {
+            "width": 900,
+            "height": 60
+          },
+          "transform": {
+            "x": 150,
+            "y": 694,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0.3,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.6,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 0.9,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 1.1,
+                "v": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "pb-final-bg",
+          "name": "Final tag",
+          "type": "shape",
+          "shape": "rect",
+          "fill": "#ffd43b",
+          "size": {
+            "width": 140,
+            "height": 40
+          },
+          "transform": {
+            "x": 1060,
+            "y": 704,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "cornerRadius": 4,
+          "rules": [
+            {
+              "when": [
+                {
+                  "source": "poll",
+                  "column": "status",
+                  "cmp": "eq",
+                  "value": "closed"
+                }
+              ],
+              "show": true
+            }
+          ],
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0.4,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.6,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 0.9,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 1.1,
+                "v": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "pb-final",
+          "name": "Final text",
+          "type": "text",
+          "text": "FINAL",
+          "style": {
+            "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+            "fontSize": 22,
+            "fontWeight": 800,
+            "fill": "#0b1f33",
+            "align": "center",
+            "verticalAlign": "middle",
+            "letterSpacing": 2
+          },
+          "size": {
+            "width": 140,
+            "height": 40
+          },
+          "transform": {
+            "x": 1060,
+            "y": 704,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "rules": [
+            {
+              "when": [
+                {
+                  "source": "poll",
+                  "column": "status",
+                  "cmp": "eq",
+                  "value": "closed"
+                }
+              ],
+              "show": true
+            }
+          ],
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0.4,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.6,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 0.9,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 1.1,
+                "v": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "pb-rows",
+          "name": "Bars",
+          "type": "table",
+          "source": "poll",
+          "row": {
+            "height": 56,
+            "gap": 10,
+            "cells": [
+              {
+                "id": "pb-label",
+                "name": "pb-label",
+                "type": "text",
+                "text": "",
+                "style": {
+                  "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+                  "fontSize": 26,
+                  "fontWeight": 600,
+                  "fill": "#ffffff",
+                  "align": "left",
+                  "verticalAlign": "middle"
+                },
+                "size": {
+                  "width": 200,
+                  "height": 56
+                },
+                "transform": {
+                  "x": 0,
+                  "y": 0,
+                  "anchorX": 0,
+                  "anchorY": 0
+                },
+                "cell": "label"
+              },
+              {
+                "id": "pb-track",
+                "name": "pb-track",
+                "type": "shape",
+                "shape": "rect",
+                "fill": "rgba(255,255,255,0.08)",
+                "size": {
+                  "width": 640,
+                  "height": 36
+                },
+                "transform": {
+                  "x": 210,
+                  "y": 10,
+                  "anchorX": 0,
+                  "anchorY": 0
+                },
+                "cornerRadius": 4
+              },
+              {
+                "id": "pb-bar",
+                "name": "pb-bar",
+                "type": "shape",
+                "shape": "rect",
+                "fill": "#4dabf7",
+                "size": {
+                  "width": 640,
+                  "height": 36
+                },
+                "transform": {
+                  "x": 210,
+                  "y": 10,
+                  "anchorX": 0,
+                  "anchorY": 0
+                },
+                "cornerRadius": 4,
+                "rules": [
+                  {
+                    "when": [
+                      {
+                        "column": "option",
+                        "cmp": "eq",
+                        "value": "yes"
+                      }
+                    ],
+                    "color": "#2f9e44"
+                  },
+                  {
+                    "when": [
+                      {
+                        "column": "option",
+                        "cmp": "eq",
+                        "value": "no"
+                      }
+                    ],
+                    "color": "#e03131"
+                  },
+                  {
+                    "when": [
+                      {
+                        "column": "option",
+                        "cmp": "eq",
+                        "value": "unsure"
+                      }
+                    ],
+                    "color": "#868e96"
+                  }
+                ],
+                "drives": [
+                  {
+                    "property": "width",
+                    "from": {
+                      "column": "percent"
+                    },
+                    "domain": {
+                      "min": 0,
+                      "max": 100
+                    },
+                    "range": [
+                      0,
+                      640
+                    ],
+                    "tween": {
+                      "duration": 0.8,
+                      "ease": "power2.out"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "pb-pct",
+                "name": "pb-pct",
+                "type": "text",
+                "text": "0%",
+                "style": {
+                  "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+                  "fontSize": 28,
+                  "fontWeight": 700,
+                  "fill": "#ffffff",
+                  "align": "right",
+                  "verticalAlign": "middle"
+                },
+                "size": {
+                  "width": 110,
+                  "height": 56
+                },
+                "transform": {
+                  "x": 860,
+                  "y": 0,
+                  "anchorX": 0,
+                  "anchorY": 0
+                },
+                "cell": "percent",
+                "count": {
+                  "duration": 0.8,
+                  "decimals": 0,
+                  "suffix": "%"
+                }
+              }
+            ]
+          },
+          "size": {
+            "width": 980,
+            "height": 200
+          },
+          "transform": {
+            "x": 150,
+            "y": 764,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0.4,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.7,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 0.9,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 1.1,
+                "v": 0
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "formatVersion": 1,
+      "id": "poll-donut-3x9kr",
+      "name": "Poll - Donut",
+      "duration": 1.4,
+      "stage": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 60,
+        "background": "transparent"
+      },
+      "markers": [
+        {
+          "type": "stop",
+          "time": 0.6,
+          "name": "Hold on air"
+        }
+      ],
+      "layers": [
+        {
+          "id": "pd-bg",
+          "name": "Panel",
+          "type": "shape",
+          "shape": "rect",
+          "fill": "rgba(11,31,51,0.94)",
+          "size": {
+            "width": 980,
+            "height": 560
+          },
+          "transform": {
+            "x": 470,
+            "y": 260,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "cornerRadius": 12,
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.4,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 0.9,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 1.3,
+                "v": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "pd-ring-bg",
+          "name": "Ring track",
+          "type": "shape",
+          "shape": "ellipse",
+          "fill": "rgba(255,255,255,0.08)",
+          "arc": {
+            "sweep": 360,
+            "thickness": 64
+          },
+          "size": {
+            "width": 400,
+            "height": 400
+          },
+          "transform": {
+            "x": 530,
+            "y": 340,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0.1,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.5,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 0.9,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 1.2,
+                "v": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "pd-slices",
+          "name": "Slices",
+          "type": "table",
+          "source": "poll",
+          "transforms": [
+            {
+              "op": "share",
+              "column": "votes",
+              "as": "pct",
+              "cumulative": "from",
+              "decimals": 1
+            }
+          ],
+          "row": {
+            "height": 0.01,
+            "cells": [
+              {
+                "id": "pd-slice",
+                "name": "Slice",
+                "type": "shape",
+                "shape": "ellipse",
+                "fill": "#4dabf7",
+                "rules": [
+                  {
+                    "when": [
+                      {
+                        "column": "option",
+                        "cmp": "eq",
+                        "value": "yes"
+                      }
+                    ],
+                    "color": "#2f9e44"
+                  },
+                  {
+                    "when": [
+                      {
+                        "column": "option",
+                        "cmp": "eq",
+                        "value": "no"
+                      }
+                    ],
+                    "color": "#e03131"
+                  },
+                  {
+                    "when": [
+                      {
+                        "column": "option",
+                        "cmp": "eq",
+                        "value": "unsure"
+                      }
+                    ],
+                    "color": "#868e96"
+                  }
+                ],
+                "arc": {
+                  "start": 0,
+                  "sweep": 0,
+                  "thickness": 64
+                },
+                "size": {
+                  "width": 400,
+                  "height": 400
+                },
+                "transform": {
+                  "x": 0,
+                  "y": 0,
+                  "anchorX": 0.5,
+                  "anchorY": 0.5
+                },
+                "drives": [
+                  {
+                    "property": "rotation",
+                    "from": {
+                      "column": "from"
+                    },
+                    "domain": {
+                      "min": 0,
+                      "max": 100
+                    },
+                    "range": [
+                      0,
+                      360
+                    ],
+                    "tween": {
+                      "duration": 0.9,
+                      "ease": "power2.out"
+                    }
+                  },
+                  {
+                    "property": "sweep",
+                    "from": {
+                      "column": "pct"
+                    },
+                    "domain": {
+                      "min": 0,
+                      "max": 100
+                    },
+                    "range": [
+                      0,
+                      360
+                    ],
+                    "tween": {
+                      "duration": 0.9,
+                      "ease": "power2.out"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "size": {
+            "width": 400,
+            "height": 400
+          },
+          "transform": {
+            "x": 530,
+            "y": 340,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0.2,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.6,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 0.9,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 1.2,
+                "v": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "pd-total",
+          "name": "Total",
+          "type": "table",
+          "source": "poll",
+          "transforms": [
+            {
+              "op": "limit",
+              "n": 1
+            }
+          ],
+          "row": {
+            "height": 120,
+            "cells": [
+              {
+                "id": "pd-total-n",
+                "name": "pd-total-n",
+                "type": "text",
+                "text": "0",
+                "style": {
+                  "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+                  "fontSize": 56,
+                  "fontWeight": 800,
+                  "fill": "#ffffff",
+                  "align": "center",
+                  "verticalAlign": "middle"
+                },
+                "size": {
+                  "width": 240,
+                  "height": 70
+                },
+                "transform": {
+                  "x": 0,
+                  "y": 0,
+                  "anchorX": 0,
+                  "anchorY": 0
+                },
+                "cell": "total",
+                "count": {
+                  "duration": 0.9,
+                  "decimals": 0
+                }
+              },
+              {
+                "id": "pd-total-l",
+                "name": "pd-total-l",
+                "type": "text",
+                "text": "VOTES",
+                "style": {
+                  "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+                  "fontSize": 20,
+                  "fontWeight": 600,
+                  "fill": "#9fb3c8",
+                  "align": "center",
+                  "verticalAlign": "middle",
+                  "letterSpacing": 3
+                },
+                "size": {
+                  "width": 240,
+                  "height": 40
+                },
+                "transform": {
+                  "x": 0,
+                  "y": 72,
+                  "anchorX": 0,
+                  "anchorY": 0
+                }
+              }
+            ]
+          },
+          "size": {
+            "width": 240,
+            "height": 120
+          },
+          "transform": {
+            "x": 610,
+            "y": 480,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0.3,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.6,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 0.9,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 1.1,
+                "v": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "pd-legend",
+          "name": "Legend",
+          "type": "table",
+          "source": "poll",
+          "row": {
+            "height": 64,
+            "gap": 12,
+            "cells": [
+              {
+                "id": "pd-swatch",
+                "name": "pd-swatch",
+                "type": "shape",
+                "shape": "rect",
+                "fill": "#4dabf7",
+                "size": {
+                  "width": 24,
+                  "height": 24
+                },
+                "transform": {
+                  "x": 0,
+                  "y": 20,
+                  "anchorX": 0,
+                  "anchorY": 0
+                },
+                "cornerRadius": 12,
+                "rules": [
+                  {
+                    "when": [
+                      {
+                        "column": "option",
+                        "cmp": "eq",
+                        "value": "yes"
+                      }
+                    ],
+                    "color": "#2f9e44"
+                  },
+                  {
+                    "when": [
+                      {
+                        "column": "option",
+                        "cmp": "eq",
+                        "value": "no"
+                      }
+                    ],
+                    "color": "#e03131"
+                  },
+                  {
+                    "when": [
+                      {
+                        "column": "option",
+                        "cmp": "eq",
+                        "value": "unsure"
+                      }
+                    ],
+                    "color": "#868e96"
+                  }
+                ]
+              },
+              {
+                "id": "pd-label",
+                "name": "pd-label",
+                "type": "text",
+                "text": "",
+                "style": {
+                  "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+                  "fontSize": 30,
+                  "fontWeight": 600,
+                  "fill": "#ffffff",
+                  "align": "left",
+                  "verticalAlign": "middle"
+                },
+                "size": {
+                  "width": 240,
+                  "height": 64
+                },
+                "transform": {
+                  "x": 40,
+                  "y": 0,
+                  "anchorX": 0,
+                  "anchorY": 0
+                },
+                "cell": "label"
+              },
+              {
+                "id": "pd-pct",
+                "name": "pd-pct",
+                "type": "text",
+                "text": "0%",
+                "style": {
+                  "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+                  "fontSize": 30,
+                  "fontWeight": 700,
+                  "fill": "#ffffff",
+                  "align": "right",
+                  "verticalAlign": "middle"
+                },
+                "size": {
+                  "width": 110,
+                  "height": 64
+                },
+                "transform": {
+                  "x": 280,
+                  "y": 0,
+                  "anchorX": 0,
+                  "anchorY": 0
+                },
+                "cell": "percent",
+                "count": {
+                  "duration": 0.9,
+                  "decimals": 0,
+                  "suffix": "%"
+                }
+              }
+            ]
+          },
+          "size": {
+            "width": 400,
+            "height": 240
+          },
+          "transform": {
+            "x": 1000,
+            "y": 420,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0.3,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.6,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 0.9,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 1.1,
+                "v": 0
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "formatVersion": 1,
+      "id": "giving-meter-5t7bn",
+      "name": "Giving Meter",
+      "duration": 1.4,
+      "stage": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 60,
+        "background": "transparent"
+      },
+      "markers": [
+        {
+          "type": "stop",
+          "time": 0.6,
+          "name": "Hold on air"
+        }
+      ],
+      "layers": [
+        {
+          "id": "gm-table",
+          "name": "Meter",
+          "type": "table",
+          "source": "giving",
+          "rowsPerPage": 1,
+          "row": {
+            "height": 700,
+            "cells": [
+              {
+                "id": "gm-tube",
+                "name": "gm-tube",
+                "type": "shape",
+                "shape": "rect",
+                "fill": "rgba(11,31,51,0.9)",
+                "size": {
+                  "width": 90,
+                  "height": 600
+                },
+                "transform": {
+                  "x": 0,
+                  "y": 0,
+                  "anchorX": 0,
+                  "anchorY": 0
+                },
+                "cornerRadius": 45
+              },
+              {
+                "id": "gm-fill",
+                "name": "gm-fill",
+                "type": "shape",
+                "shape": "rect",
+                "fill": {
+                  "type": "linear",
+                  "angle": 0,
+                  "stops": [
+                    {
+                      "pos": 0,
+                      "color": "#ffd43b"
+                    },
+                    {
+                      "pos": 1,
+                      "color": "#ff3b30"
+                    }
+                  ]
+                },
+                "size": {
+                  "width": 70,
+                  "height": 580
+                },
+                "transform": {
+                  "x": 10,
+                  "y": 10,
+                  "anchorX": 0,
+                  "anchorY": 0
+                },
+                "cornerRadius": 35,
+                "drives": [
+                  {
+                    "property": "height",
+                    "from": {
+                      "column": "raised"
+                    },
+                    "domain": {
+                      "min": 0,
+                      "max": {
+                        "column": "goal"
+                      }
+                    },
+                    "range": [
+                      0,
+                      580
+                    ],
+                    "grow": "end",
+                    "tween": {
+                      "duration": 1.2,
+                      "ease": "power2.out"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "gm-raised",
+                "name": "gm-raised",
+                "type": "text",
+                "text": "$0",
+                "style": {
+                  "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+                  "fontSize": 60,
+                  "fontWeight": 800,
+                  "fill": "#ffffff",
+                  "align": "left",
+                  "verticalAlign": "middle"
+                },
+                "size": {
+                  "width": 360,
+                  "height": 70
+                },
+                "transform": {
+                  "x": 120,
+                  "y": 420,
+                  "anchorX": 0,
+                  "anchorY": 0
+                },
+                "cell": "raised",
+                "count": {
+                  "duration": 1.2,
+                  "decimals": 0,
+                  "prefix": "$"
+                }
+              },
+              {
+                "id": "gm-goal",
+                "name": "gm-goal",
+                "type": "text",
+                "text": "",
+                "style": {
+                  "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+                  "fontSize": 26,
+                  "fontWeight": 600,
+                  "fill": "#9fb3c8",
+                  "align": "left",
+                  "verticalAlign": "middle"
+                },
+                "size": {
+                  "width": 360,
+                  "height": 40
+                },
+                "transform": {
+                  "x": 120,
+                  "y": 490,
+                  "anchorX": 0,
+                  "anchorY": 0
+                },
+                "cell": "goal",
+                "count": {
+                  "duration": 0.01,
+                  "decimals": 0,
+                  "prefix": "GOAL $"
+                }
+              },
+              {
+                "id": "gm-title",
+                "name": "gm-title",
+                "type": "text",
+                "text": "GIVING TUESDAY",
+                "style": {
+                  "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+                  "fontSize": 22,
+                  "fontWeight": 700,
+                  "fill": "#ff3b30",
+                  "align": "left",
+                  "verticalAlign": "middle",
+                  "letterSpacing": 3
+                },
+                "size": {
+                  "width": 360,
+                  "height": 40
+                },
+                "transform": {
+                  "x": 120,
+                  "y": 540,
+                  "anchorX": 0,
+                  "anchorY": 0
+                }
+              }
+            ]
+          },
+          "size": {
+            "width": 520,
+            "height": 700
+          },
+          "transform": {
+            "x": 1300,
+            "y": 240,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.5,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 0.9,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 1.3,
+                "v": 0
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "formatVersion": 1,
+      "id": "temps-line-9c4dm",
+      "name": "Hourly Temperature",
+      "duration": 2.2,
+      "stage": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 60,
+        "background": "transparent"
+      },
+      "markers": [
+        {
+          "type": "stop",
+          "time": 1.6,
+          "name": "Hold on air"
+        }
+      ],
+      "layers": [
+        {
+          "id": "tl-bg",
+          "name": "Panel",
+          "type": "shape",
+          "shape": "rect",
+          "fill": "rgba(11,31,51,0.94)",
+          "size": {
+            "width": 1360,
+            "height": 560
+          },
+          "transform": {
+            "x": 280,
+            "y": 300,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "cornerRadius": 12,
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.4,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 1.6,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 2.1,
+                "v": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "tl-title",
+          "name": "tl-title",
+          "type": "text",
+          "text": "NEXT 8 HOURS",
+          "style": {
+            "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+            "fontSize": 28,
+            "fontWeight": 700,
+            "fill": "#ffffff",
+            "align": "left",
+            "verticalAlign": "middle",
+            "letterSpacing": 2
+          },
+          "size": {
+            "width": 600,
+            "height": 50
+          },
+          "transform": {
+            "x": 340,
+            "y": 330,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0.1,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.4,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 1.6,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 2.0,
+                "v": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "tl-area",
+          "name": "Area",
+          "type": "shape",
+          "shape": "path",
+          "path": "",
+          "fill": {
+            "type": "linear",
+            "angle": 180,
+            "stops": [
+              {
+                "pos": 0,
+                "color": "rgba(255,146,43,0.45)"
+              },
+              {
+                "pos": 1,
+                "color": "rgba(255,146,43,0)"
+              }
+            ]
+          },
+          "plot": {
+            "source": "temps",
+            "y": "temp",
+            "curve": "monotone",
+            "area": true,
+            "domain": {
+              "pad": 0.15
+            },
+            "tween": {
+              "duration": 0.8
+            }
+          },
+          "size": {
+            "width": 1200,
+            "height": 300
+          },
+          "transform": {
+            "x": 360,
+            "y": 400,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0.9,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 1.3,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 1.6,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 2.0,
+                "v": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "tl-line",
+          "name": "Line",
+          "type": "shape",
+          "shape": "path",
+          "path": "",
+          "stroke": {
+            "color": "#ff922b",
+            "width": 6
+          },
+          "plot": {
+            "source": "temps",
+            "y": "temp",
+            "curve": "monotone",
+            "domain": {
+              "pad": 0.15
+            },
+            "tween": {
+              "duration": 0.8
+            }
+          },
+          "size": {
+            "width": 1200,
+            "height": 300
+          },
+          "transform": {
+            "x": 360,
+            "y": 400,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "keyframes": {
+            "trim": [
+              {
+                "t": 0.3,
+                "v": 0,
+                "ease": "power2.inOut"
+              },
+              {
+                "t": 1.3,
+                "v": 1
+              }
+            ],
+            "opacity": [
+              {
+                "t": 0.2,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.3,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 1.6,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 2.0,
+                "v": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "tl-labels",
+          "name": "Hours",
+          "type": "table",
+          "source": "temps",
+          "axis": "x",
+          "row": {
+            "height": 171.429,
+            "cells": [
+              {
+                "id": "tl-temp",
+                "name": "tl-temp",
+                "type": "text",
+                "text": "",
+                "style": {
+                  "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+                  "fontSize": 28,
+                  "fontWeight": 700,
+                  "fill": "#ffffff",
+                  "align": "center",
+                  "verticalAlign": "middle"
+                },
+                "size": {
+                  "width": 120,
+                  "height": 40
+                },
+                "transform": {
+                  "x": 0,
+                  "y": 0,
+                  "anchorX": 0,
+                  "anchorY": 0
+                },
+                "cell": "temp",
+                "count": {
+                  "duration": 0.8,
+                  "decimals": 0,
+                  "suffix": "°"
+                }
+              },
+              {
+                "id": "tl-hour",
+                "name": "tl-hour",
+                "type": "text",
+                "text": "",
+                "style": {
+                  "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+                  "fontSize": 22,
+                  "fontWeight": 600,
+                  "fill": "#9fb3c8",
+                  "align": "center",
+                  "verticalAlign": "middle"
+                },
+                "size": {
+                  "width": 120,
+                  "height": 34
+                },
+                "transform": {
+                  "x": 0,
+                  "y": 44,
+                  "anchorX": 0,
+                  "anchorY": 0
+                },
+                "cell": "hour"
+              }
+            ]
+          },
+          "size": {
+            "width": 1380,
+            "height": 80
+          },
+          "transform": {
+            "x": 300,
+            "y": 720,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0.5,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.9,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 1.6,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 2.0,
+                "v": 0
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "formatVersion": 1,
+      "id": "gauge-arc-2w6yh",
+      "name": "Gauge",
+      "duration": 1.4,
+      "stage": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 60,
+        "background": "transparent"
+      },
+      "markers": [
+        {
+          "type": "stop",
+          "time": 0.6,
+          "name": "Hold on air"
+        }
+      ],
+      "layers": [
+        {
+          "id": "ga-track",
+          "name": "Track",
+          "type": "shape",
+          "shape": "ellipse",
+          "fill": "rgba(255,255,255,0.12)",
+          "arc": {
+            "start": 225,
+            "sweep": 270,
+            "thickness": 40,
+            "cap": "round"
+          },
+          "size": {
+            "width": 420,
+            "height": 420
+          },
+          "transform": {
+            "x": 1400,
+            "y": 200,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.4,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 0.9,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 1.3,
+                "v": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "ga-value",
+          "name": "Value arc",
+          "type": "shape",
+          "shape": "ellipse",
+          "fill": {
+            "type": "linear",
+            "angle": 90,
+            "stops": [
+              {
+                "pos": 0,
+                "color": "#4dabf7"
+              },
+              {
+                "pos": 1,
+                "color": "#ff3b30"
+              }
+            ]
+          },
+          "arc": {
+            "start": 225,
+            "sweep": 0,
+            "thickness": 40,
+            "cap": "round"
+          },
+          "size": {
+            "width": 420,
+            "height": 420
+          },
+          "transform": {
+            "x": 1400,
+            "y": 200,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "drives": [
+            {
+              "property": "sweep",
+              "from": {
+                "binding": "value"
+              },
+              "domain": {
+                "min": 0,
+                "max": 100
+              },
+              "range": [
+                0,
+                270
+              ],
+              "tween": {
+                "duration": 0.9,
+                "ease": "power2.out"
+              }
+            }
+          ],
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0.1,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.4,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 0.9,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 1.2,
+                "v": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "ga-number",
+          "name": "Number",
+          "type": "text",
+          "text": "0%",
+          "style": {
+            "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+            "fontSize": 88,
+            "fontWeight": 800,
+            "fill": "#ffffff",
+            "align": "center",
+            "verticalAlign": "middle"
+          },
+          "size": {
+            "width": 300,
+            "height": 110
+          },
+          "transform": {
+            "x": 1460,
+            "y": 330,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "binding": "value",
+          "count": {
+            "duration": 0.9,
+            "decimals": 0,
+            "suffix": "%"
+          },
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0.2,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.5,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 0.9,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 1.1,
+                "v": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "ga-caption",
+          "name": "Caption",
+          "type": "text",
+          "text": "BATTERY",
+          "style": {
+            "fontFamily": "Inter, Segoe UI, Arial, sans-serif",
+            "fontSize": 24,
+            "fontWeight": 700,
+            "fill": "#9fb3c8",
+            "align": "center",
+            "verticalAlign": "middle",
+            "letterSpacing": 3
+          },
+          "size": {
+            "width": 300,
+            "height": 40
+          },
+          "transform": {
+            "x": 1460,
+            "y": 440,
+            "anchorX": 0,
+            "anchorY": 0
+          },
+          "binding": "caption",
+          "keyframes": {
+            "opacity": [
+              {
+                "t": 0.2,
+                "v": 0,
+                "ease": "power2.out"
+              },
+              {
+                "t": 0.5,
+                "v": 1,
+                "ease": "none"
+              },
+              {
+                "t": 0.9,
+                "v": 1,
+                "ease": "power2.in"
+              },
+              {
+                "t": 1.1,
+                "v": 0
+              }
+            ]
+          }
+        }
+      ],
+      "fields": {
+        "value": {
+          "kind": "number",
+          "label": "Value",
+          "min": 0,
+          "max": 100,
+          "step": 5,
+          "suffix": "%"
+        }
+      }
+    }
+  ]
+}

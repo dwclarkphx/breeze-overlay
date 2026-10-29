@@ -10,6 +10,8 @@ import path from 'node:path';
 
 import type { FastifyInstance } from 'fastify';
 
+import { outputKeying, type OutputKeying } from '@breeze/schema';
+
 import { config, projectAssetsDir } from '../config.js';
 import { readMode } from '../mode.js';
 import type { DataRegistry } from '../data/registry.js';
@@ -33,6 +35,17 @@ const MIME: Record<string, string> = {
   '.otf': 'font/otf',
   '.json': 'application/json',
 };
+
+/**
+ * `?bg=` / `?matte=1` off a request URL (Phase 9 Wave C). Read from the raw
+ * query string rather than Fastify's parsed object, so a repeated parameter
+ * means what it means in the browser — `URLSearchParams.get` takes the first —
+ * and the page and the bundle can never disagree about it.
+ */
+export function keyingOf(url: string): OutputKeying {
+  const q = url.indexOf('?');
+  return outputKeying(new URLSearchParams(q === -1 ? '' : url.slice(q + 1)));
+}
 
 export async function registerPlayRoutes(
   app: FastifyInstance,
@@ -58,6 +71,7 @@ export async function registerPlayRoutes(
       cacheBust: project.updatedAt,
       datasets: data?.datasets(req.params.id) ?? {},
       mode: await readMode(req.params.id),
+      keying: keyingOf(req.url),
     });
   });
 

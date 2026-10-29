@@ -25,6 +25,7 @@ import {
   DEFAULT_POLL_INTERVAL,
   DEFAULT_WEATHER_POLL_INTERVAL,
   FORMAT_VERSION,
+  isInlineSource,
   pollFloor,
   type DataSourceDef,
 } from '@breeze/schema';
@@ -53,7 +54,7 @@ export function assertSafeSourceId(id: string): void {
  * at all. Clamping gives them the graphic, at the rate the provider permits.
  */
 export function effectiveInterval(def: DataSourceDef): number {
-  if (def.type === 'manual') return 0;
+  if (isInlineSource(def)) return 0;
   const fallback =
     def.type === 'weather' ? DEFAULT_WEATHER_POLL_INTERVAL
     : def.type === 'air-quality' ? DEFAULT_AIR_QUALITY_POLL_INTERVAL
@@ -72,7 +73,7 @@ export function effectiveInterval(def: DataSourceDef): number {
  * rows are the definition, not a fetch.
  */
 export function effectiveExpiry(def: DataSourceDef): number | undefined {
-  if (def.type === 'manual') return undefined;
+  if (isInlineSource(def)) return undefined;
   if (def.expireAfter !== undefined) return def.expireAfter;
   if (def.type === 'air-quality' && def.provider === 'airnow-feed') return DEFAULT_AIR_QUALITY_EXPIRY;
   return undefined;
@@ -144,6 +145,28 @@ export async function writeDataSources(
   return sources;
 }
 
+const sourceLocks = new Map<string, Promise<unknown>>();
+
+/**
+ * Serialise read-modify-write of one project's `datasources.json`.
+ *
+ * Score taps (Phase 9 Wave B), poll votes and text edits (Wave R) each read
+ * the file, change one source and write it back. Two a frame apart must both
+ * land, so every such action in a project queues on one chain — shared across
+ * the routes, since a vote and a score in the same second touch the same file.
+ */
+export async function withSourcesLock<T>(projectId: string, fn: () => Promise<T>): Promise<T> {
+  const previous = sourceLocks.get(projectId) ?? Promise.resolve();
+  const run = previous.then(fn, fn);
+  const tail = run.catch(() => undefined);
+  sourceLocks.set(projectId, tail);
+  try {
+    return await run;
+  } finally {
+    if (sourceLocks.get(projectId) === tail) sourceLocks.delete(projectId);
+  }
+}
+
 export async function getDataSource(projectId: string, sourceId: string): Promise<DataSourceDef> {
   const sources = await readDataSources(projectId);
   const found = sources.find((s) => s.id === sourceId);
@@ -189,6 +212,7 @@ export function redact(def: DataSourceDef): DataSourceDef {
    */
   if (
     def.type === 'manual' ||
+    def.type === 'poll' ||
     def.type === 'sheets' ||
     def.type === 'weather' ||
     def.type === 'air-quality' ||

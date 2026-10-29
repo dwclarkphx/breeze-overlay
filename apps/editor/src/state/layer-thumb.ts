@@ -49,6 +49,7 @@ export const TYPE_GLYPH: Record<Layer['type'], string> = {
   media: '◉',
   crawl: '⇄',
   table: '▦',
+  roll: '⇅',
   composition: '⧉',
   group: '▤',
 };
@@ -131,13 +132,16 @@ export function layerThumb(layer: Layer): LayerThumb {
       };
 
     case 'text':
-    case 'crawl': {
+    case 'crawl':
+    case 'roll': {
       const style = layer.style;
+      // A roll's first line of text (Wave R), as a crawl's first item.
+      const first = layer.type === 'roll' ? (layer.data?.rows.find((r) => r['kind'] !== 'gap')?.['text'] ?? '') : '';
       return {
         kind: 'text',
         // The layer's own opening characters where there are any: a strap that
         // says "Jane Doe" is identified faster by "Jan" than by "Ag".
-        sample: sampleFrom(layer.type === 'text' ? layer.text : layer.items[0] ?? ''),
+        sample: sampleFrom(layer.type === 'text' ? layer.text : layer.type === 'roll' ? String(first) : layer.items[0] ?? ''),
         fontFamily: style.fontFamily,
         color: typeof style.fill === 'string' ? style.fill : '#ffffff',
         weight: String(style.fontWeight ?? 400),

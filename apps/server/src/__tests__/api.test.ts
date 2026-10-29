@@ -501,6 +501,40 @@ describe('output page', () => {
     expect(res.body).toContain('autoPlay: false');
   });
 
+  /* Switcher-friendly outputs (Phase 9 Wave C). */
+
+  it('paints ?bg= into the head, outranking the bundle’s transparent rule', async () => {
+    const res = await app.inject({ method: 'GET', url: '/play/demo-1iixd/l3rd-name-2a94g?bg=green' });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain(':root,:root>body{background:#00ff00!important}');
+    expect(res.body).not.toContain('brightness(0)');
+  });
+
+  it('renders ?matte=1 as a filtered stage over black, and says so in the title', async () => {
+    const res = await app.inject({ method: 'GET', url: '/play/demo-1iixd/l3rd-name-2a94g?matte=1&bg=00ff00' });
+    expect(res.body).toContain('#breeze-stage{filter:brightness(0) invert(1)}');
+    expect(res.body).toContain(':root,:root>body{background:#000!important}');
+    // A key signal is always on black: the colour asked for alongside it is dropped.
+    expect(res.body).not.toContain('#00ff00');
+    expect(res.body).toMatch(/<title>[^<]* · matte — Breeze<\/title>/);
+  });
+
+  it('never writes an unchecked ?bg= into the page', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/play/demo-1iixd/l3rd-name-2a94g?bg=${encodeURIComponent('red}</style><script>alert(1)</script>')}`,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).not.toContain('alert(1)');
+    expect(res.body).not.toContain(':root,:root>body');
+  });
+
+  it('leaves the plain page exactly as it was', async () => {
+    const res = await app.inject({ method: 'GET', url: '/play/demo-1iixd/l3rd-name-2a94g?name=Jane' });
+    expect(res.body).not.toContain(':root,:root>body');
+    expect(res.body).not.toContain(' · matte');
+  });
+
   it('redirects a bare project URL to its first composition', async () => {
     const res = await app.inject({ method: 'GET', url: '/play/demo-1iixd' });
     expect(res.statusCode).toBe(302);

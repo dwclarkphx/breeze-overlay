@@ -22,8 +22,19 @@
  * path they always did.
  */
 
-import { BreezeRuntime, installGlobals, OUTPUT_PAGE_CSS } from '@breeze/runtime';
-import { DATA_UPDATE_KEY, MODE_UPDATE_KEY, type Composition, type DataSet, type SceneElement } from '@breeze/schema';
+import { BreezeRuntime, OgrafAdapter, installGlobals, OUTPUT_PAGE_CSS } from '@breeze/runtime';
+import {
+  DATA_UPDATE_KEY,
+  KEYING_PARAMS,
+  MODE_UPDATE_KEY,
+  MOUNTS_UPDATE_KEY,
+  orderMounts,
+  outputKeying,
+  type Composition,
+  type DataSet,
+  type OutputMount,
+  type SceneElement,
+} from '@breeze/schema';
 import { SYNC_AUTO, joinTarget, reportOf, type ChannelStateLike } from './join.js';
 
 declare global {
@@ -41,6 +52,14 @@ declare global {
       mode?: string;
       /** Independently triggered elements, in paint order. Empty for a plain graphic. */
       elements?: SceneElement[];
+      /**
+       * Set on an output page (`/out/<project>/<output>`, Phase 9 Wave A): the
+       * output's name. The page then has no composition of its own and mounts
+       * whatever the rundown takes onto it, from `compositions`.
+       */
+      output?: string;
+      /** Output pages: every composition in the project, so any of them can be mounted. */
+      compositions?: Composition[];
       /** Where hls.js is, for a media layer playing HLS (Wave 8). */
       hlsScript?: string;
       autoPlay?: boolean;
@@ -96,8 +115,14 @@ function warnIfWindowSmallerThanStage(composition: Composition, scaled: boolean)
   );
 }
 
-/** Page-level parameters that are never binding values. */
-const RESERVED_PARAMS = new Set(['autoplay', 'debug', 'scale', 'preview', 'sync']);
+/**
+ * Page-level parameters that are never binding values.
+ *
+ * `bg` and `matte` (Phase 9 Wave C) shape the page for a hardware switcher; a
+ * field that happens to be called `bg` can still be set from the panel, just
+ * not from this page's URL.
+ */
+const RESERVED_PARAMS = new Set<string>(['autoplay', 'debug', 'scale', 'preview', 'sync', 'hub', 'ograf', ...KEYING_PARAMS]);
 
 /**
  * Split the query string into per-channel field payloads.
@@ -243,11 +268,13 @@ function connectToHub(
    * which output to take up from when it connects to a graphic already on air
    * — `?sync=`, see `client/join.ts`.
    */
-  join: { page: string; choice: string },
-): void {
+  join: PageJoin,
+): { close: () => void } {
   const channel = `${projectId}/${channelName}`;
   let socket: WebSocket | null = null;
   let retry = 0;
+  /** Unmounted from an output page: stop reconnecting. */
+  let closed = false;
 
   const report = () => {
     if (socket?.readyState !== WebSocket.OPEN) return;
@@ -265,6 +292,8 @@ function connectToHub(
     page?: number;
     key?: string;
     cycle?: string;
+    step?: number;
+    cut?: boolean;
   }) => {
     const table = typeof command.table === 'string' && command.table !== '' ? command.table : undefined;
     switch (command.verb) {
@@ -272,7 +301,9 @@ function connectToHub(
         if (command.data) runtime.update(command.data);
         runtime.play();
         break;
-      case 'stop': runtime.stop(); break;
+      // A cut stop (OGraf's skipAnimation, Phase 9 Wave D) is off at once.
+      case 'stop': if (command.cut) runtime.clear(); else runtime.stop(); break;
+      case 'step': if (typeof command.step === 'number') runtime.goToStep(command.step, { cut: command.cut === true }); break;
       case 'next': runtime.next(table); break;
       case 'prev': runtime.prev(table); break;
       case 'page':
@@ -285,6 +316,8 @@ function connectToHub(
       case 'clear': runtime.clear(); break;
       case 'seek': runtime.seek(command.time ?? 0); break;
       case 'update': if (command.data) runtime.update(command.data); break;
+      // Cue → take (Phase 9 Wave A): on air, the outro runs before the values change.
+      case 'take': runtime.take(command.data ?? {}); break;
       default: return;
     }
     report();
@@ -305,7 +338,14 @@ function connectToHub(
       const role = new URLSearchParams(location.search).get('preview') === '1'
         ? 'preview'
         : 'renderer';
-      socket!.send(JSON.stringify({ type: 'subscribe', channel, role, page: join.page }));
+      socket!.send(JSON.stringify({
+        type: 'subscribe',
+        channel,
+        role,
+        page: join.page,
+        // A matte page says so, so the panel can pair it with its fill.
+        ...(join.signal ? { signal: join.signal } : {}),
+      }));
     });
 
     socket.addEventListener('message', (event) => {
@@ -347,6 +387,7 @@ function connectToHub(
     });
 
     socket.addEventListener('close', () => {
+      if (closed) return;
       retry = Math.min(retry + 1, 6);
       setTimeout(connect, Math.min(500 * 2 ** retry, 10_000));
     });
@@ -360,7 +401,8 @@ function connectToHub(
   // panel's page readout is only as current as the last report.
   // `crawl` too (0.75.0): a ticker's copy changing is what a page joining late
   // has to match, and it happens with nobody pressing anything.
-  for (const event of ['play', 'hold', 'stop', 'finished', 'page', 'crawl'] as const) {
+  // `scroll` too (Wave R): a roll's extent is what the hub clamps the transport with.
+  for (const event of ['play', 'hold', 'stop', 'finished', 'page', 'crawl', 'scroll'] as const) {
     runtime.on(event, () => report());
   }
 
@@ -374,12 +416,145 @@ function connectToHub(
    * only when something other than the passage of time changed, so this costs
    * one small frame to the server and nothing to the panels.
    */
-  setInterval(() => {
+  const heartbeat = setInterval(() => {
     const state = runtime.playbackState;
     if (state === 'holding' || state === 'playing-in') report();
   }, HEARTBEAT_MS);
 
   connect();
+  return {
+    close: () => {
+      closed = true;
+      clearInterval(heartbeat);
+      socket?.close();
+    },
+  };
+}
+
+/**
+ * Follow a channel's project-wide state without taking its commands
+ * (`?hub=data`, Phase 9 Wave D).
+ *
+ * For a pointer package's page inside an OGraf renderer. That graphic is its
+ * own instance, driven by its OGraf controller, so the channel's PLAYs and
+ * typed fields are not its business — an operator taking the Breeze copy of
+ * the lower third to air must not roll it in SPX too. What *is* its business
+ * is what is project-wide: the data sources' rows and the project mode. So it
+ * subscribes as a controller (`client: 'ograf'`, which the hub counts as no
+ * panel), receives the channel's state, and adopts those two keys and nothing
+ * else. Never reports: it is not one of this channel's outputs.
+ */
+function followData(runtime: BreezeRuntime, projectId: string, channelName: string): void {
+  const channel = `${projectId}/${channelName}`;
+  let retry = 0;
+  /** JSON of what was last adopted per key, so an unchanged DataSet is not rebound. */
+  const last = new Map<string, string>();
+
+  const adopt = (data: Record<string, unknown> | undefined): void => {
+    if (!data) return;
+    const out: Record<string, unknown> = {};
+    for (const key of [DATA_UPDATE_KEY, MODE_UPDATE_KEY]) {
+      if (!(key in data)) continue;
+      const json = JSON.stringify(data[key]);
+      if (last.get(key) === json) continue;
+      last.set(key, json);
+      out[key] = data[key];
+    }
+    if (Object.keys(out).length) runtime.update(out);
+  };
+
+  const connect = (): void => {
+    const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+    const socket = new WebSocket(`${scheme}://${location.host}/ws/control`);
+    socket.addEventListener('open', () => {
+      retry = 0;
+      socket.send(JSON.stringify({ type: 'subscribe', channel, role: 'controller', client: 'ograf' }));
+    });
+    socket.addEventListener('message', (event) => {
+      try {
+        const message = JSON.parse(String(event.data)) as { type: string; state?: { data?: Record<string, unknown> } };
+        if (message.type === 'welcome' || message.type === 'state') adopt(message.state?.data);
+      } catch {
+        // A frame that is not JSON is not ours to act on.
+      }
+    });
+    socket.addEventListener('close', () => {
+      retry = Math.min(retry + 1, 6);
+      setTimeout(connect, Math.min(500 * 2 ** retry, 10_000));
+    });
+    socket.addEventListener('error', () => socket.close());
+  };
+  connect();
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Answer OGraf actions from the frame's parent (`?ograf=1`, Phase 9 Wave D).
+ *
+ * The parent is a pointer package's `graphic.mjs`, in an OGraf renderer on
+ * another origin, so the two talk by `postMessage`: `{ breezeOgraf: 1, id,
+ * method, params }` in, `{ breezeOgraf: 1, id, result }` back, and one
+ * `{ breezeOgraf: 1, ready: true }` once the runtime is built. Only the
+ * parent is listened to — anything else that can post to this window is not
+ * driving the graphic. There is nothing to gate beyond that: this page is the
+ * parent's own instance, on no channel of ours (`?hub=data`), and what it can
+ * be told to do is no more than `window.play()` already offers its embedder.
+ */
+function ografBridge(runtime: BreezeRuntime): void {
+  if (window.parent === window) return;
+  const adapter = new OgrafAdapter(runtime);
+  window.addEventListener('message', (event) => {
+    if (event.source !== window.parent) return;
+    const message: unknown = event.data;
+    if (!isPlainObject(message) || message['breezeOgraf'] !== 1) return;
+    const id = message['id'];
+    const method = message['method'];
+    if (typeof id !== 'number' || typeof method !== 'string') return;
+    const params = isPlainObject(message['params']) ? message['params'] : {};
+    const run = (): Promise<unknown> => {
+      switch (method) {
+        case 'playAction': return adapter.playAction(params);
+        case 'stopAction': return adapter.stopAction(params);
+        case 'updateAction': return adapter.updateAction(params);
+        case 'customAction': return adapter.customAction(params);
+        default: return Promise.resolve({ statusCode: 400, statusMessage: `unknown method "${method}"` });
+      }
+    };
+    void run()
+      .catch((err: unknown) => ({ statusCode: 500, statusMessage: err instanceof Error ? err.message : String(err) }))
+      .then((result) => {
+        // Back to whoever asked; an opaque origin can only be answered with '*'.
+        window.parent.postMessage({ breezeOgraf: 1, id, result }, event.origin && event.origin !== 'null' ? event.origin : '*');
+      });
+  });
+  // Nothing private in it, and the parent's origin is not known until it speaks.
+  window.parent.postMessage({ breezeOgraf: 1, ready: true, stepCount: adapter.stepCount }, '*');
+}
+
+/**
+ * What every socket on one page shares: the page's id, which output it takes
+ * up from (`?sync=`), and whether it renders the key signal (`?matte=1`).
+ */
+interface PageJoin {
+  page: string;
+  choice: string;
+  signal?: 'matte';
+}
+
+/**
+ * `?bg=` and `?matte=1` (Phase 9 Wave C).
+ *
+ * The server has already written the CSS into the head, so the first frame is
+ * right; the page reads the same parse only to tell the hub it is a matte and
+ * to say, in the console, what it ignored. Console only — this page is on air.
+ */
+function pageSignal(params: URLSearchParams): Pick<PageJoin, 'signal'> {
+  const keying = outputKeying(params);
+  for (const problem of keying.problems) console.warn(`[breeze] ${problem}`);
+  return keying.matte ? { signal: 'matte' } : {};
 }
 
 /** How often an output on air re-reports where it is. See `connectToHub`. */
@@ -398,6 +573,10 @@ async function main(): Promise<void> {
   const boot = window.__BREEZE__;
   if (!boot) {
     document.body.textContent = 'Breeze: missing bootstrap data';
+    return;
+  }
+  if (boot.output) {
+    runOutput(boot as OutputBoot);
     return;
   }
 
@@ -526,10 +705,23 @@ async function main(): Promise<void> {
    * browser source, not a socket, and a preview told to follow one follows it
    * on every channel the page has (0.74.1).
    */
-  const join = { page: newPageId(), choice: params.get('sync')?.trim() || SYNC_AUTO };
-  for (const item of mounted) {
-    connectToHub(item.runtime, boot.projectId, item.channel, new Set(Object.keys(item.seed)), join);
+  const join: PageJoin = { page: newPageId(), choice: params.get('sync')?.trim() || SYNC_AUTO, ...pageSignal(params) };
+  /*
+   * `?hub=off` — no socket at all (Phase 9 Wave A). The rundown panel's
+   * "show cued" preview drives this page itself, through `window.breeze`, with
+   * values that are not on air; following the channel would put the on-air
+   * values back over them.
+   */
+  const hubMode = params.get('hub');
+  if (hubMode === 'data') {
+    // An OGraf pointer graphic (Phase 9 Wave D): the project's data, not the channel's commands.
+    for (const item of mounted) followData(item.runtime, boot.projectId, item.channel);
+  } else if (hubMode !== 'off') {
+    for (const item of mounted) {
+      connectToHub(item.runtime, boot.projectId, item.channel, new Set(Object.keys(item.seed)), join);
+    }
   }
+  if (params.get('ograf') === '1') ografBridge(runtime);
 
   if (boot.debug || params.get('debug') === '1') makeDebugOverlay(mounted);
 
@@ -570,6 +762,266 @@ async function main(): Promise<void> {
     else if (e.key === 'ArrowLeft') all((r) => r.prev());
     else if (e.key === 'Backspace') all((r) => r.clear());
   });
+}
+
+type OutputBoot = NonNullable<Window['__BREEZE__']> & { output: string };
+
+/**
+ * An output page — `/out/<project>/<output>` (Phase 9 Wave A).
+ *
+ * A channel with no composition of its own. It listens on the routing channel
+ * `${project}/@<output>` and mounts whichever compositions the rundown takes
+ * onto it, each into its own container and runtime, exactly as a scene mounts
+ * its elements — and each on its own channel, `@<output>~<composition>`, so
+ * late join, playback reports and retained values work per graphic.
+ *
+ * Commands on the routing channel carry `mount` to say which graphic they are
+ * for: `take` mounts it if it is not there yet, then takes; `stop`, `next`,
+ * `prev` and `clear` without one act on everything mounted, and `clear`
+ * unmounts. `update` with `$mounts` is the list itself, in stacking order — the
+ * hub retains it, so a reloaded page rebuilds the same stack.
+ */
+function runOutput(boot: OutputBoot): void {
+  const params = new URLSearchParams(location.search);
+  const scaleMode = params.get('scale') === 'contain' ? 'contain' : 'none';
+  const role = params.get('preview') === '1' ? 'preview' : 'renderer';
+
+  const stage = document.createElement('div');
+  stage.id = 'breeze-stage';
+  stage.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;';
+  document.body.appendChild(stage);
+
+  const byId = new Map((boot.compositions ?? []).map((c) => [c.id, c]));
+  let datasets: Record<string, DataSet> = boot.datasets ?? {};
+  let mode = boot.mode ?? '';
+
+  interface Mount {
+    composition: string;
+    container: HTMLElement;
+    runtime: BreezeRuntime;
+    hub: { close: () => void };
+  }
+  const mounts = new Map<string, Mount>();
+  const debugList: Mounted[] = [];
+  const join: PageJoin = { page: newPageId(), choice: params.get('sync')?.trim() || SYNC_AUTO, ...pageSignal(params) };
+
+  const refresh = async (): Promise<void> => {
+    // A composition added after this page loaded: fetch the project again.
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(boot.projectId)}`);
+      if (!res.ok) return;
+      const project = (await res.json()) as { compositions?: Composition[] };
+      for (const c of project.compositions ?? []) byId.set(c.id, c);
+    } catch {
+      // Offline: the mount is skipped and logged below.
+    }
+  };
+
+  const mount = async (compositionId: string): Promise<Mount | null> => {
+    const existing = mounts.get(compositionId);
+    if (existing) return existing;
+    if (!byId.has(compositionId)) await refresh();
+    const comp = byId.get(compositionId);
+    if (!comp) {
+      console.error(`[breeze] Output "${boot.output}" was asked to show "${compositionId}", which this project does not have.`);
+      return null;
+    }
+    // Mounted while awaiting: the same id may have been asked for twice.
+    const raced = mounts.get(compositionId);
+    if (raced) return raced;
+    const container = document.createElement('div');
+    container.dataset['breezeChannel'] = `@${boot.output}~${compositionId}`;
+    container.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;';
+    stage.appendChild(container);
+    try {
+      const runtime = new BreezeRuntime({
+        container,
+        composition: comp,
+        resolveComposition: (id) => byId.get(id),
+        resolveAsset: (src) =>
+          /^(https?:)?\/\//.test(src) || src.startsWith('data:') ? src : `${boot.assetBase}/${src.replace(/^assets\//, '')}`,
+        data: {
+          ...(Object.keys(datasets).length ? { [DATA_UPDATE_KEY]: datasets } : {}),
+          ...(mode ? { [MODE_UPDATE_KEY]: mode } : {}),
+        },
+        ...(boot.hlsScript ? { hlsScript: boot.hlsScript } : {}),
+        scaleMode,
+        injectStyles: true,
+      });
+      // Keep the page's copy of the rows current, for graphics mounted later.
+      runtime.on('update', ({ data }) => {
+        const pushed = (data as Record<string, unknown>)[DATA_UPDATE_KEY];
+        if (pushed && typeof pushed === 'object') datasets = { ...datasets, ...(pushed as Record<string, DataSet>) };
+        const m = (data as Record<string, unknown>)[MODE_UPDATE_KEY];
+        if (typeof m === 'string') mode = m;
+      });
+      const hub = connectToHub(runtime, boot.projectId, `@${boot.output}~${compositionId}`, new Set(), join);
+      const entry: Mount = { composition: compositionId, container, runtime, hub };
+      mounts.set(compositionId, entry);
+      debugList.push({ channel: compositionId, label: comp.name || compositionId, runtime, seed: {} });
+      return entry;
+    } catch (err) {
+      console.error(`[breeze] "${compositionId}" failed to build on output "${boot.output}"; the rest of the page is unaffected.`, err);
+      container.remove();
+      return null;
+    }
+  };
+
+  const unmount = (compositionId: string): void => {
+    const entry = mounts.get(compositionId);
+    if (!entry) return;
+    entry.hub.close();
+    entry.runtime.destroy();
+    entry.container.remove();
+    mounts.delete(compositionId);
+    const at = debugList.findIndex((d) => d.channel === compositionId);
+    if (at !== -1) debugList.splice(at, 1);
+  };
+
+  /** Bring the page to the hub's list: mount what is missing, drop what left, stack in order. */
+  const sync = async (list: OutputMount[], additive = false): Promise<void> => {
+    const ordered = orderMounts(list);
+    const wanted = new Set(ordered.map((m) => m.composition));
+    if (!additive) for (const id of [...mounts.keys()]) if (!wanted.has(id)) unmount(id);
+    for (const m of ordered) await mount(m.composition);
+    for (const m of ordered) {
+      const entry = mounts.get(m.composition);
+      if (entry) stage.appendChild(entry.container);
+    }
+  };
+
+  const each = (target: string | undefined, fn: (r: BreezeRuntime) => void): void => {
+    if (target) {
+      const entry = mounts.get(target);
+      if (entry) fn(entry.runtime);
+      return;
+    }
+    for (const entry of mounts.values()) fn(entry.runtime);
+  };
+
+  // Commands are applied in arrival order, even when one has to mount first.
+  let queue: Promise<void> = Promise.resolve();
+  const apply = (
+    command: {
+      verb: string;
+      mount?: string;
+      data?: Record<string, unknown>;
+      step?: number;
+      cut?: boolean;
+      table?: string;
+      page?: number;
+      key?: string;
+      cycle?: string;
+    },
+    additive = false,
+  ): void => {
+    queue = queue.then(async () => {
+      const table = typeof command.table === 'string' && command.table !== '' ? command.table : undefined;
+      switch (command.verb) {
+        case 'update': {
+          const list = command.data?.[MOUNTS_UPDATE_KEY];
+          if (Array.isArray(list)) await sync(list as OutputMount[], additive);
+          return;
+        }
+        case 'take': {
+          if (!command.mount) return;
+          const entry = await mount(command.mount);
+          entry?.runtime.take(command.data ?? {});
+          return;
+        }
+        /*
+         * OGraf on an output (Phase 9 Wave D): PLAY and a step go through this
+         * routing channel, not the mount's own, because a composition loaded a
+         * moment ago may not be mounted — or subscribed there — yet. Queued
+         * here, the mount comes first and the command lands on it.
+         */
+        case 'play':
+        case 'step': {
+          if (!command.mount) return;
+          const entry = await mount(command.mount);
+          if (!entry) return;
+          if (command.verb === 'play') entry.runtime.play();
+          else if (typeof command.step === 'number') entry.runtime.goToStep(command.step, { cut: command.cut === true });
+          return;
+        }
+        case 'page':
+          each(command.mount, (r) => {
+            if (typeof command.key === 'string') r.goToPage({ key: command.key }, table);
+            else if (typeof command.page === 'number') r.goToPage({ n: command.page }, table);
+          });
+          return;
+        case 'cycle':
+          if (command.cycle === 'hold' || command.cycle === 'resume') {
+            const state = command.cycle;
+            each(command.mount, (r) => r.setCycle(state, table));
+          }
+          return;
+        // A cut stop takes the graphic off at once and leaves it mounted; CLEAR unmounts.
+        case 'stop': each(command.mount, (r) => (command.cut ? r.clear() : r.stop())); return;
+        case 'next': each(command.mount, (r) => r.next(table)); return;
+        case 'prev': each(command.mount, (r) => r.prev(table)); return;
+        case 'clear':
+          if (command.mount) unmount(command.mount);
+          else for (const id of [...mounts.keys()]) unmount(id);
+          return;
+        default:
+      }
+    }).catch((err: unknown) => console.error('[breeze] output command failed', err));
+  };
+
+  const routing = `${boot.projectId}/@${boot.output}`;
+  let socket: WebSocket | null = null;
+  let retry = 0;
+  let welcomed = false;
+  const connect = (): void => {
+    const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+    socket = new WebSocket(`${scheme}://${location.host}/ws/control`);
+    socket.addEventListener('open', () => {
+      retry = 0;
+      socket!.send(JSON.stringify({
+        type: 'subscribe',
+        channel: routing,
+        role,
+        page: join.page,
+        ...(join.signal ? { signal: join.signal } : {}),
+      }));
+    });
+    socket.addEventListener('message', (event) => {
+      let message: { type: string; command?: Parameters<typeof apply>[0]; state?: { data?: Record<string, unknown> } };
+      try {
+        message = JSON.parse(String(event.data));
+      } catch {
+        return;
+      }
+      if (message.type === 'command' && message.command) apply(message.command);
+      // On (re)connect, the retained list: a reloaded output rebuilds the stack,
+      // and each graphic then late-joins on its own channel.
+      /*
+       * Only the first welcome may take graphics down. A reconnect after the
+       * server restarted is welcomed with an empty list — the hub forgot — and
+       * obeying it would clear the output mid-show. Later welcomes only add.
+       */
+      if (message.type === 'welcome') {
+        const list = message.state?.data?.[MOUNTS_UPDATE_KEY];
+        apply({ verb: 'update', data: { [MOUNTS_UPDATE_KEY]: Array.isArray(list) ? list : [] } }, welcomed);
+        welcomed = true;
+      }
+    });
+    socket.addEventListener('close', () => {
+      retry = Math.min(retry + 1, 6);
+      setTimeout(connect, Math.min(500 * 2 ** retry, 10_000));
+    });
+    socket.addEventListener('error', () => socket?.close());
+  };
+  connect();
+
+  (globalThis as unknown as Record<string, unknown>)['breezeOutput'] = {
+    output: boot.output,
+    get: (composition: string) => mounts.get(composition)?.runtime,
+    mounted: () => [...mounts.keys()],
+  };
+
+  if (boot.debug || params.get('debug') === '1') makeDebugOverlay(debugList);
 }
 
 void main();

@@ -26,7 +26,12 @@
  *   projects/<id>/project.json
  *   projects/<id>/assets.json
  *   projects/<id>/datasources.json         (omitted when the project has none)
+ *   projects/<id>/rundowns.json            (omitted when the project has none)
  *   projects/<id>/assets/<file>
+ *
+ * Rundowns (Phase 9 Wave A) travel with a whole-project backup only. A merge
+ * and a single-composition export leave them behind: their items name
+ * compositions by id, and both of those paths can rename or drop compositions.
  */
 
 import fs from 'node:fs/promises';
@@ -36,6 +41,7 @@ import {
   FORMAT_VERSION,
   assetReferences,
   nameProblem,
+  validateRundowns,
   normalizeName,
   type AssetRef,
   type Composition,
@@ -43,7 +49,7 @@ import {
   type Project,
 } from '@breeze/schema';
 
-import { projectAssetsDir, projectDataSourcesFile, projectDir } from '../config.js';
+import { projectAssetsDir, projectDataSourcesFile, projectDir, projectRundownsFile } from '../config.js';
 import { readDataSources } from '../data/sources.js';
 import { APP_VERSION } from '../version.js';
 import {
@@ -51,6 +57,7 @@ import {
   listAssets,
   readAssets,
   readProject,
+  readRundowns,
   updateAssets,
   writeProject,
 } from '../store.js';
@@ -149,6 +156,9 @@ export async function buildBundle(projectIds: readonly string[]): Promise<{
         sources: sources.map((s) => stripSecrets(s as unknown as Record<string, unknown>)),
       });
     }
+
+    const rundowns = await readRundowns(id);
+    if (rundowns.rundowns.length) files[`projects/${id}/rundowns.json`] = utf8(rundowns);
 
     let present = 0;
     for (const asset of assets) {
@@ -299,7 +309,7 @@ export async function buildCompositionBundle(
  * "something unexpected landed in the data directory", and there is no list of
  * unexpected things to enumerate.
  */
-const PROJECT_FILE = /^projects\/([a-z0-9][a-z0-9._-]{0,63})\/(project|assets|datasources)\.json$/;
+const PROJECT_FILE = /^projects\/([a-z0-9][a-z0-9._-]{0,63})\/(project|assets|datasources|rundowns)\.json$/;
 const PROJECT_ASSET = /^projects\/([a-z0-9][a-z0-9._-]{0,63})\/assets\/([A-Za-z0-9._-]+)$/;
 
 export interface BundleContents {
@@ -708,6 +718,24 @@ export async function restoreProject(
   const sourcesJson = files.get('datasources.json');
   if (sourcesJson) {
     await fs.writeFile(projectDataSourcesFile(targetId), Buffer.from(sourcesJson));
+  }
+
+  /*
+   * Rundowns are written only if they parse and pass validation against the
+   * project they arrive with. A bad file is dropped rather than failing the
+   * restore: the graphics are what the operator needs back, and a rundown is
+   * quick to rebuild.
+   */
+  const rundownsJson = files.get('rundowns.json');
+  if (rundownsJson) {
+    try {
+      const parsed: unknown = JSON.parse(new TextDecoder().decode(rundownsJson));
+      if (validateRundowns(parsed, new Set(restored.compositions.map((c) => c.id))).length === 0) {
+        await fs.writeFile(projectRundownsFile(targetId), Buffer.from(rundownsJson));
+      }
+    } catch {
+      // Unreadable: left behind, as above.
+    }
   }
 
   await writeProject(restored);
