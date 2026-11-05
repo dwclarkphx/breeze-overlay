@@ -142,7 +142,7 @@ Ports below 1024 need root; 7331 does not, so run the server as an ordinary
 user. For an unattended install, run it under systemd rather than a login
 shell — or use the container, which handles restart-on-boot already.
 
-Then open `http://<host>:7331/`. You will have access to the [Editor](#editor), Project list, and the **[User Guide](docs/USER-GUIDE.md)**. On first run the server seeds three demo projects from `examples/` — **Breeze Demo** (a lower third, badge, ticker and standings table), a **World Cup 2026 bracket**, and the same tournament as a **scene**. They are ordinary projects: delete one and it stays deleted.
+Then open `http://<host>:7331/`. You will have access to the [Editor](#editor), Project list, and the **[User Guide](docs/USER-GUIDE.md)**. On first run the server seeds four demo projects from `examples/`: **Breeze Demo** (lower thirds, a badge, tickers, a standings table and a screen bug), a **World Cup 2026 bracket**, the same tournament as a **scene**, and **Rolls, Polls & Charts** (a credits roll, lyrics, poll results, a meter, a line chart and a gauge). They are ordinary projects: delete one and it stays deleted.
 
 `<host>` is whatever reaches the machine running the server — `localhost` if
 that is the machine you are sitting at, otherwise its LAN address or hostname.

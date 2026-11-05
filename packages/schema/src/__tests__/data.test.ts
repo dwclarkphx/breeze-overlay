@@ -55,6 +55,16 @@ describe('coerce', () => {
     expect(coerce(undefined, 'string')).toBeNull();
   });
 
+  it('reads a blank number cell as blank, not 0 (0.79.1)', () => {
+    // An unplayed quarter in a line score is an empty cell; it used to air as 0.
+    expect(coerce('', 'number')).toBeNull();
+    expect(coerce('   ', 'number')).toBeNull();
+    expect(coerce('$', 'number')).toBeNull();
+    // A real zero is still zero.
+    expect(coerce('0', 'number')).toBe(0);
+    expect(coerce(0, 'number')).toBe(0);
+  });
+
   it('accepts the spellings of yes and no that feeds actually use', () => {
     expect(coerce('YES', 'boolean')).toBe(true);
     expect(coerce('0', 'boolean')).toBe(false);

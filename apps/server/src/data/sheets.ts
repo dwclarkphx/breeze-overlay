@@ -28,7 +28,7 @@ import { type DataColumn, type DataSet } from '@breeze/schema';
 
 import { config } from '../config.js';
 import { fetchText } from './fetch.js';
-import { gridToDataSet } from './parse.js';
+import { gridToDataSet, type ColumnMatch } from './parse.js';
 
 const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
 const SHEETS_ORIGIN = 'https://sheets.googleapis.com';
@@ -233,6 +233,8 @@ export interface SheetsReadOptions {
   serviceAccount?: ServiceAccountKey | undefined;
   header?: boolean;
   columns?: DataColumn[];
+  /** Told how declared columns matched the header row (`gridToDataSet`). */
+  onColumns?: (match: ColumnMatch) => void;
 }
 
 interface ValuesResponse {
@@ -300,6 +302,7 @@ export async function sheetsToDataSet(
   return gridToDataSet(id, padded, {
     ...(opts.header !== undefined ? { header: opts.header } : {}),
     ...(opts.columns ? { columns: opts.columns } : {}),
+    ...(opts.onColumns ? { onColumns: opts.onColumns } : {}),
   });
 }
 

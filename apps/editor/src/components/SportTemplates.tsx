@@ -159,7 +159,7 @@ export function SportTemplateCreator({
 
   return (
     <div className="source-editor sport-creator">
-      <h4>{t('editor.sports.title')}</h4>
+      {/* The title is the dialog's (DataPanel, FloatingDialog). */}
       <label>
         <span>{t('editor.sports.sport')}</span>
         <select value={sportId} onChange={(e) => chooseSport(e.target.value)}>

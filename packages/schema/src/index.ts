@@ -17,6 +17,7 @@
 
 export * from './compose.js';
 export * from './data.js';
+export * from './columns.js';
 export * from './rules.js';
 export * from './time.js';
 export * from './media.js';

@@ -13,12 +13,18 @@
 import {
   conform,
   inferColumns,
+  matchDeclaredColumns,
+  type ColumnMatch,
   type ColumnType,
   type DataColumn,
   type DataRow,
   type DataSet,
   type DataValue,
 } from '@breeze/schema';
+
+// Column matching moved to @breeze/schema (columns.ts) so the editor's paste
+// shares it; re-exported here for the readers and their tests.
+export { columnMatchName, matchDeclaredColumns, type ColumnMatch } from '@breeze/schema';
 
 /* -------------------------------------------------------------------- CSV */
 
@@ -192,8 +198,23 @@ export interface CsvParseOptions {
   delimiter?: string;
   /** First row is the header. Default true. */
   header?: boolean;
-  /** Declared columns win over anything inferred from the payload. */
+  /**
+   * Declared columns win over anything inferred from the payload. With a
+   * header row they are matched to it **by name**, never by position — see
+   * `matchDeclaredColumns`.
+   */
   columns?: DataColumn[];
+  /** Told how the declared columns matched the header row. Called only when there are both. */
+  onColumns?: (match: ColumnMatch) => void;
+}
+
+/** A column-match report as the status warning an operator reads; nothing when every column was found. */
+export function columnMatchWarning(match: ColumnMatch | undefined): string | undefined {
+  if (!match) return undefined;
+  if (match.positional) return 'no header in the sheet names a declared column, so columns were read by position';
+  if (match.missing.length === 0) return undefined;
+  const noun = match.missing.length === 1 ? 'column' : 'columns';
+  return `${noun} not found in the header row, left blank: ${match.missing.join(', ')}`;
 }
 
 /**
@@ -216,12 +237,29 @@ export function gridToDataSet(
   const headers = useHeader ? grid[0]! : grid[0]!.map((_, i) => `col${i + 1}`);
   const body = useHeader ? grid.slice(1) : grid;
 
-  const columns = opts.columns?.length ? opts.columns : inferColumnsFromRows(headers, body);
+  const declared = Boolean(opts.columns?.length);
+  const columns = declared ? opts.columns! : inferColumnsFromRows(headers, body);
+
+  /*
+   * Where each column's cells are. Inferred columns were made from the header
+   * in order, so their position is their place. Declared columns are found by
+   * name when there is a header to look in; with `header: false` there is
+   * nothing to match and position is all there is.
+   */
+  let index: Array<number | undefined> = columns.map((_, i) => i);
+  if (declared && useHeader) {
+    const found = matchDeclaredColumns(headers, columns);
+    index = found.index;
+    opts.onColumns?.(found.match);
+  }
 
   const rows: DataRow[] = body.map((cells) => {
     const row: DataRow = {};
     columns.forEach((col, i) => {
-      row[col.key] = (cells[i] ?? '') as DataValue;
+      const at = index[i];
+      // A column with no header is null, not '': an empty string becomes 0 in a
+      // number column, and a missing score column must not read as nil–nil.
+      row[col.key] = (at === undefined ? null : (cells[at] ?? '')) as DataValue;
     });
     return row;
   });
@@ -234,6 +272,7 @@ export function csvToDataSet(id: string, text: string, opts: CsvParseOptions = {
   return gridToDataSet(id, parseDelimited(text, delimiter), {
     ...(opts.header !== undefined ? { header: opts.header } : {}),
     ...(opts.columns ? { columns: opts.columns } : {}),
+    ...(opts.onColumns ? { onColumns: opts.onColumns } : {}),
   });
 }
 

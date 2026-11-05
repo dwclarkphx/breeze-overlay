@@ -16,6 +16,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState, type JSX } from 'react';
 import {
+  pasteBlock,
   AIR_QUALITY_PROVIDERS,
   AIR_QUALITY_PROVIDER_INFO,
   CAP_SEVERITIES,
@@ -66,6 +67,7 @@ import {
 import { parsePlaceLine, placeLine, type PlaceKind } from '../state/places.js';
 import { useEditor } from '../state/store.js';
 import { SportGuide, SportTemplateCreator } from './SportTemplates.js';
+import { FloatingDialog } from './FloatingDialog.js';
 import { PollFeedGuide, PollSourceFields, TextSourceFields } from './LiveSourceFields.js';
 
 const TYPE_LABEL_KEY: Record<DataSourceDef['type'], string> = {
@@ -346,6 +348,12 @@ export function DataPanel(): JSX.Element {
   const [editing, setEditing] = useState<DataSourceDef | null>(null);
   /** The sport-template creator is open (Phase 9 Wave B). */
   const [templating, setTemplating] = useState(false);
+  /**
+   * Where the source being edited is shown (0.79.1): `panel` under the list, as
+   * Edit always has, or `window`, the movable, resizable dialog that Open and
+   * every Add use.
+   */
+  const [editingIn, setEditingIn] = useState<'panel' | 'window'>('panel');
   const [error, setError] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
 
@@ -393,6 +401,7 @@ export function DataPanel(): JSX.Element {
 
   const add = (type: DataSourceDef['type']) => {
     const id = `src${Date.now().toString(36)}`;
+    setEditingIn('window');
     setEditing(blankSource(type, id));
   };
 
@@ -529,7 +538,22 @@ export function DataPanel(): JSX.Element {
                       <option value="backup">{t('editor.data.guard.useBackup')}</option>
                     </select>
                   )}
-                  <button onClick={() => setEditing(def)}>{t('editor.data.edit')}</button>
+                  <button
+                    onClick={() => {
+                      setEditingIn('window');
+                      setEditing(def);
+                    }}
+                  >
+                    {t('editor.data.open')}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditingIn('panel');
+                      setEditing(def);
+                    }}
+                  >
+                    {t('editor.data.edit')}
+                  </button>
                   {isPolledSource(def) && (
                     <button onClick={() => void api.refreshDataSource(projectId, def.id).then(reload)}>
                       {t('editor.data.refresh')}
@@ -550,28 +574,53 @@ export function DataPanel(): JSX.Element {
         </div>
       )}
 
+      {/*
+        Edit shows the source under the list, as it always has. Open, and every
+        way of adding one (Add, From a sport template), show it in a movable,
+        corner-resizable window with the room a game table's grid or a preview
+        wants (0.79.1).
+      */}
       {templating && (
-        <SportTemplateCreator
-          projectId={projectId}
-          existingIds={new Set(sources.map((s) => s.def.id))}
-          onCancel={() => setTemplating(false)}
-          onDone={() => {
-            setTemplating(false);
-            void reload();
-          }}
-        />
+        <FloatingDialog
+          title={t('editor.sports.title')}
+          label={t('editor.sports.title')}
+          closeLabel={t('editor.data.dialogClose')}
+          onClose={() => setTemplating(false)}
+        >
+          <SportTemplateCreator
+            projectId={projectId}
+            existingIds={new Set(sources.map((s) => s.def.id))}
+            onCancel={() => setTemplating(false)}
+            onDone={() => {
+              setTemplating(false);
+              void reload();
+            }}
+          />
+        </FloatingDialog>
       )}
 
-      {editing && (
-        <SourceEditor
-          projectId={projectId}
-          others={sources.map((s) => s.def).filter((d) => d.id !== editing.id)}
-          def={editing}
-          onChange={setEditing}
-          onCancel={() => setEditing(null)}
-          onSave={() => void save(editing)}
-        />
-      )}
+      {editing &&
+        (() => {
+          const editor = (
+            <SourceEditor
+              projectId={projectId}
+              others={sources.map((s) => s.def).filter((d) => d.id !== editing.id)}
+              def={editing}
+              onChange={setEditing}
+              onCancel={() => setEditing(null)}
+              onSave={() => void save(editing)}
+            />
+          );
+          if (editingIn === 'panel') return editor;
+          const title = sources.some((s) => s.def.id === editing.id)
+            ? t('editor.data.dialogEdit', { name: editing.name })
+            : t('editor.data.dialogNew');
+          return (
+            <FloatingDialog title={title} label={title} closeLabel={t('editor.data.dialogClose')} onClose={() => setEditing(null)}>
+              {editor}
+            </FloatingDialog>
+          );
+        })()}
     </div>
   );
 }
@@ -2545,52 +2594,35 @@ function ManualTableEditor({
   const fedCell = (row: DataRow, key: string): boolean =>
     bracket !== null && isFedCell(row, key, bracket.seedRound, bracket.carried);
 
+  const [pasteNote, setPasteNote] = useState<string | null>(null);
+
+  /*
+   * One change, not two. This used to call setColumns and then setRows, each
+   * spreading the same `def`, so the second undid the first: a header paste
+   * left the rows keyed to columns the table didn't have. On a sport-template
+   * table it also replaced the template's keys (`homeScore` → `homescore`),
+   * which the Game block and every binding read. `pasteBlock` keeps a template
+   * table's columns and maps the pasted headers onto them by name (0.79.1).
+   */
   const pasteInto = (text: string, atRow: number, atCol: number, withHeaders: boolean) => {
-    const lines = text.replace(/\r\n?/g, '\n').replace(/\n+$/, '').split('\n');
-    if (!lines.length) return;
-
-    let columns = def.columns;
-    let body = lines;
-
-    if (withHeaders) {
-      const headers = lines[0]!.split('\t');
-      columns = headers.map((h, i) => ({
-        // A column's key is a frozen identifier a graphic binds to, and the
-        // label it falls back to is DataSet content that renders on air. Both
-        // stay English for the same reason NEW_NAME does.
-        key: h.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || `col${i + 1}`,  // i18n-ignore
-        // i18n-ignore-next-line
-        label: h.trim() || `Column ${i + 1}`,
-        // Typed from the first data row: a column that is text here sorts as
-        // text on air, and finding that out during a show is too late.
-        type: /^-?[\d.,]+$/.test((lines[1]?.split('\t')[i] ?? '').trim()) ? 'number' : 'string',
-      }));
-      body = lines.slice(1);
-      setColumns(columns);
-    }
-
-    const rows = withHeaders ? [] : [...def.rows];
-    body.forEach((line, r) => {
-      const cells = line.split('\t');
-      const target = withHeaders ? r : atRow + r;
-      while (rows.length <= target) rows.push({});
-      const row = { ...rows[target]! };
-      cells.forEach((cell, c) => {
-        const col = columns[withHeaders ? c : atCol + c];
-        if (!col) return;
-        row[col.key] =
-          col.type === 'number' && cell.trim() !== '' && Number.isFinite(Number(cell))
-            ? Number(cell)
-            : cell;
-      });
-      rows[target] = row;
+    const pasted = pasteBlock(def.columns, def.rows, text, {
+      row: atRow,
+      column: atCol,
+      headers: withHeaders,
+      lockColumns: Boolean(def.template),
     });
-    setRows(rows);
+    onChange({ ...def, columns: pasted.columns, rows: pasted.rows });
+    const notes: string[] = [];
+    if (pasted.asData) notes.push(t('editor.data.manual.pasteAsData'));
+    if (pasted.unmatched.length) notes.push(t('editor.data.manual.pasteUnmatched', { headers: pasted.unmatched.join(', ') }));
+    if (pasted.blank.length) notes.push(t('editor.data.manual.pasteBlank', { columns: pasted.blank.join(', ') }));
+    setPasteNote(notes.length ? notes.join(' ') : null);
   };
 
   return (
     <div className="manual-table">
       <div className="hint">{t('editor.data.manual.pasteHint')}</div>
+      {pasteNote && <div className="hint paste-note">{pasteNote}</div>}
 
       {isBracket && (
         <div className="bracket-bar">

@@ -1075,6 +1075,55 @@ img.layer-thumb {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
+/* ------------------------------------------------------ floating dialog */
+
+/* FloatingDialog.tsx (0.79.1): the data-source editor and the sport template
+   creator when a source is added or opened with Open (Edit stays in the panel). Width, height, left and top are written by the component; these
+   are only the limits. It opens at no more than 90% of the window (the
+   component caps that); dragging the corner may take it to the window edge.
+   Below the asset library (z 200), which a source editor can open over itself. */
+
+.float-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); z-index: 190; }
+
+.float-dialog {
+  position: fixed; display: flex; flex-direction: column;
+  min-width: 360px; min-height: 160px;
+  max-width: calc(100vw - 16px); max-height: calc(100vh - 16px);
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.7);
+  overflow: hidden; resize: both;
+}
+
+.float-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-bottom: 1px solid var(--border);
+  flex: 0 0 auto; cursor: move; user-select: none; touch-action: none;
+}
+.float-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.float-close { border: none; background: none; color: var(--muted); font-size: 16px; cursor: pointer; }
+.float-close:hover { color: var(--fg, var(--text)); }
+
+.float-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+/* As wide as what it holds, not as wide as the window, so the component sees a
+   grid grow (a preview arriving, columns added) and can widen the window to it. */
+.float-content { width: max-content; min-width: 100%; }
+
+/* Running text wraps at a readable measure, so it does not set the opening
+   width; tables and grids do, which is what the extra room is for. */
+.float-content .hint, .float-content p,
+.float-content .source-error, .float-content .source-warning { max-width: 80ch; }
+
+.float-body .source-editor {
+  max-height: none; overflow: visible; border-top: none;
+  background: var(--panel); padding: 10px 12px 0;
+}
+/* Save and Cancel stay in reach however long the form is. */
+.float-body .source-editor > .source-actions:last-child {
+  position: sticky; bottom: 0; z-index: 1;
+  margin: 8px -12px 0; padding: 8px 12px;
+  background: var(--panel); border-top: 1px solid var(--border);
+}
+
 /* ------------------------------------------------------- asset library */
 
 /* The docked bin is a picker; this is the library. Facets, a grid, bulk edit

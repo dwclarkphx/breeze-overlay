@@ -109,7 +109,12 @@ export function coerce(value: unknown, type: ColumnType): DataValue {
     if (typeof value === 'number') return Number.isFinite(value) ? value : null;
     // Thousands separators and a stray currency symbol are normal in pasted
     // spreadsheet data and must not turn a whole column into text.
-    const n = Number(String(value).replace(/[,\s$£€]/g, ''));
+    const text = String(value).replace(/[,\s$£€]/g, '');
+    // A blank cell is blank, not nought (0.79.1). `Number('')` is 0, so an
+    // unplayed quarter in a line score, or a score cell not yet filled in,
+    // used to go to air as 0.
+    if (text === '') return null;
+    const n = Number(text);
     return Number.isFinite(n) ? n : String(value);
   }
   if (type === 'boolean') {

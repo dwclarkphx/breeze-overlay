@@ -4,6 +4,35 @@ All notable changes to Breeze Overlay are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow the project rule: a feature bumps the minor version, a fix bumps the patch. Releases before 0.45.0 used two-part numbers (0.01–0.44). 1.0.0 will be the first public release.
 
+## [0.79.1] - 2026-11-04
+
+> Sheets and CSV sources find their columns by header name, so a sheet with its columns in another order no longer puts a reversed score on air, a blank number cell reads as blank instead of 0, pasting into a sport table keeps its columns, and a fetched sport feed that fails its format check says so.
+
+### Fixed
+
+- **A Google Sheets, CSV or FTP-CSV source with declared columns reads each column by its header name, not its position.** Every sport-template source made from a Sheet or CSV declares its columns, and they used to be read in the order they were declared, ignoring the header row. A sheet that listed `awayScore` before `homeScore` put the score on air reversed, and the format check passed. A column inserted anywhere in the sheet shifted every value after it. Headers now match however they are written (`homeScore`, `Home Score`, `home_score`, any script), by key and then by label. A declared column with no header reads as blank, not 0, and the source's status says which columns weren't found. Two cases still read by position: a source with no header row, and one whose headers name none of its declared columns. The second one is flagged in the status.
+- **A blank cell in a number column reads as blank, not 0**, in every source: Sheets, CSV, JSON, XML, FTP drops, manual tables and the rows a table layer holds. An unplayed quarter in a line score, or a score not yet typed in, used to go to air as `0`. A typed `0` is still 0.
+- **Pasting a block with headers into a manual table works again, and keeps a sport template's columns.** The paste updated the table's columns and then its rows as two separate changes, and the second undid the first, so the pasted rows were stored under column names the table didn't have. On a sport-template table the paste also replaced the template's keys (`homeScore` became `homescore`), which the Game block and every binding read. Now a sport table's columns never change: pasted headers are matched to them by name in any order, and the editor lists headers it didn't recognise and columns the paste left blank. A first line that names none of the columns is pasted as data. On any other manual table the pasted headers still become the columns, but one that names an existing column keeps that column's key, so graphics bound to it keep working. Header matching is shared with the Sheets and CSV readers (`@breeze/schema` `columns.ts`).
+- **A fetched sport-template source runs its format check on the server.** A Sheet, CSV or JSON feed whose rows fail the check (a required column missing, `TBD` in a score, `halftime` where `pre`/`live`/`final` is expected) says so on the source's status line, e.g. `format check: homeScore in row 1 is not a number ("TBD")`. The rows still go on air. Before, only the editor's preview ran the check.
+
+### Changed
+
+- **Data sources open in a window.** Each source in the data panel has a new **Open** button before **Edit**, which shows it in a dialog you can drag by its title bar and resize from its corner. A source being added, from **+ Add…** or **From a sport template…**, opens there too:
+  - it opens sized to its content, at most 90% of the browser window, and keeps fitting until you resize it;
+  - Save and Cancel stay at its foot however long the form;
+  - only × or Cancel close it, never Escape or a click outside.
+
+  **Edit** still shows the source in the panel, as before. New `FloatingDialog` component in the editor.
+- User guide and sport templates reference brought up to date with these fixes:
+  - how a Sheet or CSV's columns are matched by header, and the two notes a source shows when they aren't;
+  - blank number cells;
+  - pasting into a sport table;
+  - the server-side format check, and that the control panel doesn't show its note yet;
+  - three new entries in *When something looks wrong*.
+  - the list of demo projects installed on first run now includes **Rolls, Polls & Charts** (it shipped in 0.79.0) and describes everything in the Breeze Demo. The README says the same.
+
+  Also corrected: columns a template doesn't know are kept only on a manual table. A Sheet, CSV or JSON source leaves them out, as it always has. Both documents used to say they were kept.
+
 ## [0.79.0] - 2026-10-25
 
 > Rundowns with cue → take, outputs that carry several graphics, operator timers, typed fields, sport templates for data sources, fill/matte and chroma outputs for hardware switchers, OGraf interop, and rolls, polls and data-driven charts.

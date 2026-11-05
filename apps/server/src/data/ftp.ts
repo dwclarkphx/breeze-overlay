@@ -37,7 +37,7 @@ import {
 
 import { config } from '../config.js';
 import { FetchBlockedError, isPrivateAddress } from './fetch.js';
-import { csvToDataSet, jsonToDataSet } from './parse.js';
+import { csvToDataSet, jsonToDataSet, type ColumnMatch } from './parse.js';
 import { feedToDataSet, xmlToDataSet } from './parse-xml.js';
 
 /** Refuse a file large enough to be a mistake rather than a data drop. */
@@ -332,13 +332,18 @@ function joinRemote(dir: string, name: string): string {
 /* ---------------------------------------------------------------- parsing */
 
 /** Body → DataSet, using the same parsers the HTTP adapters use. */
-export function parseFtpBody(def: FtpDataSource, body: string): DataSet {
+export function parseFtpBody(
+  def: FtpDataSource,
+  body: string,
+  onColumns?: (match: ColumnMatch) => void,
+): DataSet {
   switch (def.format) {
     case 'csv':
       return csvToDataSet(def.id, body, {
         ...(def.delimiter ? { delimiter: def.delimiter } : {}),
         ...(def.header !== undefined ? { header: def.header } : {}),
         ...(def.columns ? { columns: def.columns } : {}),
+        ...(onColumns ? { onColumns } : {}),
       });
     case 'json':
       return jsonToDataSet(def.id, JSON.parse(body), {
@@ -367,7 +372,7 @@ export function parseFtpBody(def: FtpDataSource, body: string): DataSet {
   }
 }
 
-export async function ftpToDataSet(def: FtpDataSource): Promise<DataSet> {
+export async function ftpToDataSet(def: FtpDataSource, onColumns?: (match: ColumnMatch) => void): Promise<DataSet> {
   const { body } = await fetchRemoteFile(def);
-  return parseFtpBody(def, body);
+  return parseFtpBody(def, body, onColumns);
 }

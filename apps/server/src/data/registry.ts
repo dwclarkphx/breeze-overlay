@@ -38,6 +38,7 @@ import {
   applyGuard,
   attributionShown,
   blankAttribution,
+  checkSportTable,
   emptyDataSet,
   conform,
   isInlineSource,
@@ -46,6 +47,8 @@ import {
   placesFromRows,
   placesSourceOf,
   pollFloor,
+  sportRuleset,
+  sportTemplate,
   type DataSet,
   type DataSourceDef,
   type DataSourceStatus,
@@ -59,7 +62,7 @@ import { loadAirQuality } from './airquality.js';
 import { capDueIn, capToDataSet } from './cap.js';
 import { fetchText, userAgent } from './fetch.js';
 import { ftpToDataSet } from './ftp.js';
-import { csvToDataSet, jsonToDataSet } from './parse.js';
+import { columnMatchWarning, csvToDataSet, jsonToDataSet, type ColumnMatch } from './parse.js';
 import { feedToDataSet, xmlToDataSet } from './parse-xml.js';
 import { resolveSheetsCredential, sheetsToDataSet } from './sheets.js';
 import { effectiveExpiry, effectiveInterval, readDataSources } from './sources.js';
@@ -184,6 +187,31 @@ export function inlineDataSet(def: DataSourceDef): DataSet {
   return emptyDataSet(def.id);
 }
 
+/**
+ * A fetched sport-template source's format check, as a status warning (0.79.1).
+ *
+ * Until now only the editor ran `checkSportTable`, against a preview, so a feed
+ * that went wrong mid-show — a column renamed, `TBD` typed into a score — said
+ * nothing anywhere an operator looks. Reported, not enforced: the rows still go
+ * on air. Holding last-good instead is the planned `onTemplateFail` setting
+ * (sports-import-review §5.6). A manual table is checked in the editor as it
+ * is typed, so it is skipped here.
+ */
+export function templateCheckWarning(def: DataSourceDef, data: DataSet | null): string | undefined {
+  if (!def.template || !data || def.type === 'manual') return undefined;
+  const sport = sportTemplate(def.template.sport);
+  if (!sport) return undefined;
+  const check = checkSportTable(sport, sportRuleset(sport, def.template.ruleset), def.template.table, data);
+  if (check.ok) return undefined;
+  const parts: string[] = [];
+  if (check.missing.length) parts.push(`missing ${check.missing.join(', ')}`);
+  for (const m of check.mistyped.slice(0, 3)) parts.push(`${m.column} in row ${m.row} is not a number (${JSON.stringify(m.value)})`);
+  for (const u of check.unexpected.slice(0, 3)) parts.push(`${u.column} in row ${u.row} is not an allowed value (${JSON.stringify(u.value)})`);
+  const more = check.mistyped.length + check.unexpected.length - Math.min(3, check.mistyped.length) - Math.min(3, check.unexpected.length);
+  if (more > 0) parts.push(`${more} more`);
+  return `format check: ${parts.join('; ')}`;
+}
+
 /** Turn a definition plus a fetched body into a DataSet. */
 export async function loadDataSource(def: DataSourceDef, prior?: DataEntry, ctx: LoadContext = {}): Promise<{
   data: DataSet | null;
@@ -239,14 +267,16 @@ export async function loadDataSource(def: DataSourceDef, prior?: DataEntry, ctx:
    */
   if (def.type === 'sheets') {
     const credential = resolveSheetsCredential(def.secretId);
+    let match: ColumnMatch | undefined;
     const data = await sheetsToDataSet(def.id, def.spreadsheet, {
       ...(def.range ? { range: def.range } : {}),
       ...(def.header !== undefined ? { header: def.header } : {}),
       ...(def.columns ? { columns: def.columns } : {}),
       apiKey: credential.apiKey,
       serviceAccount: credential.serviceAccount,
+      onColumns: (m) => (match = m),
     });
-    return { data };
+    return { data, warning: columnMatchWarning(match) };
   }
 
   /*
@@ -274,7 +304,9 @@ export async function loadDataSource(def: DataSourceDef, prior?: DataEntry, ctx:
   }
 
   if (def.type === 'ftp') {
-    return { data: await ftpToDataSet(def) };
+    let match: ColumnMatch | undefined;
+    const data = await ftpToDataSet(def, (m) => (match = m));
+    return { data, warning: columnMatchWarning(match) };
   }
 
   const secret = def.secretId ? config.dataSecrets[def.secretId] : undefined;
@@ -314,9 +346,11 @@ export async function loadDataSource(def: DataSourceDef, prior?: DataEntry, ctx:
     return { data: null, etag: result.etag, lastModified: result.lastModified };
   }
 
-  const data = parseBody(def, result.body);
+  let match: ColumnMatch | undefined;
+  const data = parseBody(def, result.body, (m) => (match = m));
   return {
     data,
+    warning: columnMatchWarning(match),
     etag: result.etag,
     lastModified: result.lastModified,
     ...(def.type === 'cap' ? { body: result.body } : {}),
@@ -324,13 +358,14 @@ export async function loadDataSource(def: DataSourceDef, prior?: DataEntry, ctx:
 }
 
 /** Body → DataSet for the URL-addressed adapters. Split out so it is testable. */
-function parseBody(def: UrlDataSource, body: string): DataSet {
+function parseBody(def: UrlDataSource, body: string, onColumns?: (match: ColumnMatch) => void): DataSet {
   switch (def.type) {
     case 'http-csv':
       return csvToDataSet(def.id, body, {
         ...(def.delimiter ? { delimiter: def.delimiter } : {}),
         ...(def.header !== undefined ? { header: def.header } : {}),
         ...(def.columns ? { columns: def.columns } : {}),
+        ...(onColumns ? { onColumns } : {}),
       });
     case 'http-json':
       return jsonToDataSet(def.id, JSON.parse(body), {
@@ -566,6 +601,7 @@ export class DataRegistry {
       }
       const warnings = [
         result.warning,
+        templateCheckWarning(entry.def, guarded.data),
         guarded.dropped ? `the guard dropped ${guarded.dropped} ${guarded.dropped === 1 ? 'row' : 'rows'}` : undefined,
         guarded.accepted,
       ].filter((w): w is string => Boolean(w));

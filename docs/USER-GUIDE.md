@@ -72,11 +72,12 @@ Then open **`http://<host>:7331/`** — the portal. Everything the server hosts 
 
 You can also go straight to the editor at **`http://<host>:7331/editor/`** if you would rather skip the portal.
 
-On first run the server installs three demo projects, so there is something to take apart before you build your own:
+On first run the server installs four demo projects, so there is something to take apart before you build your own:
 
-- **Breeze Demo** — a lower third, a badge, a news ticker and a standings table.
-- **World Cup 2026 Bracket Demo** — a full tournament bracket driven from a data source.
-- **World Cup 2026 Tournament Scene** — the same tournament as a scene: several graphics on one browser source, each triggering independently.
+- **Breeze Demo**: lower thirds (a plain one, one with a text reveal, and one with a bug beside it), a badge, a news ticker typed in and one fed from a feed, a standings table, and a screen bug with a logo, the time and the temperature.
+- **World Cup 2026 Bracket Demo**: a full tournament bracket driven from a data source.
+- **World Cup 2026 Tournament Scene**: the same tournament as a scene, with several graphics on one browser source, each triggering independently.
+- **Rolls, Polls & Charts**: a credits roll, lyrics a verse at a time, a poll as bars and as a donut, a giving thermometer, an hourly temperature line and a gauge. See [section 12a](#12a-rolls-polls-and-charts).
 
 These are ordinary projects. They live in your data folder exactly as anything you create does, and you can rename, edit or **delete** any of them from the editor's project menu — see [Making and removing projects](#making-and-removing-projects). A deleted demo stays deleted, and will not come back the next time the server starts.
 
@@ -553,11 +554,23 @@ Click the **▾ Data sources** heading to fold the panel away. Collapsed, it bec
 - **Poll (counted by the operator)** — a question, its options and their votes, counted from the control panel. See [Polls](#polls).
 - **From a sport template…** — the five tables a sports production needs (teams, players, coaches, venue and the live game), shaped for the sport and its rules, typed in or fed from a Sheet, CSV or JSON. See [below](#sport-templates).
 
+**Open and Edit.** Each source has two ways in:
+- **Edit** opens it in the panel, under the list.
+- **Open** opens it in a window with the room a game table's grid or a preview needs.
+
+A source you add, from **+ Add…** or **From a sport template…**, opens in the window too. In the window:
+- **Move** it by dragging its title bar.
+- **Resize** it by dragging its bottom-right corner.
+- It **opens** sized to fit what it holds, never more than 90% of the browser window, and grows with it (a preview arriving, say) until you resize it yourself.
+- **×** closes it without saving, like **Cancel**. Escape and clicking outside it don't close it, so a half-filled source isn't lost by accident.
+
 Each source shows how many rows it holds, how often it refreshes, when it last fetched and when the data last *changed*. Sources that are failing are highlighted with the error. A source that is *partly* working — say two of ten cities timed out — shows an amber note naming them; it is still updating the rest.
 
 A source that stops answering keeps its last good rows. A feed going down does not blank a graphic that is on air — it shows an error here instead, which is the point of this panel.
 
 The one exception is data that must not be shown stale. Air-quality sources have a **Blank the rows after** setting (three hours for AirNow): once a source has gone that long without a successful fetch, its rows are emptied — the columns stay, so the layout holds — and they come back with the next good fetch. Alerts work the same way on their own: a warning leaves the screen when its expiry passes, even if the feed is down.
+
+**Blank cells stay blank.** A blank cell in a number column is blank on air, not `0`, whichever kind of source it comes from. An unplayed quarter in a line score stays empty and a score nobody has typed yet shows nothing. Type `0` where you mean zero.
 
 ### When the data is bad
 
@@ -754,9 +767,20 @@ Pick the **Sport** and its **Rules** (the NBA, NCAA, high school, FIBA; the NFL;
 - **A Google Sheet**: one spreadsheet, a tab per table named `teams`, `players`, `coaches`, `venue`, `game`.
 - **A published CSV** or a **JSON feed**: one URL per table. A table you leave without a URL isn't created.
 
+**How a Sheet or CSV is read.** Each column is found by its header, not by where it sits, so the columns can be in any order. A header can be written however reads best in the sheet: `homeScore`, `Home Score` and `HOME_SCORE` are the same column. Adding a column of your own, such as a notes column, moves nothing.
+- **A renamed or deleted header:** that column reads blank, and the source's row in the data panel names it: *column not found in the header row, left blank: awayScore*.
+- **No header names any of the table's columns:** Breeze reads the columns in the table's own order instead, and the note ends *…so columns were read by position*. Look at the sheet's first row: the header has usually been deleted, or a title row put above it.
+- **Columns the table doesn't have** are left out of a fetched table.
+
 **[The sport templates reference](SPORT-TEMPLATES.md)** lists every sport and rule set with its clocks and scoring, links each rule set to the governing body's own rules, and gives the format of every table with an example row — what to put in a Sheet or a feed before you build anything.
 
-Every source made from a template has a **Format guide**. It lists each column the table should have, its type, whether it is required, and an example or the values it may take. **Download CSV** gives you a header row and starter rows to paste into a Sheet; **Download JSON sample** shows the shape a feed should return. Under the guide, the source is checked against the template each time you preview it. The check names any required columns it is missing, values that should be numbers and aren't, values outside a closed list (`side` must be `home` or `away`), and columns the template doesn't know (those are fine).
+Every source made from a template has a **Format guide**. It lists each column the table should have, its type, whether it is required, and an example or the values it may take. **Download CSV** gives you a header row and starter rows to paste into a Sheet; **Download JSON sample** shows the shape a feed should return. Under the guide, the source is checked against the template each time you preview it, and the server runs the same check every time it fetches a Sheet, CSV or JSON feed. The check names:
+- required columns that are missing;
+- values that should be numbers and aren't;
+- values outside a closed list (`side` must be `home` or `away`);
+- columns the template doesn't know. Those are fine: a manual table keeps them and they can be bound, while a fetched table leaves them out.
+
+A fetch that fails the check shows an amber note on the source's row in the editor's data panel, for example *format check: homeScore in row 1 is not a number ("TBD")*. **The rows still go on air**, so fix the sheet or the feed. The control panel doesn't show this note yet; keep the editor's data panel open during the show if a feed is new.
 
 **Keeping score.** A graphic that reads any table of a sport gets a **Game** block on its control panel. The buttons are the sport's own: **+1 +2 +3**; **TD PAT 2PT FG SAF**; **TRY CON PEN DG**; **GOAL BEHIND** (the AFL `12.9.81` is worked out for you); **GOAL POINT** (GAA `1-12`); a **Point** button per side for tennis (15/30/40, deuce, advantage and tiebreaks are handled), volleyball, badminton, table tennis and pickleball (side-out scoring and server number); and a keypad for cricket (`0 1 2 3 4 6 WD NB B W`, with overs and run rates worked out). **−** takes the first button's score back (−1 in basketball), for a mistaken tap. Below them are the period arrows, possession, and every counter and toggle the sport tracks. **Reset game** needs a second tap.
 
@@ -769,6 +793,8 @@ The minimum is 5 seconds for most sources, and higher for weather (see above). M
 ![Editing a manual data source](images/data-source-editor.png)
 
 *The manual editor is a small spreadsheet. You can paste a block straight out of Excel or Sheets into the first cell — headers included — and it replaces the whole table.*
+
+On a table made from a sport template, the paste keeps the template's columns. Each pasted header is matched to a column by name, in any order and however it's written (`Home Score`, `homeScore`), and the editor lists any pasted header it didn't recognise and any column the paste left blank. If the first line names none of the table's columns, it's pasted as a row of data. On any other manual table the pasted headers become the columns, and a header that names an existing column keeps that column, so graphics bound to it keep working.
 
 ### Table layers
 
@@ -1878,6 +1904,12 @@ The list is saved on the server, so two panels on two laptops see the same rundo
 **A source will not fetch and says it refuses a private address.** The server will not fetch URLs on your own network by default, because it sits on the same LAN as the switcher and would otherwise be a way to reach it. If the feed really is on the LAN — a scoring PC, an internal results server — someone with access to the server adds that host to `BREEZE_DATA_ALLOW_HOSTS`.
 
 **A table's numbers are sorting in the wrong order — 10 before 9.** That column is being read as text. Check its type in the source: CSV, XML and Sheets all arrive as text and the type is guessed from a sample, so a column with a stray note in one cell ("9 *") gets read as text for every row. Fix the cell, or declare the column's type on the source.
+
+**Scores or stats landed in the wrong columns after someone edited the sheet.** Columns are found by their header, so moving or adding columns can't cause this. Look at the source's row in the data panel. A note ending *…read by position* means none of the sheet's headers matched the table's columns, so they were read in the table's order. Put the header row back as the sheet's first row, with no title row above it. *Column not found in the header row* (or *columns*) means a header was renamed or deleted; that column is blank until the header is put back.
+
+**The source's row says "format check: …".** The rows the feed sent don't fit the sport template: a required column missing, a word in a number column, or a value the column doesn't allow (a `status` of `halftime` where `pre`, `live` or `final` is expected). They are still on air. Fix the cell in the sheet or the feed. The [sport templates reference](SPORT-TEMPLATES.md) lists what each column may hold.
+
+**A number that used to show 0 now shows nothing.** Since 0.79.1 a blank cell in a number column is blank, not 0. Type `0` in the cell where you mean zero.
 
 **A ticker bound to a source is still showing its typed items.** Three things to check, in order: a **Column** is picked (a source with no column does nothing); the column name matches one the source actually has; and the column is not empty for every row. In all three cases the ticker deliberately falls back to the typed items rather than going blank.
 

@@ -13,7 +13,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { DataRegistry, backoffMultiplier, hashDataSet, loadDataSource } from '../data/registry.js';
+import { DataRegistry, backoffMultiplier, hashDataSet, loadDataSource, templateCheckWarning } from '../data/registry.js';
 import type { DataSet, DataSourceDef } from '@breeze/schema';
 
 const manual: DataSourceDef = {
@@ -177,5 +177,45 @@ describe('DataRegistry', () => {
     expect(Object.keys(registry.datasets('p'))).toEqual(['standings']);
     expect(Object.keys(registry.datasets('other'))).toEqual(['elsewhere']);
     registry.stop();
+  });
+});
+
+/**
+ * The sport format check on fetched rows (0.79.1). Only the editor used to run
+ * it; now a fetch that fails it says so in the source's status.
+ */
+describe('templateCheckWarning', () => {
+  const template = { sport: 'basketball', ruleset: 'nba', table: 'game' as const };
+  const def = { id: 'bball-game', name: 'Game', type: 'http-csv', url: 'https://example.com/g.csv', template } as DataSourceDef;
+  const columns: DataSet['columns'] = [
+    { key: 'status', type: 'string' },
+    { key: 'period', type: 'number' },
+    { key: 'homeScore', type: 'number' },
+    { key: 'awayScore', type: 'number' },
+  ];
+
+  it('is quiet when the rows pass', () => {
+    const data: DataSet = { id: 'bball-game', columns, rows: [{ status: 'live', period: 2, homeScore: 40, awayScore: 38 }] };
+    expect(templateCheckWarning(def, data)).toBeUndefined();
+  });
+
+  it('names a value that is not a number and a value outside a closed list', () => {
+    const data: DataSet = { id: 'bball-game', columns, rows: [{ status: 'halftime', period: 2, homeScore: 'TBD', awayScore: 38 }] };
+    const warning = templateCheckWarning(def, data);
+    expect(warning).toMatch(/^format check: /);
+    expect(warning).toContain('homeScore in row 1 is not a number ("TBD")');
+    expect(warning).toContain('status in row 1 is not an allowed value ("halftime")');
+  });
+
+  it('names required columns the feed does not have', () => {
+    const data: DataSet = { id: 'bball-game', columns: columns.slice(0, 2), rows: [{ status: 'live', period: 1 }] };
+    expect(templateCheckWarning(def, data)).toContain('missing homeScore, awayScore');
+  });
+
+  it('skips sources with no template, manual tables, and a fetch with no rows', () => {
+    const bad: DataSet = { id: 'x', columns, rows: [{ status: 'nope' }] };
+    expect(templateCheckWarning({ ...def, template: undefined } as DataSourceDef, bad)).toBeUndefined();
+    expect(templateCheckWarning({ id: 'm', name: 'm', type: 'manual', columns, rows: [], template } as DataSourceDef, bad)).toBeUndefined();
+    expect(templateCheckWarning(def, null)).toBeUndefined();
   });
 });

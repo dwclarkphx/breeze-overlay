@@ -13,9 +13,16 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { checkSportTable, sportDataColumns, sportRuleset, sportTemplate, type DataColumn } from '@breeze/schema';
+
 import {
+  columnMatchName,
+  columnMatchWarning,
   csvToDataSet,
+  gridToDataSet,
   guessRowPath,
+  matchDeclaredColumns,
+  type ColumnMatch,
   headerToKey,
   inferColumnsFromRows,
   jsonToDataSet,
@@ -133,6 +140,128 @@ describe('csvToDataSet', () => {
 
   it('is an empty set, not a throw, for an empty body', () => {
     expect(csvToDataSet('sheet', '').rows).toEqual([]);
+  });
+});
+
+/**
+ * Declared columns are found by header name (0.79.1). Before this, a declared
+ * column read the cell at its own position and the header row was ignored —
+ * and every Sheets or CSV source made from a sport template declares its
+ * columns, so a sheet with its score columns the other way round put the
+ * score on air reversed and passed the format check.
+ */
+describe('declared columns are matched by header name', () => {
+  const basketball = sportTemplate('basketball')!;
+  const nba = sportRuleset(basketball, 'nba');
+  const gameColumns = sportDataColumns(basketball, nba, 'game');
+
+  /** A one-row CSV with these headers in this order. */
+  const sheet = (values: Record<string, string | number>): string => {
+    const keys = Object.keys(values);
+    return `${keys.join(',')}\n${keys.map((k) => values[k]).join(',')}\n`;
+  };
+
+  it('reads a game sheet whose score columns are the other way round the right way round', () => {
+    const csv = sheet({ status: 'live', period: 3, periodLabel: '3rd', awayScore: 68, homeScore: 72 });
+    let match: ColumnMatch | undefined;
+    const set = csvToDataSet('game', csv, { columns: gameColumns, onColumns: (m) => (match = m) });
+    expect(set.rows[0]).toMatchObject({ homeScore: 72, awayScore: 68, period: 3, periodLabel: '3rd' });
+    expect(match?.positional).toBe(false);
+  });
+
+  it('is not moved by a column inserted into the sheet', () => {
+    const csv = sheet({ status: 'live', notes: 'tip at 7', period: 2, homeScore: 40, awayScore: 38 });
+    const set = csvToDataSet('game', csv, { columns: gameColumns });
+    expect(set.rows[0]).toMatchObject({ status: 'live', period: 2, homeScore: 40, awayScore: 38 });
+    expect(set.columns).toEqual(gameColumns);
+    expect(checkSportTable(basketball, nba, 'game', set).ok).toBe(true);
+  });
+
+  it('matches the header however the sheet writes it', () => {
+    const csv = 'STATUS,Period,Home Score,away_score,home score\nlive,1,10,8,99\n';
+    const set = csvToDataSet('game', csv, { columns: gameColumns });
+    // The first `Home Score` wins; a repeated header after it is ignored.
+    expect(set.rows[0]).toMatchObject({ status: 'live', period: 1, homeScore: 10, awayScore: 8 });
+  });
+
+  it("falls back to a column's label when no header carries its key", () => {
+    const columns: DataColumn[] = [
+      { key: 'team', label: 'Team name', type: 'string' },
+      { key: 'w', label: 'Wins', type: 'number' },
+    ];
+    const set = csvToDataSet('standings', 'Wins,Team Name\n11,Mesa\n', { columns });
+    expect(set.rows[0]).toEqual({ team: 'Mesa', w: 11 });
+  });
+
+  it("does not let one column's label take the header another column's key names", () => {
+    const columns: DataColumn[] = [
+      { key: 'name', label: 'Team', type: 'string' },
+      { key: 'team', type: 'string' },
+    ];
+    const set = csvToDataSet('players', 'team,name\nPHX,Jordan Smith\n', { columns });
+    expect(set.rows[0]).toEqual({ name: 'Jordan Smith', team: 'PHX' });
+  });
+
+  it('leaves a column blank, and says so, when its header has gone', () => {
+    let match: ColumnMatch | undefined;
+    const csv = sheet({ status: 'live', period: 4, homeScore: 101 });
+    const set = csvToDataSet('game', csv, { columns: gameColumns, onColumns: (m) => (match = m) });
+    expect(set.rows[0]!.homeScore).toBe(101);
+    expect(set.rows[0]!.awayScore).toBeNull();
+    expect(match?.missing).toContain('awayScore');
+    expect(columnMatchWarning(match)).toMatch(/not found in the header row, left blank: .*awayScore/);
+  });
+
+  it('reads by position, and says so, when no header names any declared column', () => {
+    let match: ColumnMatch | undefined;
+    const set = csvToDataSet('sheet', 'A,B\nMesa,11', {
+      columns: [{ key: 'team', type: 'string' }, { key: 'w', type: 'number' }],
+      onColumns: (m) => (match = m),
+    });
+    expect(set.rows[0]).toEqual({ team: 'Mesa', w: 11 });
+    expect(match).toEqual({ missing: [], positional: true });
+    expect(columnMatchWarning(match)).toMatch(/read by position/);
+  });
+
+  it('keeps position with no header row: there is nothing to match against', () => {
+    let called = false;
+    const set = csvToDataSet('sheet', 'Mesa,11', {
+      header: false,
+      columns: [{ key: 'team', type: 'string' }, { key: 'w', type: 'number' }],
+      onColumns: () => (called = true),
+    });
+    expect(set.rows[0]).toEqual({ team: 'Mesa', w: 11 });
+    expect(called).toBe(false);
+  });
+
+  it("reads a line score's unplayed periods as blank, not 0", () => {
+    const csv = 'status,period,homeScore,awayScore,home1,home2,home3,home4\nlive,2,30,28,16,14,,\n';
+    const set = csvToDataSet('game', csv, { columns: gameColumns });
+    expect(set.rows[0]).toMatchObject({ home1: 16, home2: 14, home3: null, home4: null });
+  });
+
+  it('reports nothing when every column was found', () => {
+    expect(columnMatchWarning({ missing: [], positional: false })).toBeUndefined();
+    expect(columnMatchWarning(undefined)).toBeUndefined();
+  });
+
+  it('applies to a Sheets grid the same way (gridToDataSet)', () => {
+    const grid = [['awayScore', 'homeScore', 'status', 'period'], ['3', '7', 'live', '2']];
+    const set = gridToDataSet('game', grid, { columns: gameColumns });
+    expect(set.rows[0]).toMatchObject({ homeScore: 7, awayScore: 3 });
+  });
+
+  it('normalises names of any script', () => {
+    expect(columnMatchName('Home Score')).toBe(columnMatchName('homeScore'));
+    expect(columnMatchName('home_score')).toBe('homescore');
+    expect(columnMatchName('Équipe')).toBe('équipe');
+    expect(columnMatchName('得点')).toBe('得点');
+    expect(columnMatchName(' — ')).toBe('');
+  });
+
+  it('never matches an empty header', () => {
+    const { index } = matchDeclaredColumns(['', 'w'], [{ key: '', type: 'string' }, { key: 'w', type: 'number' }]);
+    expect(index).toEqual([undefined, 1]);
   });
 });
 
