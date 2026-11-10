@@ -8,13 +8,12 @@
 import { expect, test, type Browser, type Page } from '@playwright/test';
 
 /**
- * Switcher-friendly outputs (Phase 9 Wave C): `?bg=` and `?matte=1`.
+ * Switcher-friendly outputs: `?bg=` and `?matte=1`.
  *
  * What a headless browser can prove is the maths: on the same frame, a matte
  * page's grey level at every pixel is the fill page's alpha there, so a luma
  * key cut from it reproduces the fill's edges exactly. What it cannot prove is
- * the key itself — that needs an ATEM and two HDMI outputs, and the PHASE9.md
- * accept criterion says so.
+ * the key itself — that needs an ATEM and two HDMI outputs.
  */
 
 const CHANNEL = 'demo-1iixd/l3rd-name-2a94g';

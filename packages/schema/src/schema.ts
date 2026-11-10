@@ -188,7 +188,7 @@ const dataTransformSchema = {
       additionalProperties: false,
     },
     {
-      // Wide to long (CYCLE.md, Wave 4). Name the columns to fold, or the
+      // Wide to long. Name the columns to fold, or the
       // columns to keep; with neither, every column is folded.
       type: 'object',
       required: ['op'],
@@ -201,7 +201,7 @@ const dataTransformSchema = {
       },
       additionalProperties: false,
     },
-    /* ------------------------------------------------------------ Wave 7 */
+    /* ------------------------------------------------------------ date, lookup, union */
     {
       type: 'object',
       required: ['op', 'column', 'keep'],
@@ -237,7 +237,7 @@ const dataTransformSchema = {
       additionalProperties: false,
     },
     {
-      // Each row's share of a column's total (Wave R, CHARTS.md §4.4).
+      // Each row's share of a column's total.
       type: 'object',
       required: ['op', 'column'],
       properties: {
@@ -264,7 +264,7 @@ const dataTransformSchema = {
   ],
 } as const;
 
-/** What a data source made from a sport template remembers (Phase 9 Wave B, sports.ts). */
+/** What a data source made from a sport template remembers (sports.ts). */
 const sportTemplateRefSchema = {
   type: 'object',
   required: ['sport', 'ruleset', 'table'],
@@ -276,7 +276,7 @@ const sportTemplateRefSchema = {
   additionalProperties: false,
 } as const;
 
-/** One typed field (Phase 9 Wave B, fields.ts). `kind` picks the branch; anything else is refused. */
+/** One typed field (fields.ts). `kind` picks the branch; anything else is refused. */
 const fieldLabel = { type: 'string', maxLength: 120 } as const;
 const fieldSpecSchema = {
   type: 'object',
@@ -468,7 +468,7 @@ const textStyleSchema = {
   additionalProperties: false,
 } as const;
 
-/** `LayerBase.rules` — CYCLE.md, Wave 6 (`rules.ts`). */
+/** `LayerBase.rules` (`rules.ts`). */
 const ruleConditionSchema = {
   type: 'object',
   required: ['cmp'],
@@ -483,7 +483,7 @@ const ruleConditionSchema = {
     },
     binding: { type: 'string', minLength: 1 },
     mode: { const: true },
-    // Phase 9 Wave B: a timer's value in seconds — `game lte 30`.
+    // A timer's value in seconds — `game lte 30`.
     timer: { type: 'string', pattern: TIMER_ID_PATTERN.source },
     cmp: { enum: [...RULE_OPS] },
     value: { anyOf: [...dataValueSchema.anyOf, { type: 'array', items: dataValueSchema }] },
@@ -491,7 +491,7 @@ const ruleConditionSchema = {
   additionalProperties: false,
 } as const;
 
-/** `LayerBase.drives` — Wave R, CHARTS.md §3. */
+/** `LayerBase.drives`. */
 const domainEndSchema = {
   anyOf: [
     { type: 'number' },
@@ -661,9 +661,9 @@ const layerSchema = {
         // path data" is not a thing JSON Schema can say, and the semantic
         // validator gives a message an author can act on instead.
         path: { type: 'string' },
-        // A colour field that fills this shape (Phase 9 Wave B).
+        // A colour field that fills this shape.
         colorBinding: { type: 'string', minLength: 1, maxLength: 64 },
-        // Wave R (CHARTS.md §4): arcs on an ellipse, draw-on, paths from rows.
+        // Arcs on an ellipse, draw-on, paths from rows.
         arc: {
           type: 'object',
           required: ['sweep'],
@@ -709,7 +709,7 @@ const layerSchema = {
         type: { const: 'text' },
         text: { type: 'string' },
         binding: { type: 'string' },
-        // A colour field that colours this text (Phase 9 Wave B).
+        // A colour field that colours this text.
         colorBinding: { type: 'string', minLength: 1, maxLength: 64 },
         style: { $ref: '#/$defs/textStyle' },
         fit: {
@@ -758,7 +758,7 @@ const layerSchema = {
           },
           additionalProperties: false,
         },
-        // Phase 9 Wave B — see timer.ts.
+        // See timer.ts.
         timer: {
           type: 'object',
           required: ['mode'],
@@ -776,7 +776,7 @@ const layerSchema = {
           },
           additionalProperties: false,
         },
-        // Wave R (CHARTS.md §4.5): count to a new number.
+        // Count to a new number.
         count: {
           type: 'object',
           required: ['duration'],
@@ -870,7 +870,7 @@ const layerSchema = {
         binding: { type: 'string' },
         separator: { type: 'string' },
         style: { $ref: '#/$defs/textStyle' },
-        // Wave 2: a ticker can read one column of a data source instead of a
+        // A ticker can read one column of a data source instead of a
         // hand-written list. `items` stays required — it is the fallback when
         // the feed has not answered yet.
         source: { type: 'string' },
@@ -958,7 +958,7 @@ const layerSchema = {
       additionalProperties: false,
     },
     {
-      // Wave R (ROLLS.md §4).
+      // A roll.
       properties: {
         ...layerBaseProps,
         type: { const: 'roll' },
@@ -1044,7 +1044,7 @@ export const compositionSchema = {
   properties: {
     formatVersion: { const: FORMAT_VERSION },
     /*
-     * The *legacy* key pattern, not the creation rule (SCENES.md §6).
+     * The *legacy* key pattern, not the creation rule.
      *
      * This document is validated on every read, so the pattern here has to keep
      * accepting every id ever written to disk — including the pre-2026-08
@@ -1086,7 +1086,7 @@ export const compositionSchema = {
     // `duration` here: duration is optional and derived when absent, so the
     // relation cannot be stated in JSON Schema. `posterTimeOf` clamps instead.
     posterTime: { type: 'number', minimum: 0 },
-    // Typed fields, Phase 9 Wave B — see fields.ts.
+    // Typed fields — see fields.ts.
     fields: {
       type: 'object',
       propertyNames: { type: 'string', minLength: 1, maxLength: 64 },
@@ -1112,7 +1112,7 @@ export const compositionSchema = {
 } as const;
 
 /*
- * Shared pieces of the data-source branches (Phase 8.6 Wave 3).
+ * Shared pieces of the data-source branches.
  *
  * `contact` goes into a header: free text, length-capped, and refused rather
  * than stripped if it holds a newline, which is the one thing that would make a
@@ -1158,7 +1158,7 @@ const placesFromSchema = {
   additionalProperties: false,
 } as const;
 
-/** `DataSourceBase.media` — CYCLE.md, Wave 8. */
+/** `DataSourceBase.media`. */
 const mediaCheckSchema = {
   type: 'object',
   required: ['column'],
@@ -1172,7 +1172,7 @@ const mediaCheckSchema = {
   additionalProperties: false,
 } as const;
 
-/** `DataSourceBase.guard` — CYCLE.md, Wave 5. */
+/** `DataSourceBase.guard`. */
 const guardSchema = {
   type: 'object',
   properties: {
@@ -1354,7 +1354,7 @@ export const dataSourcesSchema = {
             required: ['spreadsheet'],
             additionalProperties: false,
           },
-          /* ------------------------------------------------------- Wave 3 */
+          /* ------------------------------------------------------- weather and file drops */
           {
             properties: {
               id: { type: 'string', minLength: 1 },
@@ -1429,14 +1429,14 @@ export const dataSourcesSchema = {
               header: { type: 'boolean' },
               rowPath: { type: 'string' },
               columns: { type: 'array', items: { $ref: '#/$defs/dataColumn' } },
-              // `format: 'text'` (Wave R).
+              // `format: 'text'`.
               split: { enum: [...TEXT_SPLITS] },
               markup: { type: 'boolean' },
             },
             required: ['protocol', 'host', 'pattern', 'format'],
             additionalProperties: false,
           },
-          /* -------------------------------------- Phase 8.6 Wave 3 */
+          /* -------------------------------------- alerts and air quality */
           {
             properties: {
               id: { type: 'string', minLength: 1 },
@@ -1493,9 +1493,9 @@ export const dataSourcesSchema = {
             required: ['provider'],
             additionalProperties: false,
           },
-          /* ------------------------------------------ Phase 9 Wave R */
+          /* ------------------------------------------ text and polls */
           {
-            // Long text — lyrics, credits (ROLLS.md §3). In the project or fetched, never both (validate.ts).
+            // Long text — lyrics, credits. In the project or fetched, never both (validate.ts).
             properties: {
               id: { type: 'string', minLength: 1 },
               name: { type: 'string' },
@@ -1517,7 +1517,7 @@ export const dataSourcesSchema = {
             additionalProperties: false,
           },
           {
-            // An operator-run poll (CHARTS.md §5).
+            // An operator-run poll.
             properties: {
               id: { type: 'string', minLength: 1 },
               name: { type: 'string' },
@@ -1654,7 +1654,7 @@ export const projectSchema = {
     updatedAt: { type: 'string' },
     compositions: { type: 'array', items: { $ref: 'composition-v1.json' } },
     /**
-     * Legacy index, kept readable so a project written before Phase 7.5 still
+     * Legacy index, kept readable so a project written before the index was split out still
      * validates. Nothing writes it any more — see `assetsSchema` below.
      */
     assets: { type: 'array', items: assetRefSchema },
@@ -1665,7 +1665,7 @@ export const projectSchema = {
 /**
  * The asset index — `projects/<id>/assets.json`.
  *
- * Split out of `project.json` in Phase 7.5 (ASSETS.md §6). `registerAsset` did
+ * Kept out of `project.json`. Inside it, `registerAsset` did
  * a full `readProject` → mutate → `writeProject` on every upload, so adding a
  * logo rewrote every composition in the project: the document grew with asset
  * count, composition saves got slower as the bin filled, and the
@@ -1678,7 +1678,7 @@ export const projectSchema = {
  * `tags` is the project's controlled vocabulary — the terms offered as
  * suggestions in the bin. Kept at the document level rather than derived from
  * the assets so a term survives the deletion of the last asset using it, which
- * is what stops a vocabulary quietly re-fragmenting (ASSETS.md §4).
+ * is what stops a vocabulary quietly re-fragmenting.
  */
 export const assetsSchema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',

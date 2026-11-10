@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Sport templates on the server (Phase 9 Wave B): the catalogue route, and a
+ * Sport templates on the server: the catalogue route, and a
  * score tapped on the game table reaching every open graphic of the project.
  */
 

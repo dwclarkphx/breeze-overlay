@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Timeline panel — Phase 3.
+ * Timeline panel.
  *
  * One track per layer, one lane per animated property, a marker lane for STOP
  * markers, and a draggable playhead. All geometry comes from `timeline-math.ts`
@@ -520,7 +520,7 @@ export function Timeline({ onGrow }: TimelineProps = {}): JSX.Element {
       </div>
 
       {/*
-        Pinned LTR under a mirrored chrome — I18N.md §6.1.
+        Pinned LTR under a mirrored chrome.
 
         Time runs left to right in every non-linear editor on earth, including
         the Arabic-localised ones; a mirrored timeline puts 00:00 on the right

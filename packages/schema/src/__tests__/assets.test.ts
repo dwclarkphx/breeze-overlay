@@ -8,8 +8,8 @@
 /**
  * Which assets a composition actually uses.
  *
- * Moved here from `apps/editor/src/__tests__/asset-bin.test.ts` in Phase 7.5
- * along with the function itself: the server now asks the same question across
+ * Kept beside the function itself,
+ * because the server asks the same question across
  * every composition in a project, and one walk needs one test suite.
  *
  * The answer is load-bearing in both directions — a false negative invites
@@ -360,7 +360,7 @@ describe('normalizeTags', () => {
 
 describe('normalizeFolder', () => {
   it('keeps the separator, so a nesting convention survives', () => {
-    // ASSETS.md §11: flat now, `game-scene/backgrounds` as a convention that
+    // Flat now, `game-scene/backgrounds` as a convention that
     // can become real nesting later without a migration.
     expect(normalizeFolder('Game Scene/Backgrounds')).toBe('game-scene/backgrounds');
   });

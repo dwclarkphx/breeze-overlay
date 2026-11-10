@@ -5,7 +5,7 @@
 // Copyright (C) 2026 Dave Clark
 // SPDX-License-Identifier: MPL-2.0
 
-/** Typed fields (Phase 9 Wave B). */
+/** Typed fields. */
 
 import { describe, expect, it } from 'vitest';
 

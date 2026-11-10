@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Phase 9 Wave R on the server (ROLLS.md, CHARTS.md): the scroll transport in
+ * Rolls, texts and polls on the server: the scroll transport in
  * the hub, its REST verbs, text and poll sources, and the routes an operator
  * changes them through.
  */
@@ -22,7 +22,7 @@ import { ControlHub, channelKey, type ServerMessage } from '../hub.js';
 import { readScrollRequest } from '../scroll-request.js';
 import { readPollAction } from '../routes/live-sources.js';
 
-const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'breeze-wave-r-'));
+const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'breeze-rolls-polls-'));
 process.env['BREEZE_DATA_DIR'] = tmpDir;
 process.env['BREEZE_LOG_LEVEL'] = 'silent';
 
@@ -152,6 +152,7 @@ describe('reading requests', () => {
     expect(readPollAction({ action: 'vote', option: 'a', delta: '-1' })).toEqual({ type: 'vote', option: 'a', delta: -1 });
     expect(readPollAction({ type: 'set', option: 'b', value: '12' })).toEqual({ type: 'set', option: 'b', value: 12 });
     expect(readPollAction({ type: 'close' })).toEqual({ type: 'close' });
+    expect(readPollAction({ action: 'toggle' })).toEqual({ type: 'toggle' });
     expect(readPollAction({ type: 'vote' })).toEqual({ error: 'error.pollOption' });
     expect(readPollAction({ type: 'shout' })).toEqual({ error: 'error.pollAction' });
   });
@@ -219,6 +220,19 @@ describe('routes', () => {
     const bad = await app.inject({ method: 'POST', url: `/api/projects/${P}/datasources/poll/poll`, payload: { type: 'vote', option: 'zz' } });
     expect(bad.statusCode).toBe(400);
     expect(bad.json().code).toBe('error.pollOption');
+  });
+
+  it('toggles from the stored status, and says where it landed', async () => {
+    const url = `/api/projects/${P}/datasources/poll/poll`;
+    await app.inject({ method: 'POST', url, payload: { type: 'open' } });
+    let res = await app.inject({ method: 'POST', url, payload: { type: 'toggle' } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe('closed');
+    expect(res.json().rows[0].status).toBe('closed');
+    // Header-less, as a Stream Deck URL button sends it.
+    res = await app.inject({ method: 'GET', url: `${url}?type=toggle` });
+    expect(res.json().status).toBe('open');
+    expect(res.json().rows[0].status).toBe('open');
   });
 
   it('two taps a frame apart both land', async () => {

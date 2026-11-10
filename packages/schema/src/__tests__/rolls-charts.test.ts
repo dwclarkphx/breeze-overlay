@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Phase 9 Wave R — rolls, polls and charts (ROLLS.md, CHARTS.md): the pure
+ * Rolls, polls and charts: the pure
  * parts shared by the hub, the runtime, the panels and the editor.
  */
 
@@ -141,6 +141,16 @@ describe('polls', () => {
     p = applyPollAction(p, { type: 'reset' });
     expect(p.votes).toBeUndefined();
     expect(p.status).toBe('open');
+  });
+
+  it('toggles between open and closed, treating no status as open', () => {
+    let p = applyPollAction(poll, { type: 'toggle' });
+    expect(p.status).toBe('closed');
+    p = applyPollAction(p, { type: 'toggle' });
+    expect(p.status).toBe('open');
+    // Votes are untouched either way.
+    expect(p.votes).toEqual(poll.votes);
+    expect(pollActionProblem(poll, { type: 'toggle' })).toBeNull();
   });
 
   it('names a bad option or count', () => {
@@ -299,7 +309,7 @@ describe('arcs and plots', () => {
 
 /* ---------------------------------------------------------- validation */
 
-describe('Wave R validation', () => {
+describe('roll, drive and chart validation', () => {
   const comp = (layers: unknown[]) => createComposition({ name: 'T', layers: layers as never });
 
   it('accepts a new roll and the chart props on the right layers', () => {

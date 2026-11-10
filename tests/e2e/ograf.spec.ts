@@ -11,7 +11,7 @@ import type { AddressInfo } from 'node:net';
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * OGraf interop (Phase 9 Wave D), in a real browser against the real server.
+ * OGraf interop, in a real browser against the real server.
  *
  *  - **D2**: a page on another origin plays the part of an OGraf renderer. It
  *    imports the pointer package's `graphic.mjs` from the server — cross-origin,
@@ -22,7 +22,7 @@ import { expect, test, type Page } from '@playwright/test';
  *    Breeze channel; the output page plays and the control panel shows it.
  *
  * What this cannot do is stand in for SPX or the OGraf DevTool themselves;
- * PHASE9.md's accept criterion names both, and they are run by hand.
+ * those are run by hand.
  */
 
 const PROJECT = 'demo-1iixd';

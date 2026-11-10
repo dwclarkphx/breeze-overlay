@@ -8,7 +8,7 @@
 // @vitest-environment happy-dom
 
 /**
- * Layers that react to data (CYCLE.md, Wave 6), through the runtime: rules on
+ * Layers that react to data, through the runtime: rules on
  * ordinary layers read fields, sources and the mode; rules on table cells read
  * their own row as well. Every change goes back when the rule stops holding.
  */

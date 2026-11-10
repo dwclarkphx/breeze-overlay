@@ -8,9 +8,8 @@
 /**
  * Which assets a layer tree touches.
  *
- * Lived in `apps/editor/src/components/AssetBin.tsx` until Phase 7.5, where it
- * answered "is this file in use by the composition currently open" for the bin's
- * delete confirmation. The server needs the same answer across *every*
+ * The editor's bin asks "is this file in use by the composition currently open"
+ * for its delete confirmation. The server needs the same answer across *every*
  * composition in a project — to make delete honest, to scope a composition
  * export, and to make an expiry warning actionable — and two implementations of
  * "which assets does this layer tree touch" would diverge on the next layer type
@@ -107,7 +106,7 @@ export function normalizeTags(tags: readonly string[]): string[] {
  *
  * A label, not a path — but `/` is kept, because `game-scene/backgrounds` as a
  * convention costs nothing now and can become real nesting later without a
- * migration (ASSETS.md §11). Leading, trailing and doubled separators collapse
+ * migration. Leading, trailing and doubled separators collapse
  * so `/scene//bg/` and `scene/bg` are the same folder rather than three.
  */
 export function normalizeFolder(folder: string): string {
@@ -186,9 +185,9 @@ export function assetReferences(layers: readonly Layer[]): AssetReference[] {
  * Repoint every reference to one asset path at another.
  *
  * The write half of `assetReferences`, and the thing Replace is actually made
- * of: new bytes are a new content-addressed path (§2 wall 5), so replacing a
+ * of: new bytes are a new content-addressed path, so replacing a
  * corrected logo without this leaves every `src` pointing at the old file and
- * the graphic showing the old logo. The ASSETS.md §8 entry is one line —
+ * the graphic showing the old logo. The fix is one line —
  * "new bytes, rewrite every referencing `src`, keep `supersedes`" — and this is
  * the middle clause.
  *
@@ -376,7 +375,7 @@ export function findNameCollisions(
       continue;
     }
 
-    // Missing `addedAt` sorts oldest: it means the asset predates Phase 7.5,
+    // Missing `addedAt` sorts oldest: it means the asset predates the field,
     // which is the one thing we know about it.
     const heldAt = held.addedAt ? Date.parse(held.addedAt) : 0;
     const thisAt = asset.addedAt ? Date.parse(asset.addedAt) : 0;

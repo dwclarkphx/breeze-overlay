@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Wave 5 in the registry (CYCLE.md): a fetch has to pass its guard to go on
+ * Guards and backups in the registry: a fetch has to pass its guard to go on
  * air, and a source with nothing fit to show can serve its backup's rows —
  * under its own id, so every table bound to it carries on unchanged.
  */

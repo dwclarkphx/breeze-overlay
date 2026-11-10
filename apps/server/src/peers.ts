@@ -102,7 +102,7 @@ function hostOf(value: string | undefined): string | null {
  */
 export function isExternalApiCall(req: RequestLike): boolean {
   const path = stripQuery(req.url);
-  // The OGraf Server API (Phase 9 Wave D) is an API like any other: an SPX on
+  // The OGraf Server API is an API like any other: an SPX on
   // the next desk calling it is exactly the caller this list exists to show.
   if (!path.startsWith('/api/') && !path.startsWith('/ograf/v1')) return false;
   if (header(req, 'sec-fetch-site') === 'same-origin') return false;

@@ -190,7 +190,7 @@ export function formatClock(date: Date, clock: TextClock): string {
   /*
    * `en-US` when the graphic does not say otherwise, which is what every clock
    * rendered before `locale` existed. Deliberately *not* the server's
-   * BREEZE_LOCALE — see TextClock.locale and I18N.md §5.3: the language on air
+   * BREEZE_LOCALE — see TextClock.locale: the language on air
    * belongs to the graphic, not to whoever is looking at the editor.
    */
   const parts = partsOf(date, clock.locale ?? 'en-US', clock.timezone);

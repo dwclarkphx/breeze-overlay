@@ -363,7 +363,7 @@ function mountSourceRoutes(app: FastifyInstance, registry: DataRegistry, prefix:
        * A server-level source cannot be deleted while a project links to it.
        *
        * This is the asymmetry that made the shared asset store copy rather
-       * than link (ASSETS.md §3): a central delete reaches projects nobody has
+       * than link: a central delete reaches projects nobody has
        * open, mid-show. Refusing with the list is the other way to close it,
        * and the one that keeps a single poll per source. Read from disk, not
        * the registry, so a project that failed to register still counts.
@@ -424,8 +424,8 @@ function mountSourceRoutes(app: FastifyInstance, registry: DataRegistry, prefix:
   );
 
   /**
-   * Choose whose rows go on air: `auto`, `primary` or `backup` (CYCLE.md,
-   * Wave 5) — the operator's switch for a feed that is up and wrong, which no
+   * Choose whose rows go on air: `auto`, `primary` or `backup` —
+   * the operator's switch for a feed that is up and wrong, which no
    * guard can see.
    *
    * GET as well as POST for header-less panels, and gated either way: the auth

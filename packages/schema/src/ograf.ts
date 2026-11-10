@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * OGraf interop (Phase 9 Wave D, PHASE9.md §3) — the pure half.
+ * OGraf interop — the pure half.
  *
  * Two things speak OGraf, and both need the same few answers:
  *
@@ -25,7 +25,7 @@
  * them the same way.
  *
  * Spec: https://github.com/ebu/ograf — v1 Graphics specification and Server API
- * v1 (stable since 2026-08-13), re-read when Wave D opened on 2026-10-26.
+ * v1 (stable since 2026-08-13), as read on 2026-10-26.
  */
 
 import type { Composition } from './types.js';
@@ -42,7 +42,7 @@ export const OGRAF_MANIFEST_SCHEMA = 'https://ograf.ebu.io/v1/specification/json
  * and would be — and, unlike `:`, it is legal in a Windows file name, which
  * matters because the id names the pointer package's folder.
  *
- * A frozen identifier (I18N.md §2): it reaches controllers' rundowns.
+ * A frozen identifier: it reaches controllers' rundowns.
  */
 export const OGRAF_ID_SEPARATOR = '~';
 
@@ -268,8 +268,8 @@ const TABLE_PROPERTY = {
  * shows a timer. Only what applies, so a controller's action list is a true
  * statement about the graphic rather than every verb Breeze has.
  *
- * The project mode is **not** here: it is project-wide in Breeze (CYCLE.md,
- * Wave 6), so on the Server API it is a renderer action, where "renderer" is
+ * The project mode is **not** here: it is project-wide in Breeze,
+ * so on the Server API it is a renderer action, where "renderer" is
  * the project, and a pointer package follows the server's mode.
  */
 export function ografCustomActions(opts: { tables: ReadonlyArray<{ cycle: boolean }>; timers: boolean; scrolls?: boolean }): OgrafAction[] {
@@ -353,7 +353,7 @@ export function ografCustomActions(opts: { tables: ReadonlyArray<{ cycle: boolea
     });
   }
   if (opts.scrolls) {
-    // Wave R: the roll transport, for a graphic with credits or lyrics in it.
+    // The roll transport, for a graphic with credits or lyrics in it.
     out.push({
       id: 'scroll',
       name: 'Scroll',
@@ -445,7 +445,7 @@ export interface OgrafManifestOptions {
   dataSchema: Record<string, unknown>;
   tables: ReadonlyArray<{ cycle: boolean }>;
   timers: boolean;
-  /** The graphic has a roll (Wave R). */
+  /** The graphic has a roll. */
   scrolls?: boolean;
   /** The module file name. */
   main: string;

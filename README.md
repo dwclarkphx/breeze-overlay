@@ -538,6 +538,8 @@ Repeated PLAY therefore steps a graphic all the way through — the one-button w
 
 ## API
 
+The full reference is **[docs/API.md](docs/API.md)**, also served by a running server at `/docs/api`: every route with its parameters and answers, the control WebSocket, the OGraf Server API and the output page's scripting hooks. What follows is the short version.
+
 Projects, compositions and data sources — the routes worth automating against. The asset library, transcode queue, shared store, backup/restore and activity log each have their own endpoints under `/api/` as well; those exist to serve the editor, and are not listed here because their shapes still move with it.
 
 ```
@@ -574,7 +576,7 @@ GET    /api/sources                                   every source on the server
 
 GET    /api/projects/:id/mode                         the project mode, and every mode its rules name
 GET|POST /api/projects/:id/mode/set                   ?value=first-alert — empty clears it
-GET    /api/channels                                  every graphic's channel, with its paged tables
+GET    /api/channels                                  every graphic's channel, with its paged tables, timers and rolls
 GET    /api/projects/:id/channels
 GET    /media/:project/:source/:key/snapshot|stream   the camera proxy — one upstream connection shared by every output
 ```
@@ -778,7 +780,7 @@ Transforms are stored with the *consumer*, not the source, so two graphics can s
 
 A **roll** layer scrolls a text source through a window: up for end credits, down, or left and right for a long crawl, at the designer's speed in px/s. It can start off screen or at the top, stop at the end, loop, or hand the graphic on to its outro when the last line has gone. The operator drives it while it airs — pause, backward, forward, faster and slower in multiples of that speed — and every output on the channel shows the same line, because the hub holds the transport as it holds a timer. REST: `/api/control/<project>/<composition>/scroll?action=play|pause|toggle|forward|backward|reverse|faster|slower|speed|jog|seek|restart|end|reset` with `value=` for `speed` (`1.5`, `x2`), `jog` (`-3`) and `seek` (`1:30`, `50%`); `/api/out/<project>/<output>/scroll` on an output. Lyrics a verse at a time are a table of one row per page on a source split by verse.
 
-**Polls** are counted at `…/datasources/<source>/poll?type=vote&option=yes` (also `set&value=`, `open`, `close`, `reset`), and the question and options are changed with a `PUT` there. A text source's words are replaced with `PUT …/datasources/<source>/text`, refused unless the designer has made it operator-changeable.
+**Polls** are counted at `…/datasources/<source>/poll?type=vote&option=yes` (also `set&value=`, `open`, `close`, `toggle`, `reset`), and the question and options are changed with a `PUT` there. A text source's words are replaced with `PUT …/datasources/<source>/text`, refused unless the designer has made it operator-changeable.
 
 **Charts** are built from the layers there already are. Any layer can carry **drives**: a number from a field, a source or a table cell's own row moves its width, height, position, scale, rotation, opacity, an arc's sweep or a path's trim, from a domain (a number, the column's min, max or total, or another column — `goal`) to a range, with a tween when it changes. A bar chart is a table of driven bars; a goal meter is one driven bar and a counting number; a donut is a table of ring arcs turned by a `share` transform's running total; a line or sparkline is a path that plots a source's rows, straight or smooth, drawn on with `trim`. A table's rows can step across (`axis: x`) for the labels under a chart, and a text layer can **count** to its new number. The **Rolls, Polls & Charts** demo has one of each.
 
@@ -925,7 +927,7 @@ The properties panel reports the measured piece count and the reveal's real tota
 
 ## What's next
 
-Phase 8 — masks, effects, nesting and the on-stage pen — is complete as of 0.78.0. Phase 9 is under way: rundowns with cue → take and multi-graphic outputs, operator timers, typed fields and sport templates, keyable fill/matte outputs, and OGraf interop (the Server API and pointer packages), and rolls, polls and data-driven charts have landed in 0.79.0. Still to come are starter templates and project styles, editing a nested composition in place, persisted hub state, roles, and a packaged distribution. Before 1.0.0 the project schema has to settle, since that is the release from which an existing project is promised to keep loading.
+Masks, effects, nesting and the on-stage pen are complete as of 0.78.0. Rundowns with cue → take and multi-graphic outputs, operator timers, typed fields and sport templates, keyable fill/matte outputs, OGraf interop (the Server API and pointer packages), and rolls, polls and data-driven charts landed in 0.79.0. Still to come are starter templates and project styles, editing a nested composition in place, persisted hub state, roles, and a packaged distribution. Before 1.0.0 the project schema has to settle, since that is the release from which an existing project is promised to keep loading.
 
 ## License
 

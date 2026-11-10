@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * The error contract (I18N.md §5.1) and the frozen-response guarantee (§5.2).
+ * The error contract and the frozen-response guarantee (§5.2).
  *
  * These two belong together: the contract only buys anything if the response
  * really is the same for every caller, and the guarantee is only worth having

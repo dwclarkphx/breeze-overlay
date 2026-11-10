@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Common Alerting Protocol reader (Phase 8.6 Wave 3 — CYCLE.md).
+ * Common Alerting Protocol reader.
  *
  * CAP is one standard that arrives in three wrappers, and a station needs all
  * three:

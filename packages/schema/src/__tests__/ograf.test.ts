@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * OGraf interop (Phase 9 Wave D): ids, the step rule, the GDD data schema and
+ * OGraf interop: ids, the step rule, the GDD data schema and
  * the manifest — the last checked against the EBU's own JSON Schemas for
  * OGraf v1, vendored under `fixtures/ograf-v1` (MIT, see the README there),
  * for every composition in the shipped examples as well as a hand-built one

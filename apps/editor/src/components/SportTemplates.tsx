@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Sport templates in the data panel (Phase 9 Wave B, schema `sports.ts`).
+ * Sport templates in the data panel (schema `sports.ts`).
  *
  *  - `SportTemplateCreator` — pick a sport and its rules, choose where the rows
  *    come from (typed in here, a Google Sheet, a published CSV, a JSON feed),

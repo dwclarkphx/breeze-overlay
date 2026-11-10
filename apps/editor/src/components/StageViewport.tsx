@@ -340,11 +340,11 @@ export function StageViewport(): JSX.Element {
           /^(https?:)?\/\//.test(src) || src.startsWith('data:')
             ? src
             : `/assets/${useEditor.getState().projectId ?? ''}/${src.replace(/^assets\//, '')}`,
-        // The staged copy the output page uses too (Wave 8) — see scripts/vendor-hls.mjs.
+        // The staged copy the output page uses too — see scripts/vendor-hls.mjs.
         hlsScript: HLS_SCRIPT_URL,
         // The picture while authoring, not only once previewed on air.
         mediaWhenIdle: true,
-        // A roll shows its first lines while it is being styled (Wave R).
+        // A roll shows its first lines while it is being styled.
         poseRolls: true,
         autoPlay: false,
         data: {
@@ -374,7 +374,7 @@ export function StageViewport(): JSX.Element {
          * And the expander's own complaints, which are not measurements but
          * belong to the same publication: an unresolved ref, a cycle or a
          * depth cut-off is known only once a plan has been built, and until
-         * now the only place it was reported was `console.warn` (MASKS.md §4).
+         * now the only place it was reported was `console.warn`.
          */
         expandWarnings: runtime.plan.warnings,
       });
@@ -895,12 +895,12 @@ export function StageViewport(): JSX.Element {
       <div
         className="stage-canvas"
         /*
-         * Pinned LTR — I18N.md §6.1. The stage is a 1:1 preview of what goes to
+         * Pinned LTR. The stage is a 1:1 preview of what goes to
          * air and the graphic does not mirror, so a mirrored preview would be
          * lying about the output. It is also built on raw `clientX` arithmetic,
          * pointer capture and react-moveable's coordinate model, which between
          * them have produced four recorded defects; inverting the sign of every
-         * horizontal delta in there is the most expensive thing this phase could
+         * horizontal delta in there is the most expensive change localisation could
          * choose. The toolbar above is chrome and mirrors normally.
          */
         dir="ltr"
@@ -1028,8 +1028,8 @@ export function StageViewport(): JSX.Element {
             only where an anchor is drawn.
 
             `locked` is honoured here, where the drag starts, exactly as it is
-            on Moveable above: the field was deferred to this surface (MASKS.md
-            §0) so the guard would live in one kind of place. Hidden while
+            on Moveable above: the field was deferred to this surface
+            so the guard would live in one kind of place. Hidden while
             playing, because the handles are measured at the playhead and a
             moving layer would leave them behind.
           */}

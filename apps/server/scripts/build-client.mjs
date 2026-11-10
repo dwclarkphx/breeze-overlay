@@ -67,7 +67,7 @@ const RUNTIME_VENDOR = path.join(repoRoot, 'packages', 'runtime', 'src', 'vendor
  * natively, so pointing at the source keeps the graph flat.
  *
  * Only control, portal and backup import it. `player.ts` — the `/play` bundle —
- * does not and must not: that page is frozen English by design (I18N.md §2), so
+ * does not and must not: that page is frozen English by design, so
  * a catalogue in it would be dead weight at best and a way to break the one
  * output that has to be byte-identical everywhere at worst.
  */
@@ -85,7 +85,7 @@ const options = {
     path.join(appRoot, 'client', 'control.ts'),
     path.join(appRoot, 'client', 'portal.ts'),
     path.join(appRoot, 'client', 'backup.ts'),
-    // Phase 9 Wave A — the rundown panel.
+    // The rundown panel.
     path.join(appRoot, 'client', 'rundown.ts'),
   ],
   outdir: path.join(appRoot, 'public'),

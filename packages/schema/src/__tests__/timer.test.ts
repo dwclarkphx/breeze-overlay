@@ -5,12 +5,13 @@
 // Copyright (C) 2026 Dave Clark
 // SPDX-License-Identifier: MPL-2.0
 
-/** Timer arithmetic (Phase 9 Wave B) — shared by the hub, the runtime and the panels. */
+/** Timer arithmetic — shared by the hub, the runtime and the panels. */
 
 import { describe, expect, it } from 'vitest';
 
 import {
   applyTimerAction,
+  defaultTimerId,
   formatTimer,
   formatTimerMs,
   idleTimer,
@@ -121,5 +122,18 @@ describe('parseTimerInput', () => {
     expect(parseTimerInput('')).toBeNull();
     expect(parseTimerInput('soon')).toBeNull();
     expect(parseTimerInput('1:2:3:4')).toBeNull();
+  });
+});
+
+describe('defaultTimerId', () => {
+  it('is main when the graphic has it, or declares nothing', () => {
+    expect(defaultTimerId()).toBe('main');
+    expect(defaultTimerId([])).toBe('main');
+    expect(defaultTimerId(['shot', 'main'])).toBe('main');
+  });
+
+  it('is the first declared timer when there is no main', () => {
+    // A blank id has to reach the clock a blank-id readout shows.
+    expect(defaultTimerId(['game', 'shot'])).toBe('game');
   });
 });

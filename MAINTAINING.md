@@ -86,7 +86,7 @@ Everything below is derived from the root `package.json` — none of it is writt
 | Portal page, beside the title | same |
 | Editor app bar, beside the brand | `__APP_VERSION__`, injected by Vite from `apps/editor/package.json` |
 
-`version` is the product; `formatVersion` is the composition document, which has been at 1 since Phase 0 and moves on its own clock. `/healthz` used to report only the latter, under the name `version` — so a health check answered "1" for every build ever shipped.
+`version` is the product; `formatVersion` is the composition document, which has been at 1 since the first release and moves on its own clock. `/healthz` used to report only the latter, under the name `version` — so a health check answered "1" for every build ever shipped.
 
 ## 6. Dependencies
 
@@ -96,3 +96,15 @@ GSAP is the one dependency that is *not* in that generated table, because it is 
 
 - **Upgrading it is a manifest change.** Bump the `~3.15.0` pin in *both* `packages/runtime/package.json` and `apps/editor/package.json` — they must match — then rebuild. `pnpm vendor:check` in CI fails if the staged files and the pin disagree.
 - **The supported range is wider than the pin.** The output page checks the loaded GSAP against `>=3.13 <4` and reports a mismatch through the browser source's title. That range lives in `apps/server/src/pages.ts`; widen it deliberately, not by accident.
+
+## 7. Comments and docs
+
+A comment or a doc is read by someone who has only this repository. Write for that reader. `pnpm comments:check` (CI, and the release gate) fails on the first three of these; the rest are review rules.
+
+- **No work-package labels.** Not in comments, test titles, strings or file names. Name a test file for what it covers (`data-guard-backup.test.ts`), and say what the code does.
+- **No references to anything unpublished.** A private design note, a scratch path, a maintainer script: the reader cannot open it, so the comment carries the reason itself. `README.md`, `docs/` and `CHANGELOG.md` are fair to point at.
+- **Describe the code as it stands.** No phrasing that is only true on the day it is written — the check lists the phrases it refuses. What changed and when belongs in `CHANGELOG.md`; a comment that narrates is wrong the day after it is written.
+- **Explain why, not what.** A comment earns its place by stating a constraint, a trade-off, or a failure the code is shaped to avoid. A past bug may be cited as the reason a guard exists — "without this, X" — but not as a story about finding it.
+- **A version number is a compatibility fact or it is nothing.** "Absent on servers before 0.74" helps a reader; "added in 0.74" is changelog.
+- **Docs claim what is tested.** A feature that has not been confirmed on real hardware is listed under Known gaps until it has.
+- **No dependency without an import.** Removing the last use of a package removes it from the manifest in the same change.

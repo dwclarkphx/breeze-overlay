@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Long text as rows (Phase 9 Wave R, ROLLS.md §3).
+ * Long text as rows.
  *
  * Lyrics, credits, a statement: one body of text, split into the rows a roll
  * scrolls, a table pages or a crawl rotates. Three markup rules, kept to three

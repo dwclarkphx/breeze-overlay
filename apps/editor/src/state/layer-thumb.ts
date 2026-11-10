@@ -86,8 +86,8 @@ export function layerThumb(layer: Layer): LayerThumb {
      * A sprite thumbnails as its *first frame*, not as the sheet.
      *
      * Rendering the whole sheet shrunk into a 32px box is a grey smear that
-     * cannot be told apart from any other sheet, which fails the test Phase 7.6
-     * set for thumbnails — two graphics that look the same in the panel have
+     * cannot be told apart from any other sheet, which fails the test
+     * for thumbnails — two graphics that look the same in the panel have
      * failed at the only job they have. The frame maths is the same percentage
      * form `applySpriteFrame` writes, so the panel and the stage agree by
      * construction rather than by two implementations that happen to match.
@@ -135,7 +135,7 @@ export function layerThumb(layer: Layer): LayerThumb {
     case 'crawl':
     case 'roll': {
       const style = layer.style;
-      // A roll's first line of text (Wave R), as a crawl's first item.
+      // A roll's first line of text, as a crawl's first item.
       const first = layer.type === 'roll' ? (layer.data?.rows.find((r) => r['kind'] !== 'gap')?.['text'] ?? '') : '';
       return {
         kind: 'text',

@@ -132,14 +132,14 @@ export function expandComposition(comp: Composition, options: ExpandOptions = {}
       if (layer.type !== 'composition') continue;
 
       /*
-       * Independent elements are not expanded (SCENES.md §3).
+       * Independent elements are not expanded.
        *
        * The instance above is still pushed, for the scene's own paint order —
        * but the walk stops here, so this instance never gets children and its
        * DOM node stays empty. The visible graphic is mounted separately, by
        * the player, into its own full-frame container built from the
        * referenced composition's own stage; this instance's `transform` is
-       * not read for that. Confirmed as the intended shape (SCENES.md §2): an
+       * not read for that. Confirmed as the intended shape: an
        * independent element is a link and a channel, not a placement — move,
        * resize or restyle it by editing the referenced composition, not this
        * layer.

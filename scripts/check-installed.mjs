@@ -20,7 +20,7 @@
  *
  * **Why it exists.** `ag-psd` was added to the editor, recorded in the lockfile,
  * and never installed into the working tree — because the install that resolved
- * it was run in `dev/build_test/<version>/` rather than the repo. The lockfile
+ * it was run in a scratch copy of the tree rather than the repo. The lockfile
  * check passed, because the lockfile was right. The failure surfaced four gates
  * later as `Rolldown failed to resolve import "ag-psd"`, which reads like a
  * bundler configuration problem; vite's own suggestion — add it to
@@ -96,7 +96,7 @@ if (missing.length) {
   for (const entry of missing) console.error(`  ${entry}`);
   console.error(
     '\nRun `pnpm install` here. If an install seemed to succeed recently, check\n' +
-      'which directory it ran in — installing inside dev/build_test/<version>/\n' +
+      'which directory it ran in — installing inside a scratch copy of the tree\n' +
       'leaves the repo itself untouched.',
   );
   process.exit(1);

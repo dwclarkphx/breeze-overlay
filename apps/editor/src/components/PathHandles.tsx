@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * The on-stage bezier surface (MASKS.md §5.1, D′) — anchors, handles and the
+ * The on-stage bezier surface (D′) — anchors, handles and the
  * hairlines joining them, drawn over the selected layer's path and dragged in
  * place.
  *

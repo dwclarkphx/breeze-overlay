@@ -8,8 +8,8 @@
 // @vitest-environment happy-dom
 
 /**
- * Phase 9 Wave R in the runtime: rolls, drives, counting numbers, plotted
- * lines and tables along x (ROLLS.md, CHARTS.md).
+ * In the runtime: rolls, drives, counting numbers, plotted
+ * lines and tables along x.
  *
  * happy-dom measures every element as 0, so geometry is tested through an
  * injected `measure`, and the transport through injected clocks and tickers —

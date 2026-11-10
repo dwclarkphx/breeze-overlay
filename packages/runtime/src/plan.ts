@@ -92,7 +92,7 @@ export function baselineValue(layer: Layer, prop: AnimatableProp): number {
     case 'grayscale': return layer.effects?.grayscale ?? 0;
     case 'sepia': return layer.effects?.sepia ?? 0;
     case 'maskOffset': return 0;
-    // Wave R: shape-only, inert at their defaults on everything else.
+    // Shape-only, inert at their defaults on everything else.
     case 'trim': return layer.type === 'shape' ? (layer.trim ?? 1) : 1;
     case 'sweep': return layer.type === 'shape' && layer.arc ? layer.arc.sweep : 360;
     default: {
@@ -235,8 +235,8 @@ export function derivedDuration(instances: LayerInstance[]): number {
 /**
  * Value a property has when nothing sets it.
  *
- * Made exhaustive in Phase 8 Wave B (MASKS.md §3.3), with the same `never`
- * case `baselineValue` already uses to fail the build on an unhandled prop.
+ * Exhaustive, with the same `never`
+ * case `baselineValue` uses to fail the build on an unhandled prop.
  * It used to be a two-branch fallback — list the props defaulting to `1`,
  * return `0` for everything else — which agreed with `baselineValue` only by
  * coincidence and would have silently defaulted `contrast`/`saturate` to `0`

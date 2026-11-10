@@ -11,7 +11,7 @@
  *   node scripts/vendor-hls.mjs           # stage
  *   node scripts/vendor-hls.mjs --check   # verify staged, exit 1 if not
  *
- * A media layer playing an HLS stream (CYCLE.md, Wave 8) needs hls.js in every
+ * A media layer playing an HLS stream needs hls.js in every
  * engine a graphic plays in except Safari — OBS, vMix and Chrome among them.
  * It is not bundled: the player loads it by a script tag the first time an HLS
  * source is shown, so a graphic with no HLS in it never downloads a byte of it.

@@ -8,7 +8,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * Editor smoke tests — Phase 2 + 3 acceptance.
+ * Editor smoke tests.
  *
  * These drive the real UI against the real server and the real runtime. The
  * point is not pixel comparison but that the loop closes: an edit changes the
@@ -1941,10 +1941,9 @@ test.describe('text reveal gallery', () => {
 
 test.describe('crawl authoring', () => {
   /*
-   * The schema and the runtime have supported speed, direction, a bound item
-   * list and live append since Phase 1, but the panel had no controls for any of
-   * it — a crawl added in the editor was stuck on its factory defaults. Found by
-   * auditing Phase 5 against the roadmap, not by a report.
+   * The schema and the runtime support speed, direction, a bound item
+   * list and live append; without the panel's controls a crawl added in the
+   * editor is stuck on its factory defaults.
    */
   test.beforeEach(async ({ page }) => {
     await page.locator('select.add-layer').selectOption('crawl');
@@ -2125,7 +2124,7 @@ test.describe('asset bin', () => {
 });
 
 /**
- * The asset library modal (Phase 7.5 Wave B).
+ * The asset library modal.
  *
  * The docked bin stays a picker; this is where browsing, filing and tagging
  * happen, because facets, a grid, bulk edit and a detail panel do not fit in
@@ -2396,7 +2395,7 @@ test.describe('transcoding', () => {
 
   test('warns on a video layer pointing at a format with no alpha', async ({ page }) => {
     /*
-     * The defect this phase exists to prevent, and it is otherwise completely
+     * The defect transcoding exists to prevent, and it is otherwise completely
      * silent: an MP4 stinger looks right in the editor, over the editor's own
      * background, and goes to air as a black box over live pictures.
      */

@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Rundowns, cue → take and outputs (Phase 9 Wave A), against the real app and
+ * Rundowns, cue → take and outputs, against the real app and
  * hub with fake sockets standing in for output pages and panels.
  */
 
@@ -249,7 +249,7 @@ describe('outputs', () => {
     expect(bad.statusCode).toBe(400);
   });
 
-  it('shapes an output page for a switcher with ?bg= and ?matte=1 (Phase 9 Wave C)', async () => {
+  it('shapes an output page for a switcher with ?bg= and ?matte=1', async () => {
     const chroma = await app.inject({ method: 'GET', url: `/out/${P}/main?bg=0000ff` });
     expect(chroma.body).toContain(':root,:root>body{background:#0000ff!important}');
     const matte = await app.inject({ method: 'GET', url: `/out/${P}/main?matte=1` });
@@ -280,7 +280,7 @@ describe('control panel take', () => {
   });
 });
 
-describe('timer routes (Phase 9 Wave B)', () => {
+describe('timer routes', () => {
   it('starts, adjusts and reports a graphic timer over REST', async () => {
     const out = client('timer-out', `${P}/${LT}`, 'renderer');
     const start = await app.inject({ method: 'POST', url: `/api/control/${P}/${LT}/timer`, payload: { action: 'start', id: 'game' } });
@@ -293,6 +293,29 @@ describe('timer routes (Phase 9 Wave B)', () => {
     expect(state.json().timers.timers.game.running).toBe(true);
     expect(out.commands().at(-1)?.['verb']).toBe('update');
     out.close();
+  });
+
+  it('resolves a blank id against the timers and rolls the target declares', async () => {
+    const { readTimerRequest } = await import('../timer-request.js');
+    const { readScrollRequest } = await import('../scroll-request.js');
+    expect(readTimerRequest({ action: 'start' })).toMatchObject({ ok: true, id: 'main' });
+    expect(readTimerRequest({ action: 'start' }, ['shot', 'main'])).toMatchObject({ ok: true, id: 'main' });
+    expect(readTimerRequest({ action: 'start', id: ' ' }, ['game', 'shot'])).toMatchObject({ ok: true, id: 'game' });
+    // A named id is never second-guessed.
+    expect(readTimerRequest({ action: 'start', id: 'shot' }, ['game'])).toMatchObject({ ok: true, id: 'shot' });
+    expect(readScrollRequest({ action: 'play' }, ['credits'])).toMatchObject({ ok: true, id: 'credits' });
+    expect(readScrollRequest({ action: 'play' })).toMatchObject({ ok: true, id: 'main' });
+  });
+
+  it('lists each channel with the timers and rolls it declares', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/channels' });
+    expect(res.statusCode).toBe(200);
+    const channels = res.json().projects.flatMap((p: { channels: Array<{ timers: unknown; scrolls: unknown }> }) => p.channels);
+    expect(channels.length).toBeGreaterThan(0);
+    for (const c of channels) {
+      expect(Array.isArray(c.timers)).toBe(true);
+      expect(Array.isArray(c.scrolls)).toBe(true);
+    }
   });
 
   it('refuses a bad action or value with a code', async () => {

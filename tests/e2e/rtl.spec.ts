@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Right-to-left, against `ar-XB` — I18N.md §6.
+ * Right-to-left, against `ar-XB`.
  *
  * `ar-XB` is the RTL pseudo-locale: English words, Arabic direction. That is
  * exactly what this spec wants, because every assertion here is about *layout*,

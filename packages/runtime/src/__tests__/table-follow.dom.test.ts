@@ -8,7 +8,7 @@
 // @vitest-environment happy-dom
 
 /**
- * Follow (CYCLE.md, Wave 4): a table that shows the rows for whatever page
+ * Follow: a table that shows the rows for whatever page
  * another table is on — the forecast tiles that change with the city a
  * rotation is showing.
  *

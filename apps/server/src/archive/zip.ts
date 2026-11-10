@@ -9,7 +9,7 @@
  * Hardened zip reading.
  *
  * The one parser this server allows in front of a filesystem write, and it is
- * allowed on a narrower argument than the one Wave 0 rejected multipart on.
+ * allowed on a narrower argument than the one multipart was rejected on.
  * Multipart is delimiter-scanned: its failure modes are crafted boundaries,
  * smuggled second parts and filenames split across header continuations, and
  * they exist because the format has no index. A zip has a central directory —
@@ -22,9 +22,9 @@
  * allowed to be a decompression bomb, and nothing lands in a served directory
  * that a browser would execute.
  *
- * **Written for two callers on purpose.** Phase 7.5's project and composition
- * restore is next and needs the identical guarantees; a second reader written
- * then would be a second set of these checks to get right, and the one that
+ * **Written for two callers on purpose.** Project and composition
+ * restore needs the identical guarantees; a second reader
+ * would be a second set of these checks to get right, and the one that
  * gets it wrong is the one nobody exercised. This one runs on every sequence
  * upload.
  */

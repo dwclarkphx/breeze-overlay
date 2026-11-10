@@ -166,8 +166,7 @@ export const MAX_BODY_BYTES = 8 * 1024 * 1024;
  *
  * Tracks the running build rather than a literal, which is the whole point of a
  * product token: an origin that starts refusing us needs to be able to tell one
- * release from another, and `1.0` — hardcoded here since Phase 6 while the
- * product moved through the 0.4x and 0.5x lines — named a version that has
+ * release from another, and a hardcoded literal names a version that
  * never shipped. `APP_VERSION` is read from the server's own manifest, so this
  * follows `pnpm version:sync` with nothing further to remember.
  *

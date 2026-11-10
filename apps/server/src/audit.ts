@@ -40,19 +40,19 @@ export type AuditAction =
   | 'scene.delete'
   | 'panel.connect'
   | 'panel.disconnect'
-  /** An operator chose whose rows a data source serves (Wave 5). */
+  /** An operator chose whose rows a data source serves. */
   | 'source.use'
   /** A project's source was moved to the server level, leaving a link (0.80.0). */
   | 'source.move'
-  /** An operator changed a text source's words on air (Wave R). */
+  /** An operator changed a text source's words on air. */
   | 'source.text'
-  /** A poll was opened, closed, reset or re-worded (Wave R). Single votes are not logged. */
+  /** A poll was opened, closed, reset or re-worded. Single votes are not logged. */
   | 'source.poll'
   /** A browser signed in with the API key, signed out, or gave a wrong key. */
   | 'session.start'
   | 'session.end'
   | 'session.refused'
-  /** The project's mode was set or cleared (Wave 6). */
+  /** The project's mode was set or cleared. */
   | 'mode.set';
 
 export interface AuditActor {

@@ -298,7 +298,7 @@ export default defineConfig({
       '/api': 'http://127.0.0.1:7331',
       '/assets': 'http://127.0.0.1:7331',
       '/play': 'http://127.0.0.1:7331',
-      // The camera proxy (Wave 8): a media cell on the stage plays `mediaSrc` from here.
+      // The camera proxy: a media cell on the stage plays `mediaSrc` from here.
       '/media': 'http://127.0.0.1:7331',
       /*
        * The vendored GSAP files. The editor deliberately does not stage its own

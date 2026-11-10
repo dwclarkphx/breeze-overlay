@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * OGraf interop (Phase 9 Wave D) against the real app and hub: the Server API
+ * OGraf interop against the real app and hub: the Server API
  * facade (D1), with fake sockets standing in for output pages that answer as
  * a runtime would, and the pointer package (D2).
  */

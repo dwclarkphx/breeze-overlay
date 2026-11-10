@@ -37,7 +37,7 @@ const MIME: Record<string, string> = {
 };
 
 /**
- * `?bg=` / `?matte=1` off a request URL (Phase 9 Wave C). Read from the raw
+ * `?bg=` / `?matte=1` off a request URL. Read from the raw
  * query string rather than Fastify's parsed object, so a repeated parameter
  * means what it means in the browser — `URLSearchParams.get` takes the first —
  * and the page and the bundle can never disagree about it.

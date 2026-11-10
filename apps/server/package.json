@@ -1,6 +1,6 @@
 {
   "name": "@breeze/server",
-  "version": "0.80.0",
+  "version": "0.81.0",
   "private": true,
   "license": "MPL-2.0",
   "type": "module",
@@ -19,7 +19,6 @@
     "@breeze/i18n": "workspace:*",
     "@breeze/runtime": "workspace:*",
     "@breeze/schema": "workspace:*",
-    "@fastify/static": "^10.1.2",
     "@fastify/websocket": "^11.0.1",
     "basic-ftp": "^6.2.0",
     "fastify": "^5.2.0",

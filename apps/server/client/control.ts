@@ -73,7 +73,7 @@ interface Binding {
   readOnly?: boolean;
   sourceName?: string;
   sourceType?: string;
-  /** Typed-field declaration (Phase 9 Wave B). */
+  /** Typed-field declaration. */
   field?: FieldSpec;
 }
 
@@ -91,22 +91,22 @@ declare global {
       datasets: Record<string, DatasetValue & { fetchedAt?: string }>;
       /** Independently triggered elements, when this composition is a scene. */
       elements?: Array<{ layerId: string; name: string; ref: string; channel: string }>;
-      /** Fetched sources this graphic reads, with their backups (Wave 5). */
+      /** Fetched sources this graphic reads, with their backups. */
       sources?: Array<{ id: string; name: string; backup?: string; backupName?: string; media?: boolean; fed?: boolean }>;
-      /** The project's mode, and the modes its rules name (Wave 6). */
+      /** The project's mode, and the modes its rules name. */
       mode?: string;
       modes?: string[];
-      /** Operator timers this graphic shows (Phase 9 Wave B). */
+      /** Operator timers this graphic shows. */
       timers?: TimerRef[];
-      /** The bin, for an asset field's picker (Phase 9 Wave B). */
+      /** The bin, for an asset field's picker. */
       assets?: Array<{ path: string; name: string; kind: string }>;
-      /** Sport game tables this graphic reads (Phase 9 Wave B). */
+      /** Sport game tables this graphic reads. */
       games?: Array<{ id: string; name: string; sport: string; ruleset: string; teams?: string }>;
-      /** Roll transports (Wave R). */
+      /** Roll transports. */
       scrolls?: ScrollRef[];
-      /** Polls this graphic reads (Wave R). */
+      /** Polls this graphic reads. */
       polls?: Array<{ id: string; name: string; question: string; options: PollOption[]; editable: boolean }>;
-      /** Operator-changeable texts this graphic reads (Wave R). */
+      /** Operator-changeable texts this graphic reads. */
       texts?: Array<{ id: string; name: string; body: string }>;
       /** The installation's locale, and this panel's slice of the catalogue. */
       locale?: string;
@@ -577,7 +577,7 @@ function restBody(command: Record<string, unknown>): Record<string, unknown> {
 const TYPED_KINDS = new Set(['number', 'boolean', 'enum', 'color', 'asset']);
 
 /**
- * The control for a typed field (Phase 9 Wave B): a number with −/+ and the
+ * The control for a typed field: a number with −/+ and the
  * author's one-tap buttons, a toggle, a select, a colour, an asset picker.
  *
  * A button or a toggle *commits* — in live mode that is an update on air, the
@@ -691,7 +691,7 @@ function makeTypedField(
 }
 
 /**
- * The Game block (Phase 9 Wave B): score buttons for a sport template's game
+ * The Game block: score buttons for a sport template's game
  * table, laid out by the sport — +1/+2/+3, TD/FG/PAT, try and conversion, a
  * point to either side for the racket sports, the cricket keypad — with the
  * period, possession and the sport's own counters beneath.
@@ -725,7 +725,7 @@ function makeGameBlock(
     let row: GameRow = seeded ?? {};
     let teams: GameRow[] = (game.teams ? boot.datasets?.[game.teams]?.rows : undefined) ?? [];
 
-    // i18n-ignore-next-line — an API path, frozen per I18N.md §2
+    // i18n-ignore-next-line — an API path, frozen
     const url = `/api/projects/${encodeURIComponent(boot.projectId)}/datasources/${encodeURIComponent(game.id)}/game${auth}`;
     const act = (action: Record<string, unknown>): void => {
       void fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(action) })
@@ -936,7 +936,7 @@ function makeGameBlock(
 }
 
 /**
- * The Timers block (Phase 9 Wave B): one row per timer this graphic shows,
+ * The Timers block: one row per timer this graphic shows,
  * with a readout worked out here from the hub's anchor — the same arithmetic
  * the outputs run, so the panel and air agree without a frame per second.
  */
@@ -1046,7 +1046,7 @@ function makeTimerBlock(
 }
 
 /**
- * The Scroll block (Wave R, ROLLS.md §5.3): the transport for each roll this
+ * The Scroll block: the transport for each roll this
  * graphic shows. The position is worked out here from the hub's anchor — the
  * arithmetic the outputs run — and the length from what an output reported,
  * so the bar moves smoothly without a frame per second from anyone.
@@ -1253,7 +1253,7 @@ async function refusal(res: Response): Promise<string> {
 }
 
 /**
- * The Poll block (Wave R, CHARTS.md §5.1): tally buttons for each poll this
+ * The Poll block: tally buttons for each poll this
  * graphic reads. Every tap is a poll action on the server, which writes the
  * tally every graphic of the project reads; the readout follows the hub's
  * pushes of the poll's rows and each action's own answer.
@@ -1271,7 +1271,7 @@ function makePollBlock(
   const painters: Array<(push: Record<string, unknown>) => void> = [];
 
   for (const poll of polls) {
-    // i18n-ignore-next-line — an API path, frozen per I18N.md §2
+    // i18n-ignore-next-line — an API path, frozen
     const url = `/api/projects/${encodeURIComponent(boot.projectId)}/datasources/${encodeURIComponent(poll.id)}/poll${auth}`;
     let rows: Array<Record<string, unknown>> = boot.datasets?.[poll.id]?.rows ?? [];
     let options = poll.options;
@@ -1459,7 +1459,7 @@ function makePollBlock(
 }
 
 /**
- * The Text block (Wave R, ROLLS.md §3): the words of each text source this
+ * The Text block: the words of each text source this
  * graphic reads whose designer ticked **Operator changeable**. Sent when the
  * operator says so, never as they type — a lyric half-corrected on air would be
  * worse than the typo.
@@ -1473,7 +1473,7 @@ function makeTextBlock(boot: NonNullable<Window['__BREEZE_CONTROL__']>, key: str
   const auth = key ? `?key=${encodeURIComponent(key)}` : '';
 
   for (const text of texts) {
-    // i18n-ignore-next-line — an API path, frozen per I18N.md §2
+    // i18n-ignore-next-line — an API path, frozen
     const url = `/api/projects/${encodeURIComponent(boot.projectId)}/datasources/${encodeURIComponent(text.id)}/text${auth}`;
     let saved = text.body;
     const box = document.createElement('div');
@@ -1714,7 +1714,7 @@ interface SourceHealth {
 }
 
 /**
- * The Data block (CYCLE.md, Wave 5): what each feed this graphic reads is
+ * The Data block: what each feed this graphic reads is
  * doing, and — where it has a backup — the switch to put the backup on air.
  *
  * Polled, not pushed: source health lives in the data registry, which has no
@@ -1730,7 +1730,7 @@ function wireSources(boot: NonNullable<Window['__BREEZE_CONTROL__']>, key: strin
   section.hidden = false;
 
   const auth = key ? `?key=${encodeURIComponent(key)}` : '';
-  // i18n-ignore-next-line — an API path, frozen per I18N.md §2
+  // i18n-ignore-next-line — an API path, frozen
   const base = `/api/projects/${encodeURIComponent(boot.projectId)}/datasources`;
 
   const rows = new Map<string, { state: HTMLElement; media: HTMLElement | null; buttons: Map<string, HTMLButtonElement> }>();
@@ -1759,7 +1759,7 @@ function wireSources(boot: NonNullable<Window['__BREEZE_CONTROL__']>, key: strin
     }
     if (status.use) text = t('control.sourceOverride', { state: text });
     /*
-     * A camera list (Wave 8): how many cameras are up. For a typed list that
+     * A camera list: how many cameras are up. For a typed list that
      * is the whole story — it has no fetch of its own to report on.
      */
     if (row.media) {
@@ -1886,7 +1886,7 @@ function wireSources(boot: NonNullable<Window['__BREEZE_CONTROL__']>, key: strin
 }
 
 /**
- * The Mode block (CYCLE.md, Wave 6): a button per mode the project's rules
+ * The Mode block: a button per mode the project's rules
  * name, and one to clear it. The mode is project-wide — every graphic with a
  * rule for it follows — so the block says so rather than pretending it
  * belongs to this panel's graphic. Polled like the Data block, and answered
@@ -1900,7 +1900,7 @@ function wireMode(boot: NonNullable<Window['__BREEZE_CONTROL__']>, key: string):
   section.hidden = false;
 
   const auth = key ? `?key=${encodeURIComponent(key)}` : '';
-  // i18n-ignore-next-line — an API path, frozen per I18N.md §2
+  // i18n-ignore-next-line — an API path, frozen
   const base = `/api/projects/${encodeURIComponent(boot.projectId)}/mode`;
   const buttons = new Map<string, HTMLButtonElement>();
 
@@ -1998,7 +1998,7 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
   /* --------------------------------------------------------- cue → take */
 
   /*
-   * Cue → take (Phase 9 Wave A), opted into per panel. Live edit stays the
+   * Cue → take, opted into per panel. Live edit stays the
    * default — 0.21's "edit the name live on air" must not change under anyone.
    *
    * In cue mode the fields are a buffer: typing, Enter and a table edit change
@@ -2157,7 +2157,7 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
     add(SYNC_AUTO, t('control.syncNewest'));
     list.forEach((s, i) => {
       const vars = { n: i + 1, label: s.label, ip: s.ip };
-      // A matte page (Phase 9 Wave C) runs the same timeline as its fill, so it
+      // A matte page runs the same timeline as its fill, so it
       // can be followed like any output; the label only says which it is.
       const matte = s.signal === 'matte';
       add(
@@ -2251,7 +2251,7 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
     : t('control.syncCheckCrawl', { name: check.name.split('/').pop() ?? check.name });
 
   /**
-   * Fill ↔ matte (Phase 9 Wave C).
+   * Fill ↔ matte.
    *
    * A switcher keying from a fill page and a `?matte=1` page needs both on the
    * same moment of the graphic: a matte that missed a PLAY cuts a hole where
@@ -2422,7 +2422,7 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
   const grids = new Map<string, DatasetGrid>();
   /** Fed bindings are displayed, never edited. Keyed by source id. */
   const fed = new Map<string, FedField>();
-  /** Typed fields (Phase 9 Wave B) — each knows its own value. */
+  /** Typed fields — each knows its own value. */
   const typed = new Map<string, { value(): unknown }>();
 
   for (const binding of boot.bindings) {
@@ -2661,7 +2661,7 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
 
   const timerBlock = makeTimerBlock(boot.timers ?? [], send);
   const gameBlock = makeGameBlock(boot, key);
-  // Wave R: rolls, polls and texts.
+  // Rolls, polls and texts.
   const scrollBlock = makeScrollBlock(boot.scrolls ?? [], send);
   const pollBlock = makePollBlock(boot, key);
   makeTextBlock(boot, key);
@@ -2700,7 +2700,7 @@ function start(boot: NonNullable<Window['__BREEZE_CONTROL__']>): void {
           // Row cap: the panel shows a feed, not the whole of one. A 5000-row
           // sheet would otherwise be fetched and laid out every 15 seconds on
           // a tablet.
-          // i18n-ignore-next-line — an API path, frozen per I18N.md §2
+          // i18n-ignore-next-line — an API path, frozen
           const url = `/api/projects/${encodeURIComponent(boot.projectId)}/datasources/${encodeURIComponent(sourceId)}?rows=50${key ? `&key=${encodeURIComponent(key)}` : ''}`;
           const res = await fetch(url);
           if (!res.ok) continue;

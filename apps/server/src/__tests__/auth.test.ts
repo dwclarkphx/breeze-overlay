@@ -157,7 +157,7 @@ describe('project mutations require the key', () => {
   });
 });
 
-describe('choosing a data source’s backup requires the key (Wave 5)', () => {
+describe('choosing a data source’s backup requires the key', () => {
   const KEY = { 'x-breeze-key': 's3cret' };
   const BASE = '/api/projects/demo-1iixd/datasources';
 
@@ -382,7 +382,7 @@ describe('logging', () => {
   });
 });
 
-describe('setting the mode requires the key (Wave 6)', () => {
+describe('setting the mode requires the key', () => {
   it('gates the set, and leaves the read open', async () => {
     expect((await app.inject({ method: 'GET', url: '/api/projects/demo-1iixd/mode/set?value=storm' })).statusCode).toBe(401);
     expect((await app.inject({ method: 'GET', url: '/api/projects/demo-1iixd/mode/%73et?value=storm' })).statusCode).toBe(401);
@@ -394,7 +394,7 @@ describe('setting the mode requires the key (Wave 6)', () => {
   });
 });
 
-describe('checking a camera list requires the key (Wave 8)', () => {
+describe('checking a camera list requires the key', () => {
   const BASE = '/api/projects/demo-1iixd/datasources';
   const KEY = { 'x-breeze-key': 's3cret' };
 
@@ -422,7 +422,7 @@ describe('checking a camera list requires the key (Wave 8)', () => {
   });
 });
 
-describe('the OGraf Server API requires the key for actions (Phase 9 Wave D)', () => {
+describe('the OGraf Server API requires the key for actions', () => {
   const LOAD = '/ograf/v1/renderers/demo-1iixd/target/graphicInstance/load';
   const body = {
     renderTarget: { channel: 'l3rd-name-2a94g' },

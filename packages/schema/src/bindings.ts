@@ -8,7 +8,7 @@
 /**
  * Dynamic fields. Any layer carrying a `binding` name becomes an operator-
  * editable field. The derived schema drives:
- *   - the `/control/:id` operator form (Phase 4)
+ *   - the `/control/:id` operator form
  *   - `update()` payloads over REST and WebSocket
  *   - host scripting from vMix and OBS, which send the same JSON
  */
@@ -18,7 +18,7 @@ import { fieldDefault, type FieldSpec } from './fields.js';
 
 /**
  * `number`, `boolean`, `enum`, `color` and `asset` come from a declaration in
- * `Composition.fields` (Phase 9 Wave B); the rest from the layer's type.
+ * `Composition.fields`; the rest from the layer's type.
  */
 export type BindingKind =
   | 'string'
@@ -125,7 +125,7 @@ export function collectBindings(comp: Composition): BindingDescriptor[] {
   });
 
   /*
-   * Colour bindings (Phase 9 Wave B): a text or shape layer recoloured by a
+   * Colour bindings: a text or shape layer recoloured by a
    * field. A `color` field whether or not it is declared — the declaration
    * only adds a label and a default.
    */
@@ -182,7 +182,7 @@ function typedDefault(spec: FieldSpec, authored: unknown): unknown {
 /**
  * Separator between a mount and the field it carries — `nest118bi.headlines`.
  *
- * A frozen identifier (I18N.md §2): it goes into `update()` payloads, into the
+ * A frozen identifier: it goes into `update()` payloads, into the
  * `/bindings` descriptor an external caller reads, and therefore into Companion
  * buttons and vMix scripts. It never changes and it is never localised.
  */
@@ -222,7 +222,7 @@ export interface OverrideBinding extends BindingDescriptor {
  * two minutes to air.
  *
  * Independent mounts are skipped: they own a control channel each, and their
- * fields are addressed there rather than through the parent (SCENES.md §2).
+ * fields are addressed there rather than through the parent.
  */
 export function collectOverrideBindings(
   comp: Composition,
@@ -302,7 +302,7 @@ export function collectSources(comp: Composition): SourceRef[] {
   const byId = new Map<string, SourceRef>();
 
   /*
-   * What else reads a source by itself (Wave R): a plotted line, and a drive
+   * What else reads a source by itself: a plotted line, and a drive
    * reading a source row — a thermometer's goal. Listed so the panel's Data
    * block watches them, like a table's.
    */
@@ -426,7 +426,7 @@ export function bindingsJsonSchema(
         };
         break;
       /*
-       * Typed fields (Phase 9 Wave B). Plain JSON Schema keywords wherever one
+       * Typed fields. Plain JSON Schema keywords wherever one
        * exists, so a generic form generator — OGraf's included — draws the
        * right control without knowing Breeze; `x-breeze-*` only for what
        * JSON Schema has no word for.

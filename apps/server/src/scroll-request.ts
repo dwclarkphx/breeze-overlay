@@ -6,19 +6,22 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Reading a scroll command off a request (Phase 9 Wave R, ROLLS.md §5.3) —
+ * Reading a scroll command off a request —
  * shared by the graphic's `/api/control/:id/:compId/scroll` and the output's
  * `/api/out/:id/:output/scroll`, so both say the same thing about a bad one.
  *
- * `action=` one of `SCROLL_ACTIONS`, `id=` (default `main`) and `value=`:
+ * `action=` one of `SCROLL_ACTIONS`, `id=` and `value=`:
  * for `speed` a multiple (`1.5`, `x2`); for `jog` signed seconds (`-3`,
  * `+0:05`); for `seek` seconds or a percentage (`1:30`, `90`, `50%`).
+ *
+ * A blank `id` is resolved against the rolls the target declares
+ * (`defaultScrollId`), as a blank timer id is.
  */
 
 import {
-  DEFAULT_SCROLL_ID,
   SCROLL_ACTIONS,
   SCROLL_ID_PATTERN,
+  defaultScrollId,
   parseScrollSeek,
   parseTimerInput,
   type ScrollAction,
@@ -28,12 +31,12 @@ export type ScrollRequest =
   | { ok: true; action: ScrollAction; id: string; value?: number; percent?: boolean }
   | { ok: false; code: string; params?: Record<string, string> };
 
-export function readScrollRequest(params: Record<string, unknown>): ScrollRequest {
+export function readScrollRequest(params: Record<string, unknown>, declared: readonly string[] = []): ScrollRequest {
   const action = typeof params['action'] === 'string' ? params['action'].trim() : '';
   if (!(SCROLL_ACTIONS as readonly string[]).includes(action)) {
     return { ok: false, code: 'error.scrollAction', params: { actions: SCROLL_ACTIONS.join(', ') } };
   }
-  const rawId = typeof params['id'] === 'string' && params['id'].trim() !== '' ? params['id'].trim() : DEFAULT_SCROLL_ID;
+  const rawId = typeof params['id'] === 'string' && params['id'].trim() !== '' ? params['id'].trim() : defaultScrollId(declared);
   if (!SCROLL_ID_PATTERN.test(rawId)) return { ok: false, code: 'error.scrollId' };
   const raw = params['value'];
   const text = typeof raw === 'number' ? String(raw) : typeof raw === 'string' ? raw.trim() : '';

@@ -6,10 +6,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /*
- * path-geometry.ts shipped in 0.71.0 proven only by throwaway Node scripts in a
- * sandbox that could not run vitest (MASKS.md §5.1). These are those checks,
- * committed — the on-stage surface (D′) now dispatches every gesture through
- * these functions, so they need to fail in CI rather than in a session's notes.
+ * The on-stage pen surface dispatches every gesture through path-geometry.ts,
+ * so its arithmetic is checked here, where a mistake fails in CI.
  */
 
 import { describe, expect, it } from 'vitest';

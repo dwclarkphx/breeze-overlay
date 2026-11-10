@@ -9,7 +9,7 @@
  * Display names — the shared rules for what a project or composition may be
  * called.
  *
- * A name is operator data, not an identifier (I18N.md §2): it never reaches a
+ * A name is operator data, not an identifier: it never reaches a
  * URL, a directory or a channel key — those are all built from the id, which
  * has its own rules in `keys.ts`. So the rules here are deliberately about
  * what a *person* reads, and any script is welcome: Arabic, CJK, accented

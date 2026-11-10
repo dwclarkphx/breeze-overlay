@@ -8,7 +8,7 @@
 /**
  * Which frame a thumbnail poses at.
  *
- * The whole of Phase 7.6 rests on this being something other than 0: t=0 is the
+ * Every thumbnail rests on this being something other than 0: t=0 is the
  * one moment a graphic is guaranteed to look like nothing, so a thumbnail taken
  * there renders every lower third in a project as the same empty box.
  */

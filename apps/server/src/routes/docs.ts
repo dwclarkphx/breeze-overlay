@@ -33,12 +33,14 @@ const DOCS_DIR = path.join(REPO_ROOT, 'docs');
 
 /**
  * The documents served, by the file name they link to each other with. The
- * guide links to the sport templates reference as `SPORT-TEMPLATES.md`, which
- * is what works on GitHub; served, those links are rewritten to these paths.
+ * guide links to the sport templates reference as `SPORT-TEMPLATES.md` and to
+ * the developer API reference as `API.md`, which is what works on GitHub;
+ * served, those links are rewritten to these paths.
  */
 const DOCS: Record<string, string> = {
   'USER-GUIDE.md': '/docs',
   'SPORT-TEMPLATES.md': '/docs/sport-templates',
+  'API.md': '/docs/api',
 };
 
 const IMAGE_MIME: Record<string, string> = {
@@ -159,6 +161,7 @@ export async function registerDocsRoutes(app: FastifyInstance): Promise<void> {
   app.get('/docs', async (_req, reply) => serve(reply));
   app.get('/docs/', async (_req, reply) => serve(reply));
   app.get('/docs/sport-templates', async (_req, reply) => serve(reply, 'SPORT-TEMPLATES.md'));
+  app.get('/docs/api', async (_req, reply) => serve(reply, 'API.md'));
 
   /*
    * Images only, and only from `docs/images`. This route exists to serve

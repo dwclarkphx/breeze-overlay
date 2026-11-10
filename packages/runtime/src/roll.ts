@@ -6,8 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Rolls: long text scrolling under the operator's control (Phase 9 Wave R,
- * ROLLS.md).
+ * Rolls: long text scrolling under the operator's control.
  *
  * Two parts. `RollBlock` lays one roll's rows out in its track and says where
  * the track sits for a given travel. `RollSync` holds the hub's scroll state

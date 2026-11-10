@@ -16,7 +16,7 @@
  * *reported* — by pnpm's own script banner, and by the server reading its own
  * manifest at startup. Left to themselves they drift: all four sat at the 0.1.0
  * they were scaffolded with while the product reached 0.44, so `pnpm start`
- * announced `@breeze/server@0.1.0` on a machine running Phase 5.
+ * announced `@breeze/server@0.1.0` on a machine running 0.44.
  *
  * Usage:
  *   node scripts/sync-version.mjs          # write root version into every package

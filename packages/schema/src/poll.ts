@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Polls (Phase 9 Wave R, CHARTS.md §5).
+ * Polls.
  *
  * A poll source is the question, its options and the tally, kept in the
  * project. Votes come from the operator (the panel, REST, Companion) or the
@@ -45,8 +45,8 @@ export const POLL_COLUMNS: DataColumn[] = [
 ];
 
 /**
- * Columns a poll feed must and may carry — the Poll template's format guide
- * (CHARTS.md §5.2). A `share` transform then adds `percent`, and `rank` the
+ * Columns a poll feed must and may carry — the Poll template's format guide.
+ * A `share` transform then adds `percent`, and `rank` the
  * rest, so one graphic serves an operator's poll and a fed one.
  */
 export const POLL_FEED_COLUMNS: Array<DataColumn & { required: boolean; example: string }> = [
@@ -96,7 +96,7 @@ export function pollDataSet(def: PollDataSource): DataSet {
   return { id: def.id, columns: POLL_COLUMNS, rows };
 }
 
-export const POLL_ACTIONS = ['vote', 'set', 'open', 'close', 'reset'] as const;
+export const POLL_ACTIONS = ['vote', 'set', 'open', 'close', 'toggle', 'reset'] as const;
 export type PollActionType = (typeof POLL_ACTIONS)[number];
 
 export type PollAction =
@@ -104,6 +104,7 @@ export type PollAction =
   | { type: 'set'; option: string; value: number }
   | { type: 'open' }
   | { type: 'close' }
+  | { type: 'toggle' }
   | { type: 'reset' };
 
 /** Why an action cannot apply to this poll — an i18n error code — or null. */
@@ -138,6 +139,10 @@ export function applyPollAction(def: PollDataSource, action: PollAction): PollDa
       return { ...def, status: 'open' };
     case 'close':
       return { ...def, status: 'closed' };
+    case 'toggle':
+      // Decided here, from the stored status, so a button never has to read the
+      // poll first and two presses cannot both see "open".
+      return { ...def, status: def.status === 'closed' ? 'open' : 'closed' };
     case 'reset': {
       const { votes: _gone, ...rest } = def;
       return { ...rest, status: 'open' };

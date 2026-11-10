@@ -4,6 +4,31 @@ All notable changes to Breeze Overlay are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow the project rule: a feature bumps the minor version, a fix bumps the patch. Releases before 0.45.0 used two-part numbers (0.01–0.44). 1.0.0 will be the first public release.
 
+## [0.81.0] - 2026-11-10
+
+> Three additions for control surfaces: a poll can be toggled in one call, a timer or roll command with no id reaches the timer or roll the graphic actually has, and `/healthz` says it is Breeze. The source tree's comments and test names were also cleaned of development bookkeeping.
+
+### Added
+
+- **Poll `toggle`.** `…/datasources/<poll>/poll?type=toggle` opens a closed poll and closes an open one. The server decides from the stored status, so a button no longer has to read the poll first, and a toggle on an already-open poll closes it on the first press. The activity log records it as the open or close it turned out to be.
+- The poll action's answer carries **`status`** (`open` or `closed`) as well as the rows.
+- **`/api/channels` and `/api/projects/:id/channels` list each graphic's timers and rolls.** Every channel has `timers` and `scrolls`: the ids it declares, its mounted compositions' included, in layer order. A control surface can build a button per timer at connect, before any output has reported in.
+- **A developer API reference**, `docs/API.md`, served at `/docs/api` and linked from the README and the user guide's remote-control section. Every route with its parameters and answers, the control WebSocket, the OGraf Server API and the output page's scripting hooks.
+- **`/healthz` answers with `app: "breeze-overlay"`.** A fixed string, so a client pointed at the wrong port can tell Breeze from another server. `version` and `formatVersion` are unchanged.
+
+### Changed
+
+- **A timer or roll command with a blank `id` means `main` if the graphic has it, otherwise the graphic's first.** It used to mean `main` always, so a blank id on a graphic whose only timer is `game` started a timer nothing showed. This applies to `/api/control/…/timer` and `…/scroll`, to `/api/out/…/timer` and `…/scroll` (resolved against everything mounted on the output), and to the OGraf `timer` and `scroll` actions. A graphic that declares no timer at all still gets `main`. The answer's `timer.id` or `scroll.id` says which was used. A command sent over the control WebSocket with no id is unchanged: the hub does not read compositions, so it still means `main`.
+
+### Removed
+
+- `@fastify/static` from the server's dependencies. Nothing imported it; the editor's files are served by the server's own route. `THIRD-PARTY-NOTICES.md` loses it and the eighteen packages only it brought in.
+
+### Internal
+
+- Comments, test titles and test file names no longer carry work-package labels, references to unpublished notes, or history. Nine test files are renamed for what they cover.
+- `pnpm comments:check` (CI and the release gate) keeps it that way; the rule is in `MAINTAINING.md`, "Comments and docs".
+
 ## [0.80.0] - 2026-11-09
 
 > Server-level data sources: set a feed up once on a new Data sources page, have it fetching before any project uses it, and link it into as many projects as show it. A project restored while the server is running now starts fetching its sources, and Refresh is held to each source's limits.

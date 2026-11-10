@@ -6,8 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Rolls and data-driven graphics in the properties panel (Phase 9 Wave R,
- * ROLLS.md, CHARTS.md).
+ * Rolls and data-driven graphics in the properties panel.
  *
  * Kept out of `PropertiesPanel.tsx` for the reason `RulesSection` is: that
  * file is long enough, and drives — like rules — are a section every layer
@@ -224,7 +223,7 @@ function DomainEndInput({
 }
 
 /**
- * Drives (CHARTS.md §3): a number from data moving a property. A bar is a
+ * Drives: a number from data moving a property. A bar is a
  * `width` drive in a table cell; a meter, a `height` drive whose top end is a
  * goal; a gauge, a `sweep` drive on an arc.
  */
@@ -417,7 +416,7 @@ export function DrivesSection({
 /* ------------------------------------------------------- arcs, trim, plots */
 
 /**
- * The chart controls a shape grows (CHARTS.md §4): an arc on an ellipse, a
+ * The chart controls a shape grows: an arc on an ellipse, a
  * draw-on for any outline, and a path plotted from rows. Sweep and trim are
  * keyframable, so they carry the panel's stopwatch.
  */
@@ -570,7 +569,7 @@ export function ShapeChartFields({
 
 /* --------------------------------------------------------------- counts */
 
-/** Counting to a new number (CHARTS.md §4.5). */
+/** Counting to a new number. */
 export function CountSection({ layer, onPatch }: { layer: TextLayer; onPatch: (patch: Partial<Layer>) => void }): JSX.Element {
   const t = useT();
   const count = layer.count;
@@ -634,7 +633,7 @@ function placeholderText(layer: RollLayer): string {
 }
 
 /**
- * A roll (ROLLS.md §4): where its text comes from, which way and how fast it
+ * A roll: where its text comes from, which way and how fast it
  * runs, where it starts and ends, and what PLAY does to it. Its type styles
  * are the panel's ordinary Type sections, beneath.
  */

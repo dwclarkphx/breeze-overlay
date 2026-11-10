@@ -8,7 +8,7 @@
 /**
  * Which locale, and which way it reads.
  *
- * Breeze does not detect a locale (I18N.md §4.4). A server belongs to one
+ * Breeze does not detect a locale. A server belongs to one
  * operation, and detection would show two crew members two languages for the
  * same buttons. The locale is `BREEZE_LOCALE`, resolved once at start-up, with
  * `?lang=` as an explicit override that exists so the pseudo-locales and the

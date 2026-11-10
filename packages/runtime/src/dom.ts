@@ -59,15 +59,15 @@ export interface LayerNodes {
   poster?: HTMLImageElement;
   /** Sprite-only: the box carrying the sheet as a background. */
   sprite?: HTMLElement;
-  /** Media-only (Wave 8): the player filling the layer. */
+  /** Media-only: the player filling the layer. */
   mediaPlayer?: MediaPlayer;
   /**
-   * The drawn outline of a path or arc shape (Wave R) — what `trim` dashes and
+   * The drawn outline of a path or arc shape — what `trim` dashes and
    * what an arc's `sweep` and a plot's rows rewrite. Absent on rects and plain
    * ellipses, which CSS draws.
    */
   shapePath?: SVGPathElement;
-  /** A roll's window (overflow hidden) and the track that moves inside it (Wave R). */
+  /** A roll's window (overflow hidden) and the track that moves inside it. */
   rollWindow?: HTMLElement;
   rollTrack?: HTMLElement;
 }
@@ -84,9 +84,9 @@ export interface BuildContext {
    * property `still.dom.test.ts` guards.
    */
   still?: boolean;
-  /** Where hls.js can be loaded from, for a media layer playing HLS (Wave 8). */
+  /** Where hls.js can be loaded from, for a media layer playing HLS. */
   hlsScript?: string;
-  /** Whether live media should play now — the graphic is on air (Wave 8). Absent: always. */
+  /** Whether live media should play now — the graphic is on air. Absent: always. */
   isLive?: () => boolean;
 }
 
@@ -173,7 +173,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 let gradientCounter = 0;
 
 /**
- * A path shape — the one shape CSS cannot draw (MASKS.md §5).
+ * A path shape — the one shape CSS cannot draw.
  *
  * Rendered as a real `<svg>` rather than as a `clip-path: path()` on the
  * existing div, which was the cheaper-looking option and is wrong: a clipped
@@ -184,7 +184,7 @@ let gradientCounter = 0;
  * **No `viewBox`, and `overflow: visible`.** One user unit is one layer pixel
  * that way, so `d` is authored in exactly the coordinates the panel shows and
  * the pen tool drags. And geometry outside the layer's own box still paints,
- * which is the same rule Wave A settled for masks: the box only has to exist,
+ * which is the same rule masks follow: the box only has to exist,
  * the geometry lives in the shape.
  */
 function buildPathShape(layer: ShapeLayer, ctx: BuildContext): { el: SVGSVGElement; path: SVGPathElement } {
@@ -197,7 +197,7 @@ function buildPathShape(layer: ShapeLayer, ctx: BuildContext): { el: SVGSVGEleme
   const path = ctx.doc.createElementNS(SVG_NS, 'path');
   // A plotted path's `d` comes from its rows, which the runtime writes once it has them.
   path.setAttribute('d', layer.plot ? '' : (layer.path ?? ''));
-  // One unit of length for the whole outline, so `trim` is a plain fraction (Wave R).
+  // One unit of length for the whole outline, so `trim` is a plain fraction.
   path.setAttribute('pathLength', '1');
 
   /*
@@ -228,7 +228,7 @@ function buildPathShape(layer: ShapeLayer, ctx: BuildContext): { el: SVGSVGEleme
 }
 
 /**
- * An ellipse drawn as an arc (Wave R, CHARTS.md §4.2): a ring segment stroked
+ * An ellipse drawn as an arc: a ring segment stroked
  * in the fill, or a filled wedge. An SVG for the same reason a path is one —
  * CSS has no arc — and sized to the layer box with no viewBox, so the geometry
  * is in the layer's own pixels and `arcPath` can be redrawn as `sweep` moves.
@@ -263,7 +263,7 @@ function buildArcShape(layer: ShapeLayer, ctx: BuildContext): { el: SVGSVGElemen
 }
 
 /**
- * Draw an outline on to `t` (0–1) of its length (Wave R, CHARTS.md §4.3).
+ * Draw an outline on to `t` (0–1) of its length.
  *
  * The path carries `pathLength="1"`, so the dash is the fraction itself. At
  * zero the stroke is made transparent rather than dashed to nothing: a round
@@ -466,7 +466,7 @@ function buildVideoPoster(layer: VideoLayer, ctx: BuildContext): HTMLImageElemen
 }
 
 /**
- * A roll (Wave R, ROLLS.md §4): a window clipping a track. The rows are the
+ * A roll: a window clipping a track. The rows are the
  * runtime's to fill (`RollBlock`), as a crawl's blocks are `CrawlLoop`'s. The
  * soft edges are a mask on the *window*, never on the layer element, so they
  * compose with a layer mask rather than replace it.
@@ -625,8 +625,8 @@ export function applyStaticEffects(el: HTMLElement, layer: Layer): void {
 }
 
 /**
- * Filter props a timeline can drive. `dropShadow` is deliberately absent —
- * MASKS.md §3.2: a keyframe track is a track of scalars, a drop shadow is a
+ * Filter props a timeline can drive. `dropShadow` is deliberately absent:
+ * a keyframe track is a track of scalars, a drop shadow is a
  * 4-tuple, and it stays a static baseline read straight from `fx` below.
  */
 export interface AnimatedFilterProps {

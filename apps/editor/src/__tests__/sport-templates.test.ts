@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * The sport-template creator's source definitions (Phase 9 Wave B): every feed
+ * The sport-template creator's source definitions: every feed
  * kind makes a definition the server will save, carrying its template.
  */
 

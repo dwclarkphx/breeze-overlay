@@ -8,8 +8,8 @@
 /**
  * Replace — new bytes, rewrite every referencing `src`, keep `supersedes`.
  *
- * ASSETS.md §2 lists this as the fifth wall: "a corrected logo is a new path
- * and every `src` string pointing at the old one keeps pointing at it". The
+ * Assets are content-addressed: a corrected logo is a new path
+ * and every `src` string pointing at the old one keeps pointing at it. The
  * consequence in a gallery is worse than it sounds — the operator sees the new
  * file appear in the bin, concludes the job is done, and the graphic goes to
  * air on the old logo with nothing anywhere reporting a problem.

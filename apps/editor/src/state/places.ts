@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * The data panel's typed list of places (Phase 8.6 Wave 3), one per line.
+ * The data panel's typed list of places, one per line.
  *
  * Kept out of the component so it can be tested without a DOM, and because
  * the reading rule — name first, then the first number — is the kind of thing

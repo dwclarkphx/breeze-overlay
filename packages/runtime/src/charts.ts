@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Data-driven graphics in the runtime (Phase 9 Wave R, CHARTS.md).
+ * Data-driven graphics in the runtime.
  *
  * The arithmetic is the schema's (`@breeze/schema` charts.ts); this is the
  * part that touches the DOM: putting a driven value on a property, counting a
@@ -178,8 +178,8 @@ export interface CountFormat {
 }
 
 /**
- * Show `value` on `inner`, counting to it from the number shown before (CHARTS.md
- * §4.5). The first number a layer shows is written straight away: there is no
+ * Show `value` on `inner`, counting to it from the number shown before.
+ * The first number a layer shows is written straight away: there is no
  * "before" to count from, and counting up from zero on load would be a graphic
  * animating when nothing changed. `onDone` runs once the final text is up — the
  * runtime refits then, not on every frame.
@@ -235,7 +235,7 @@ export function countable(value: unknown): number | null {
 /* ----------------------------------------------------------------- plots */
 
 /**
- * Redraw a plotted path from rows (CHARTS.md §4.4). When the row count is the
+ * Redraw a plotted path from rows. When the row count is the
  * same as last time and the plot asks for a tween, the points move to their
  * new heights instead of the line being replaced — a temperature line that
  * reshapes when the forecast updates.

@@ -20,7 +20,7 @@
  *  3. **One slow origin cannot starve the loop.** Per-source timers, per-source
  *     timeouts, exponential backoff on failure.
  *
- * And, since Wave 5 (CYCLE.md), two rules about data that arrives but is wrong:
+ * And two rules about data that arrives but is wrong:
  *
  *  4. **A fetch must pass its guard to go on air.** One that fails it is treated
  *     like one that failed to connect — rule 1 applies.
@@ -185,7 +185,7 @@ export function hashDataSet(data: DataSet): string {
 
 /**
  * The rows of a source that is its own definition — a manual table, a poll, a
- * text kept in the project (Wave R). Synchronous: nothing is fetched.
+ * text kept in the project. Synchronous: nothing is fetched.
  */
 export function inlineDataSet(def: DataSourceDef): DataSet {
   if (def.type === 'manual') return { id: def.id, columns: def.columns, rows: conform(def.rows, def.columns) };
@@ -202,11 +202,10 @@ export function inlineDataSet(def: DataSourceDef): DataSet {
 /**
  * A fetched sport-template source's format check, as a status warning (0.79.1).
  *
- * Until now only the editor ran `checkSportTable`, against a preview, so a feed
- * that went wrong mid-show — a column renamed, `TBD` typed into a score — said
+ * The editor runs `checkSportTable` only against a preview, so without this a feed
+ * that goes wrong mid-show — a column renamed, `TBD` typed into a score — says
  * nothing anywhere an operator looks. Reported, not enforced: the rows still go
- * on air. Holding last-good instead is the planned `onTemplateFail` setting
- * (sports-import-review §5.6). A manual table is checked in the editor as it
+ * on air. A manual table is checked in the editor as it
  * is typed, so it is skipped here.
  */
 export function templateCheckWarning(def: DataSourceDef, data: DataSet | null): string | undefined {
@@ -245,7 +244,7 @@ export async function loadDataSource(def: DataSourceDef, prior?: DataEntry, ctx:
   if (def.type === 'link') {
     throw new Error(`"${def.name}" is a link to the server-level source "${def.source}" and has nothing of its own to fetch`);
   }
-  // Wave R: a poll's rows are its tally; a text kept in the project is its body.
+  // A poll's rows are its tally; a text kept in the project is its body.
   if (def.type === 'poll' || (def.type === 'text' && def.url === undefined)) {
     return { data: inlineDataSet(def) };
   }
@@ -313,7 +312,7 @@ export async function loadDataSource(def: DataSourceDef, prior?: DataEntry, ctx:
     // expired, and neither is what a failed place should fall back to.
     const placeCtx = { places: resolvePlaces(def, ctx), prior: prior?.ownLoaded ? prior.own : undefined };
     const result = def.type === 'weather' ? await loadWeather(def, placeCtx) : await loadAirQuality(def, placeCtx);
-    // Show attribution off (Phase 9 Wave 0): the column stays, blank, so an
+    // Show attribution off: the column stays, blank, so an
     // `attribution is empty` rule can take the credit strap off air.
     const data = result.data && !attributionShown(def) ? blankAttribution(result.data) : result.data;
     return { data, warning: result.warning };
@@ -407,7 +406,7 @@ function parseBody(def: UrlDataSource, body: string, onColumns?: (match: ColumnM
 }
 
 /**
- * What the registry needs from the media checks (Wave 8, `media/monitor.ts`):
+ * What the registry needs from the media checks (`media/monitor.ts`):
  * to be told a source's rows, and to add the check's columns to them.
  */
 export interface MediaDecorator {
@@ -496,7 +495,7 @@ export class DataRegistry {
     }
 
     // A manual source needs no fetch — its rows are the definition. A poll
-    // and a text kept in the project are the same (Wave R).
+    // and a text kept in the project are the same.
     if (isInlineSource(def)) {
       this.clearTimer(key);
       this.ingest(entry, inlineDataSet(def));
@@ -973,7 +972,7 @@ export class DataRegistry {
       entry.status.rowCount = entry.data.rows.length;
     } else {
       let data: DataSet = fromOwn ? served.data : { id: entry.def.id, columns: served.data.columns, rows: served.data.rows };
-      // A camera list carries each camera's check (Wave 8); a change in one is a change on air.
+      // A camera list carries each camera's check; a change in one is a change on air.
       if (this.media) {
         this.media.sync(entry.projectId, entry.def, data);
         if (entry.def.media) {

@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Operator timers on text layers, ticked locally (Phase 9 Wave B).
+ * Operator timers on text layers, ticked locally.
  *
  * The hub owns each timer's state — running, an anchor, time run before it —
  * and sends it under `$timers` with the hub's own clock. This works out the

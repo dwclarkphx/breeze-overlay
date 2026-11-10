@@ -66,7 +66,7 @@ export interface ValidationIssue {
    * Absent means `'error'`. A `'warning'` is legal and will save — it names
    * something that reads exactly like a fault on air but is a sizing or
    * timing choice the author may have meant, e.g. a mask `width`/`height` of
-   * 0 at the start of an animated reveal (MASKS.md §2.4). Every rule that
+   * 0 at the start of an animated reveal. Every rule that
    * predates this field is an error, unchanged.
    */
   severity?: 'error' | 'warning';
@@ -94,12 +94,12 @@ function tableNames(comp: Composition): Set<string> {
 }
 
 /**
- * Layer rules (CYCLE.md, Wave 6). The JSON schema checks shape; this checks
+ * Layer rules. The JSON schema checks shape; this checks
  * sense — one subject per condition, a row to read, and an effect the layer
  * can actually show.
  */
 /**
- * A media layer (Wave 8). The settings that only mean something in a table
+ * A media layer. The settings that only mean something in a table
  * cell, or for one kind, are warnings rather than errors — they are harmless,
  * just ignored, and the author may be about to move the layer into a table.
  */
@@ -209,7 +209,7 @@ function checkRules(layer: Layer, path: string, inCell: boolean): ValidationIssu
 }
 
 /**
- * Drives (Wave R, CHARTS.md §3): what the JSON schema cannot say about one.
+ * Drives: what the JSON schema cannot say about one.
  *
  * A property both keyframed and driven is refused, not resolved by
  * precedence: GSAP would own it twice and whichever wrote last would win on
@@ -266,7 +266,7 @@ function checkDrives(layer: Layer, path: string, inCell: boolean): ValidationIss
   return issues;
 }
 
-/** Arcs, trims, plots and counts (Wave R, CHARTS.md §4) on the layers they belong to. */
+/** Arcs, trims, plots and counts on the layers they belong to. */
 function checkChartProps(layer: Layer, path: string): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   if (layer.type === 'shape') {
@@ -325,8 +325,8 @@ function toIssues(errors: ErrorObject[] | null | undefined): ValidationIssue[] {
 export interface SemanticContext {
   /**
    * The project's asset index, for the one rule that needs it — a mask
-   * `src` resolving to a real file. Assets live in a sibling `assets.json`
-   * (ASSETS.md §6), not in the `Project` document this module otherwise
+   * `src` resolving to a real file. Assets live in a sibling `assets.json`,
+   * not in the `Project` document this module otherwise
    * validates, so a caller with no asset list simply gets that one rule
    * skipped rather than a required argument it may not have.
    */
@@ -339,7 +339,7 @@ export interface SemanticContext {
  *
  * Not a path parser. The rule is the SVG spec's own: path data must begin with
  * a moveto, and a path that does not is in error and renders *nothing* — the
- * silent failure this phase keeps finding, and the exact result of a
+ * silent failure paths are prone to, and the exact result of a
  * hand-edited `d` that lost its leading `M`. Everything past that first
  * command is left to the renderer, which is the only thing that can really
  * judge it and which degrades gracefully when it cannot.
@@ -384,7 +384,7 @@ export function validateCompositionSemantics(
   /** Resolved channel → the layer path that claimed it, for the duplicate check. */
   const claimedChannels = new Map<string, string>();
 
-  // Typed fields (Phase 9 Wave B): what JSON Schema cannot say about one.
+  // Typed fields: what JSON Schema cannot say about one.
   for (const [name, spec] of Object.entries(comp.fields ?? {})) {
     for (const message of fieldSpecProblems(spec)) issues.push({ path: `/fields/${name}`, message });
   }
@@ -458,8 +458,8 @@ export function validateCompositionSemantics(
         }
 
         /*
-         * `overrides` is the third field in this family, found while Wave C was
-         * building its editor (MASKS.md §4).
+         * `overrides` is the third field in this family, found while
+         * building its editor.
          *
          * It reaches a nested composition through `expandComposition`, which
          * stops at an independent layer and never walks the child — and the
@@ -635,7 +635,7 @@ export function validateCompositionSemantics(
         issues.push(...checkChartProps(cell, cellPath));
         if (cell.type === 'media') {
           issues.push(...checkMedia(cell, cellPath, true, (layer.cycle?.dwell ?? 0) > 0));
-          // One failed tile would turn a whole grid of cameras (Wave 8).
+          // One failed tile would turn a whole grid of cameras.
           if (cell.onError === 'skip' && layer.rowsPerPage !== 1) {
             issues.push({
               path: `${cellPath}/onError`,
@@ -755,7 +755,7 @@ export function validateCompositionSemantics(
       }
 
       /*
-       * Following (CYCLE.md, Wave 4). Following itself is an error — it would
+       * Following. Following itself is an error — it would
        * filter on its own page key and empty itself. A leader this composition
        * does not contain is only a warning: it may be in the composition this
        * one is mounted into, which a single-composition check cannot see.
@@ -792,7 +792,7 @@ export function validateCompositionSemantics(
 
     if (layer.mask) {
       /*
-       * MASKS.md §2.4 — there were no rules for `mask` before Wave A; the
+       * The rules for `mask` live here; the
        * JSON schema checks shape (required x/y/width/height) and stops.
        */
       const m = layer.mask;
@@ -941,9 +941,9 @@ export function validateProject(doc: unknown, assets?: readonly AssetRef[]): Val
 /**
  * Validate a `datasources.json` document.
  *
- * The schema for these has existed since Wave 1 but nothing called it, so it
+ * The schema for these existed for a long time before anything called it, so it
  * was never exercised — a source type could be declared wrongly and the only
- * symptom would be a graphic that quietly failed to fetch. Adding a Wave-2
+ * symptom would be a graphic that quietly failed to fetch. Adding a
  * source type to `dataSourcesSchema` and to `DataSourceDef` are two separate
  * edits, and nothing was checking that they agreed.
  *
@@ -1022,7 +1022,7 @@ export function validateDataSources(doc: unknown): ValidationResult {
       });
     }
 
-    // Wave R: a text is kept in the project or fetched, never both.
+    // A text is kept in the project or fetched, never both.
     if (source.type === 'text') {
       if (source.body !== undefined && source.url !== undefined) {
         semantic.push({ path: `/sources/${i}/url`, message: 'a text is kept in the project or fetched from a URL — not both' });
@@ -1086,7 +1086,7 @@ export function validateDataSources(doc: unknown): ValidationResult {
   });
 
   /*
-   * Backups (CYCLE.md, Wave 5). Another source in this file, not itself, and
+   * Backups. Another source in this file, not itself, and
    * no loop: A backed by B backed by A would each serve the other's rows the
    * moment both failed, and neither holds anything anyone could show.
    */
@@ -1094,7 +1094,7 @@ export function validateDataSources(doc: unknown): ValidationResult {
   for (const source of sources) if (source.fallback !== undefined) fallbackOf.set(source.id, source.fallback);
   sources.forEach((source, i) => {
     /*
-     * Media checks (Wave 8) read a column. Only a source that declares its
+     * Media checks read a column. Only a source that declares its
      * columns can be checked here — a feed's arrive with its rows — and the
      * four the check adds must not collide with the source's own.
      */

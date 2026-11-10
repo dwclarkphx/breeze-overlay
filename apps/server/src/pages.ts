@@ -72,7 +72,7 @@ const GSAP_MAX_EXCLUSIVE = [4, 0, 0] as const;
  * visible in the OBS/vMix source list, which is where an operator looks.
  */
 // i18n-ignore-start — every string below is emitted into /play's inline
-// script, and /play is frozen English (I18N.md §2). They reach a console and a
+// script, and /play is frozen English. They reach a console and a
 // tab title, not an operator, and the same bytes have to appear on every
 // install for a support conversation about them to mean anything.
 function gsapTags(): string {
@@ -137,7 +137,7 @@ function escapeJson(value: unknown): string {
  * its data, so a bundle needs no request of its own between painting and having
  * text. `apps/server/client/i18n.ts` is the other half.
  *
- * Never called from `playPage`. `/play` is frozen English (I18N.md §2) and the
+ * Never called from `playPage`. `/play` is frozen English and the
  * whole point of that is an output that is byte-identical on every install.
  */
 /**
@@ -155,7 +155,7 @@ function pageT(): Translate {
  * `lang` and `dir` for a page that is translated.
  *
  * `/play` keeps its own hardcoded `lang="en"` and no `dir` at all: it is frozen
- * English (I18N.md §2), and a graphic does not mirror — the stage is a 1:1
+ * English, and a graphic does not mirror — the stage is a 1:1
  * preview of what goes to air, so a mirrored one would be lying.
  */
 /** The copy icon, and the tick that replaces it once copied. Markup, not text. */
@@ -211,7 +211,7 @@ export interface PlayPageOptions {
   /** The project's mode, inlined for the same reason — first paint is already in it. */
   mode?: string;
   /**
-   * `?bg=` / `?matte=1` (Phase 9 Wave C), already parsed. Written into the head
+   * `?bg=` / `?matte=1`, already parsed. Written into the head
    * rather than applied by the bundle, so the first frame a switcher sees is
    * already opaque or already a key — never a transparent flash.
    */
@@ -248,7 +248,7 @@ export function playPage(opts: PlayPageOptions): string {
    */
   const elements = sceneElements(composition);
   return `<!doctype html>
-<html lang="en">  <!-- Frozen: /play is byte-identical on every install (I18N.md §2). -->
+<html lang="en">  <!-- Frozen: /play is byte-identical on every install. -->
 <head>
 <meta charset="utf-8">
 <title>${escapeHtml(displayName(composition.name, composition.id))}${signalSuffix(opts.keying)} — Breeze</title>
@@ -293,13 +293,13 @@ export interface OutPageOptions {
 }
 
 /**
- * The output page, `/out/<project>/<output>` (Phase 9 Wave A). Frozen English
+ * The output page, `/out/<project>/<output>`. Frozen English
  * like `/play`, and the same bundle: `player.js` sees `output` and mounts what
  * the rundown takes onto it instead of one composition of its own.
  */
 export function outPage(opts: OutPageOptions): string {
   return `<!doctype html>
-<html lang="en">  <!-- Frozen: an output page is byte-identical on every install (I18N.md §2). -->
+<html lang="en">  <!-- Frozen: an output page is byte-identical on every install. -->
 <head>
 <meta charset="utf-8">
 <title>${escapeHtml(`@${opts.output}`)}${signalSuffix(opts.keying)} — Breeze</title>
@@ -338,7 +338,7 @@ export interface RundownPageOptions {
 }
 
 /**
- * The rundown panel, `/rundown/<project>` (Phase 9 Wave A): prepare a list
+ * The rundown panel, `/rundown/<project>`: prepare a list
  * before the service, see each item cued in the preview, take it with one key.
  * The page is a shell; `client/rundown.ts` builds it.
  */
@@ -459,7 +459,7 @@ export interface ControlPanelBinding {
   sourceName?: string;
   /** Source type — shown so an operator knows why a field is not editable. */
   sourceType?: string;
-  /** Typed-field declaration (Phase 9 Wave B) — picks the control the panel draws. */
+  /** Typed-field declaration — picks the control the panel draws. */
   field?: FieldSpec;
 }
 
@@ -476,26 +476,26 @@ export interface ControlPageOptions {
    * websocket frame looks like a source that is not working.
    */
   datasets?: Record<string, DataSet>;
-  /** Fetched sources this graphic reads, with their backups — the Data block (Wave 5). */
+  /** Fetched sources this graphic reads, with their backups — the Data block. */
   sources?: Array<{ id: string; name: string; backup?: string; backupName?: string; media?: boolean; fed?: boolean }>;
-  /** The project's mode, and every mode its rules name — the Mode block (Wave 6). */
+  /** The project's mode, and every mode its rules name — the Mode block. */
   mode?: string;
   modes?: string[];
-  /** Operator timers this graphic shows, its mounts' included — the Timers block (Phase 9 Wave B). */
+  /** Operator timers this graphic shows, its mounts' included — the Timers block. */
   timers?: TimerRef[];
-  /** The bin, for an asset field's picker (Phase 9 Wave B). Only sent when the graphic has one. */
+  /** The bin, for an asset field's picker. Only sent when the graphic has one. */
   assets?: Array<{ path: string; name: string; kind: string }>;
-  /** Sport game tables this graphic reads — the Game block (Phase 9 Wave B). */
+  /** Sport game tables this graphic reads — the Game block. */
   games?: Array<{ id: string; name: string; sport: string; ruleset: string; teams?: string }>;
-  /** Roll transports this graphic shows, its mounts' included — the Scroll block (Wave R). */
+  /** Roll transports this graphic shows, its mounts' included — the Scroll block. */
   scrolls?: ScrollRef[];
-  /** Polls this graphic reads — the Poll block (Wave R). */
+  /** Polls this graphic reads — the Poll block. */
   polls?: ControlPanelPoll[];
-  /** Operator-changeable texts this graphic reads — the Text block (Wave R). */
+  /** Operator-changeable texts this graphic reads — the Text block. */
   texts?: ControlPanelText[];
 }
 
-/** A poll on the panel (Wave R): what the Poll block draws its buttons from. */
+/** A poll on the panel: what the Poll block draws its buttons from. */
 export interface ControlPanelPoll {
   id: string;
   name: string;
@@ -505,7 +505,7 @@ export interface ControlPanelPoll {
   editable: boolean;
 }
 
-/** A text an operator may change on air (Wave R, decided 2026-10-26). */
+/** A text an operator may change on air (decided 2026-10-26). */
 export interface ControlPanelText {
   id: string;
   name: string;
@@ -589,7 +589,7 @@ function sceneElementsBlock(elements: SceneElement[]): string {
  * Deliberately large touch targets and high contrast — it gets used in a dim
  * gallery, in a hurry, often one-handed.
  */
-/** The sport rulesets' names, for the Game block's caption (Phase 9 Wave B). */
+/** The sport rulesets' names, for the Game block's caption. */
 const SPORT_RULESET_KEYS = SPORT_TEMPLATES.flatMap((sport) => sport.rulesets.map((r) => r.labelKey));
 
 export function controlPage(opts: ControlPageOptions): string {
@@ -610,7 +610,7 @@ ${FAVICON_LINK}
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <style>
-  :root{--ui-tracking:1;--ui-caps:uppercase;/* I18N.md §6.3 — a multiplier and a switch, so a script group is one rule. */${DARK_ROOT_DECLS}
+  :root{--ui-tracking:1;--ui-caps:uppercase;/* A multiplier and a switch, so a script group is one rule. */${DARK_ROOT_DECLS}
         /* Theme tokens (src/theme.ts) under this page's own names. */
         --go:var(--success-emphasis);--stop:var(--danger-emphasis);--fed:var(--success);--line:var(--border)}
   :root:lang(ar),:root:lang(fa),:root:lang(ur),:root:lang(he),:root:lang(zh),:root:lang(ja),:root:lang(ko),:root:lang(hi){--ui-tracking:0;--ui-caps:none}
@@ -706,7 +706,7 @@ ${FAVICON_LINK}
   .page-bar{height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:8px}
   .page-bar i{display:block;height:100%;width:0;background:var(--accent)}
   .page-row .verbs button{min-height:44px;padding:10px 8px;font-size:15px}
-  /* The Game block (Phase 9 Wave B): two sides, big scores, buttons for thumbs. */
+  /* The Game block: two sides, big scores, buttons for thumbs. */
   .game{border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:12px;background:var(--panel2)}
   .game-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px}
   .game-sides{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -729,7 +729,7 @@ ${FAVICON_LINK}
   .seg{display:flex;gap:4px;flex-wrap:wrap}
   .seg button[aria-pressed="true"],.game-cell .typed-toggle[aria-pressed="true"]{background:var(--go);border-color:var(--success-border);color:var(--on-accent)}
   .game-reset{margin-top:10px;width:100%;min-height:40px}
-  /* Typed fields (Phase 9 Wave B): score buttons big enough for a thumb. */
+  /* Typed fields: score buttons big enough for a thumb. */
   .typed{display:flex;gap:8px;align-items:stretch;flex-wrap:wrap}
   .typed input[type=number]{flex:1 1 6em;min-width:5em;font:600 20px/1 ui-monospace,Consolas,monospace;text-align:center}
   .typed input[type=color]{width:5em;height:48px;padding:2px}
@@ -737,7 +737,7 @@ ${FAVICON_LINK}
   .typed-btn{min-height:48px;min-width:56px;padding:8px 12px;font-size:18px}
   .typed-toggle{min-height:48px;min-width:96px}
   .typed-toggle[aria-pressed="true"]{background:var(--go);border-color:var(--success-border);color:var(--on-accent)}
-  /* Timers (Phase 9 Wave B): the readout is the point, big enough to read across a gallery. */
+  /* Timers: the readout is the point, big enough to read across a gallery. */
   .timer-row{border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:10px;background:var(--panel2)}
   .timer-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px}
   .timer-name{color:var(--muted);font:12px/1 ui-monospace,Consolas,monospace}
@@ -749,7 +749,7 @@ ${FAVICON_LINK}
   .timer-set input{flex:1 1 auto;min-width:0}
   .timer-set button{min-height:44px;padding:8px 14px;width:auto}
   .page-row button[aria-pressed="true"]{outline:2px solid var(--key);outline-offset:-2px}
-  /* Rolls, polls and texts (Wave R). */
+  /* Rolls, polls and texts. */
   .scroll-row,.poll,.text-row{border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:10px;background:var(--panel2)}
   .scroll-head,.poll-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px}
   .scroll-name{color:var(--muted);font:12px/1 ui-monospace,Consolas,monospace}
@@ -1022,7 +1022,7 @@ export function escapeHtml(s: string): string {
  * like leaving the application.
  */
 const SHELL_CSS = `
-  :root{--ui-tracking:1;--ui-caps:uppercase;/* I18N.md §6.3 — a multiplier and a switch, so a script group is one rule. */${DARK_ROOT_DECLS}--live:var(--success)}
+  :root{--ui-tracking:1;--ui-caps:uppercase;/* A multiplier and a switch, so a script group is one rule. */${DARK_ROOT_DECLS}--live:var(--success)}
   :root:lang(ar),:root:lang(fa),:root:lang(ur),:root:lang(he),:root:lang(zh),:root:lang(ja),:root:lang(ko),:root:lang(hi){--ui-tracking:0;--ui-caps:none}
   *{box-sizing:border-box}
   body{font:14px/1.6 system-ui,"Segoe UI","Noto Sans Arabic","Noto Sans Hebrew","Noto Sans SC","Noto Sans TC","Noto Sans JP","Noto Sans KR","Noto Sans Devanagari",sans-serif;background:var(--bg);color:var(--text);
@@ -1656,7 +1656,7 @@ export function peersPage(
   const companions = new Set(
     report.sockets.filter((p) => p.kind === 'companion').map((p) => p.ip),
   ).size;
-  /* OGraf pointer graphics (Phase 9 Wave D): graphics inside someone else's
+  /* OGraf pointer graphics: graphics inside someone else's
      renderer, following this server's data. Not browser sources of ours — no
      command here reaches them — so counted under the sources, not listed. */
   const ografs = report.sockets.filter((p) => p.kind === 'ograf').length;

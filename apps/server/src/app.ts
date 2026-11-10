@@ -41,7 +41,7 @@ import { fail } from './errors.js';
 import { FAVICON_SVG } from './favicon.js';
 import { themeScript } from './theme.js';
 import { NotFoundError, ensureDataDirs, listProjects } from './store.js';
-import { APP_VERSION, FORMAT_VERSION } from './version.js';
+import { APP_ID, APP_VERSION, FORMAT_VERSION } from './version.js';
 
 export interface BuildAppOptions {
   /** Install the demo project when the data dir is empty. Default true. */
@@ -102,7 +102,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const AUTH_ROUTES = new Set(['/api/auth', '/api/auth/login', '/api/auth/logout']);
 
   /*
-   * CORS on the OGraf routes (Phase 9 Wave D), as the Server API suggests, so a
+   * CORS on the OGraf routes, as the Server API suggests, so a
    * web-based controller on another origin can call them. Before the key check
    * below, so a refusal carries the headers too and reads as a 401 in the
    * browser rather than as a CORS failure.
@@ -124,7 +124,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     const route = req.routeOptions?.url;
     if (!route) return;
     /*
-     * The OGraf Server API (Phase 9 Wave D): reads open, as on `/api`, and
+     * The OGraf Server API: reads open, as on `/api`, and
      * every action gated — they are all POST or PUT. An OGraf controller has no
      * session, so the key comes as a header, `?key=`, or `Authorization:
      * Bearer`, the one header a generic HTTP client is most likely to offer.
@@ -149,20 +149,20 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
      */
     const isControlAction =
       (route.startsWith('/api/control/:id/:compId/') && route !== '/api/control/:id/:compId/state') ||
-      // Choosing a source's backup puts different rows on air (Wave 5), and
-      // setting the mode changes what every graphic shows (Wave 6).
+      // Choosing a source's backup puts different rows on air, and
+      // setting the mode changes what every graphic shows.
       route === '/api/projects/:id/datasources/:sourceId/use' ||
-      // Checking every camera now makes a request to each of them (Wave 8).
+      // Checking every camera now makes a request to each of them.
       route === '/api/projects/:id/datasources/:sourceId/media/check' ||
       // The same two on a server-level source (0.80.0), which every linked project shows.
       route === '/api/server/datasources/:sourceId/use' ||
       route === '/api/server/datasources/:sourceId/media/check' ||
-      // A score tapped from a header-less button (Phase 9 Wave B).
+      // A score tapped from a header-less button.
       route === '/api/projects/:id/datasources/:sourceId/game' ||
-      // A poll vote from one, the same (Wave R).
+      // A poll vote from one, the same.
       route === '/api/projects/:id/datasources/:sourceId/poll' ||
       route === '/api/projects/:id/mode/set' ||
-      // Rundown verbs and output verbs put things on air (Phase 9 Wave A).
+      // Rundown verbs and output verbs put things on air.
       (route.startsWith('/api/rundown/:id/:rundownId/') && route !== '/api/rundown/:id/:rundownId/state') ||
       (route.startsWith('/api/out/:id/:output/') && route !== '/api/out/:id/:output/state');
     if (!isControlAction && req.method === 'GET') return;
@@ -222,15 +222,17 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
 
   /*
-   * `version` is the app, `formatVersion` is the composition document.
+   * `app` says what is answering, `version` which build of it, and
+   * `formatVersion` is the composition document — three questions, each under
+   * the name that means what it says.
    *
-   * This used to report `version: 1` — the format version wearing the app's
-   * name — so a health check asked "what is running?" answered "1" no matter
-   * which build it was. Both are reported now, each under the name that means
-   * what it says.
+   * `app` is a fixed string so a control surface pointed at the wrong port can
+   * tell Breeze from any other server that happens to return JSON with a
+   * `version` in it. It never changes; a client matches it exactly.
    */
   app.get('/healthz', async () => ({
     ok: true,
+    app: APP_ID,
     version: APP_VERSION,
     formatVersion: FORMAT_VERSION,
   }));

@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Rundowns, cue → take, and outputs (Phase 9 Wave A, PHASE9.md §3).
+ * Rundowns, cue → take, and outputs.
  *
  *  - `GET/PUT /api/projects/:id/rundowns` — the document, `rundowns.json`.
  *  - `/api/rundown/:id/:rundownId/{cue,next,prev,take,out}` — verbs, GET or
@@ -24,7 +24,7 @@
  * outro of what is on air before the new values go up.
  *
  * Live state is in memory, like the hub's: a server restart forgets what was
- * armed. Persisting it is Wave F's.
+ * armed.
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -58,7 +58,7 @@ import { readMode } from '../mode.js';
 import { outPage, rundownPage } from '../pages.js';
 import { panelBindingsFor } from '../panel-bindings.js';
 import { keyingOf } from './play.js';
-import { RundownValidationError, getComposition, readProject, readRundowns, writeRundowns } from '../store.js';
+import { RundownValidationError, getComposition, listChannels, readProject, readRundowns, writeRundowns } from '../store.js';
 
 /** A refusal the routes turn into a status and an error code. */
 export class RundownError extends Error {
@@ -272,7 +272,7 @@ export class RundownController {
   /**
    * Put a composition on an output without playing it, and return the output's
    * routing channel. What a TAKE does before it plays, and all an OGraf `load`
-   * onto an output does (Phase 9 Wave D) — one list of mounts per output,
+   * onto an output does — one list of mounts per output,
    * whichever of the two put a graphic there.
    *
    * A mount already there keeps its place in the stack unless `layer` says
@@ -376,7 +376,7 @@ export class RundownController {
       const onAir = onAirId ? rundown.items.find((i) => i.id === onAirId) : undefined;
       let state = 'idle';
       let renderers = 0;
-      // Rolls on the target (Wave R) — the panel's transport for each.
+      // Rolls on the target — the panel's transport for each.
       const scrolls = this.hub.scrollSummary(item.output ? outputChannel(projectId, item.output) : `${projectId}/${item.composition}`);
       if (item.output) {
         renderers = this.hub.state(outputChannel(projectId, item.output)).renderers;
@@ -516,12 +516,26 @@ export async function registerRundownRoutes(
     app.post(`/api/out/:id/:output/${name}`, handler);
   }
 
+  /**
+   * The timer or roll ids of everything mounted on an output, in mount order —
+   * what a blank `id` is resolved against there, since the output's timers and
+   * rolls are shared by its mounts.
+   */
+  const declaredOn = async (projectId: string, output: string, kind: 'timers' | 'scrolls'): Promise<string[]> => {
+    const channels = await listChannels(projectId);
+    const ids = new Set<string>();
+    for (const mount of rundowns.mountsOf(projectId, output)) {
+      for (const id of channels.find((c) => c.channel === mount.composition)?.[kind] ?? []) ids.add(id);
+    }
+    return [...ids];
+  };
+
   /** An output's timers — shared by every composition mounted on it (`ControlHub.timerHome`). */
   const outTimer = async (req: OutReq, reply: FastifyReply) =>
     answer(reply, async () => {
       assertOutput(req.params.output);
       await readProject(req.params.id);
-      const parsed = readTimerRequest(params(req));
+      const parsed = readTimerRequest(params(req), await declaredOn(req.params.id, req.params.output, 'timers'));
       if (!parsed.ok) throw new RundownError(400, parsed.code, parsed.params);
       const channel = outputChannel(req.params.id, req.params.output);
       const delivered = hub.dispatch(channel, {
@@ -540,12 +554,12 @@ export async function registerRundownRoutes(
   app.get('/api/out/:id/:output/timer', outTimer);
   app.post('/api/out/:id/:output/timer', outTimer);
 
-  /** An output's roll transport (Wave R) — shared by every composition mounted on it, like its timers. */
+  /** An output's roll transport — shared by every composition mounted on it, like its timers. */
   const outScroll = async (req: OutReq, reply: FastifyReply) =>
     answer(reply, async () => {
       assertOutput(req.params.output);
       await readProject(req.params.id);
-      const parsed = readScrollRequest(params(req));
+      const parsed = readScrollRequest(params(req), await declaredOn(req.params.id, req.params.output, 'scrolls'));
       if (!parsed.ok) throw new RundownError(400, parsed.code, parsed.params);
       const channel = outputChannel(req.params.id, req.params.output);
       const delivered = hub.dispatch(channel, {

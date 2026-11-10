@@ -8,7 +8,7 @@
 /**
  * Backup and restore.
  *
- * The acceptance criterion in ASSETS.md is "a composition backed up to a zip
+ * The acceptance criterion is "a composition backed up to a zip
  * that restores into a clean install and plays", so the round trip is tested as
  * a round trip: build a bundle, restore it under a new id, and assert the
  * restored project is the same document with the same asset bytes on disk.
@@ -326,7 +326,7 @@ describe('stripSecrets', () => {
 describe('the bundle carries no runtime', () => {
   it('holds only data files', async () => {
     /*
-     * ASSETS.md's rule, asserted rather than trusted: a bundle is inert without
+     * The rule, asserted rather than trusted: a bundle is inert without
      * a Breeze install, which is what makes it a backup rather than an export.
      * A `.js` appearing in here would mean someone had added a self-restoring
      * archive or an embedded preview player.

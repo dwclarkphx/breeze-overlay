@@ -15,7 +15,7 @@
  * line and logs normally.
  *
  * Terminal text is English, like every other log line. It is a diagnostic
- * surface (I18N.md §5.1), read by whoever is running the box, and it needs to
+ * surface, read by whoever is running the box, and it needs to
  * match what gets pasted into an issue.
  *
  * Drawn with plain ANSI escapes on the alternate screen — no dependency. The
@@ -281,7 +281,7 @@ export function renderFrame(input: FrameInput, width: number, height: number, co
   const panels = input.sockets.filter((p) => p.kind === 'panel' || p.kind === 'editor');
   const monitors = input.sockets.filter((p) => p.kind === 'monitor').length;
   const previews = input.sockets.filter((p) => p.kind === 'preview').length;
-  // OGraf pointer graphics (Phase 9 Wave D) — graphics in another renderer, not panels.
+  // OGraf pointer graphics — graphics in another renderer, not panels.
   const ografs = input.sockets.filter((p) => p.kind === 'ograf').length;
   const extras = [
     monitors > 0 ? `+${monitors} element readout${monitors === 1 ? '' : 's'}` : '',

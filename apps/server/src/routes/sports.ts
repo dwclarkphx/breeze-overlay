@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Sport templates on the server (Phase 9 Wave B, sports.ts).
+ * Sport templates on the server (sports.ts).
  *
  *  - `GET /api/sports` — the catalogue: sports, rulesets, timers, scoring
  *    buttons and each table's columns, for a control surface building buttons.

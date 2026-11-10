@@ -59,8 +59,8 @@ describe('crawl separator presets', () => {
   });
 
   it('names a catalogue key rather than English', () => {
-    // The rule this phase turns on: @breeze/schema carries identifiers and
-    // values, never display text (I18N.md §2.1).
+    // The rule localisation turns on: @breeze/schema carries identifiers and
+    // values, never display text.
     for (const preset of CRAWL_SEPARATOR_PRESETS) {
       expect(preset.labelKey).toMatch(/^schema\.crawl\.separator\.[a-z]+$/);
     }

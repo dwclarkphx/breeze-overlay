@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * The on-stage bezier surface — the arithmetic half (MASKS.md §5.1, D′).
+ * The on-stage bezier surface — the arithmetic half (D′).
  *
  * `path-geometry.ts` edits a path; this decides *which* path a selected layer
  * offers to the stage, where its anchors and handles are drawn, and what a

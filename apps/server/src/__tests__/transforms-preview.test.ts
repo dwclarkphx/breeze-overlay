@@ -7,7 +7,7 @@
 
 /**
  * The source preview runs a `lookup` or `union` against the project's other
- * live sources (CYCLE.md, Wave 7) — the author sees the brought columns before
+ * live sources — the author sees the brought columns before
  * saving, not an empty column that fills in only on air.
  */
 
@@ -53,7 +53,7 @@ const forecast = {
   rows: [{ code: 'phx', hi: 104 }, { code: 'FLG', hi: 78 }],
 };
 
-describe('preview with Wave 7 transforms', () => {
+describe('preview with date, lookup and union transforms', () => {
   it('brings columns across from a saved source by key', async () => {
     const res = await app.inject({
       method: 'POST',

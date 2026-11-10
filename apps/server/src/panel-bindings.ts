@@ -7,7 +7,7 @@
 
 /**
  * The fields an operator can set on a composition — what the rundown panel's
- * item editor offers (Phase 9 Wave A).
+ * item editor offers.
  *
  * The same rule as the control panel's form: editable bindings, minus any fed
  * by a fetched source (pushing a typed value over live rows is the 0.50.0 bug),

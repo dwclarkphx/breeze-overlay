@@ -13,8 +13,8 @@
  * `node:fs` and nothing else: no parser, no dependency, no build step, so it
  * can run before `pnpm install` has finished being interesting.
  *
- * Five rules fail the build and two only report. The split matters
- * (I18N.md §10): on a one-maintainer project a gate that fails every time an
+ * Five rules fail the build and two only report. The split matters:
+ * on a one-maintainer project a gate that fails every time an
  * English string is added — because 27 catalogues instantly fall behind — is a
  * gate that gets skipped within a fortnight, and a skipped gate is worse than
  * no gate.
@@ -207,7 +207,7 @@ for (const swept of config.swept ?? []) {
   );
 }
 
-// 6. Direction: physical properties do not mirror (I18N.md §6.2).
+// 6. Direction: physical properties do not mirror.
 //
 // Scoped to the files that actually style chrome. Everything pinned `dir="ltr"`
 // — the timeline, the stage canvas, `/play` — is listed in `config.direction`

@@ -28,7 +28,7 @@ import type { BreezeRuntime } from './runtime.js';
 export interface BreezeGlobals {
   play: () => void;
   stop: () => void;
-  /** With a table name, turns only that table's page (CYCLE.md). */
+  /** With a table name, turns only that table's page. */
   next: (table?: string) => void;
   /** Back a page while holding, otherwise back to the previous hold. */
   prev: (table?: string) => void;
@@ -43,13 +43,13 @@ export interface BreezeGlobals {
   /** Freeze self-paging tables, or set them going again. */
   cycle: (state: 'hold' | 'resume', table?: string) => boolean;
   /**
-   * The mode layer rules read (Wave 6): with a value, set it on this page;
+   * The mode layer rules read: with a value, set it on this page;
    * without, read it. `''` clears it. On air the server sets it project-wide.
    */
   mode: (value?: string) => string;
   update: (payload: string | Record<string, unknown>) => void;
   /**
-   * Cue → take (Phase 9 Wave A): new values and PLAY as one step. On air, the
+   * Cue → take: new values and PLAY as one step. On air, the
    * outro runs first, so the new values never appear on the old pose.
    */
   take: (payload?: string | Record<string, unknown>) => void;

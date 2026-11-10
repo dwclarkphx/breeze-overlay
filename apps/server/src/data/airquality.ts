@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Air quality (Phase 8.6 Wave 3 — CYCLE.md): AirNow's EnviroFlash feeds, and
+ * Air quality: AirNow's EnviroFlash feeds, and
  * CAMS through Open-Meteo, onto one column set.
  *
  * **AirNow via EnviroFlash.** The public RSS feeds per reporting area —

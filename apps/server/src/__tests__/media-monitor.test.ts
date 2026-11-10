@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Wave 8 on the server: JPEG frames out of a stream, the media checks, the
+ * Media on the server: JPEG frames out of a stream, the media checks, the
  * camera proxy, and the check's columns on a published source.
  *
  * Nothing touches the network: `open` is replaced by a function answering

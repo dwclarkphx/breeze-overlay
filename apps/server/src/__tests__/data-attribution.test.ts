@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Show attribution in the loader (Phase 9 Wave 0): the adapter's rows come back
+ * Show attribution in the loader: the adapter's rows come back
  * with `attribution` blanked when the box is unticked, and untouched when the
  * property is absent — the case every project saved before 0.79.0 is in.
  */

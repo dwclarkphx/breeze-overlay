@@ -5,7 +5,7 @@
 // Copyright (C) 2026 Dave Clark
 // SPDX-License-Identifier: MPL-2.0
 
-/** Switcher-friendly outputs (Phase 9 Wave C): `?bg=` and `?matte=1`. */
+/** Switcher-friendly outputs: `?bg=` and `?matte=1`. */
 
 import { describe, expect, it } from 'vitest';
 

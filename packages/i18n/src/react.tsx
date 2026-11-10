@@ -10,7 +10,7 @@
  * point so the server and the esbuild client bundles never pull it in.
  *
  * Deliberately thin. The formatter, the catalogue and the locale rules live in
- * plain TypeScript because three different renderers share them (I18N.md §4.1);
+ * plain TypeScript because three different renderers share them;
  * this file is a context and two hooks over the top.
  */
 

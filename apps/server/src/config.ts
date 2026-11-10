@@ -37,7 +37,7 @@ export interface Config {
    * UI language for the editor and the operator pages, as a BCP-47 tag.
    *
    * An installation setting, not a per-browser one, and deliberately not
-   * detected (I18N.md §4.4): a Breeze server belongs to one operation, and
+   * detected: a Breeze server belongs to one operation, and
    * `Accept-Language` would let two crew members see two languages for the same
    * buttons. Raw here — `i18n.ts` resolves it against what actually shipped and
    * logs once if it did not match. Never consulted by `/play` or `/api/*`.
@@ -126,7 +126,7 @@ function envSecrets(name: string): Record<string, string> {
  * `BREEZE_DATA_SECRETS_FILE=/etc/breeze/secrets.json` — a JSON object of
  * `id → value`, merged over anything the environment variable set.
  *
- * Added in Wave 2 because a Google service-account key is a multi-line JSON
+ * It exists because a Google service-account key is a multi-line JSON
  * document with commas and equals signs in it, and the comma-separated
  * `id=value` env format cannot represent one. A value may be a string or, for
  * exactly that case, a nested object — which is re-serialised here so every
@@ -206,7 +206,7 @@ export const projectDataSourcesFile = (id: string) =>
  * scope has somewhere to grow without a second top-level file.
  */
 export const serverSourcesFile = () => path.join(config.dataDir, 'server', 'datasources.json');
-/** The asset index. Split out of project.json in Phase 7.5 — see ASSETS.md §6. */
+/** The asset index, kept apart from project.json so an upload does not rewrite every composition. */
 export const projectAssetsFile = (id: string) => path.join(projectDir(id), 'assets.json');
-/** Rundowns (Phase 9 Wave A) — beside the asset index, under the same write lock. */
+/** Rundowns — beside the asset index, under the same write lock. */
 export const projectRundownsFile = (id: string) => path.join(projectDir(id), 'rundowns.json');

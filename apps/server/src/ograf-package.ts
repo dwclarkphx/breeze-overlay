@@ -6,20 +6,20 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * The OGraf pointer package (Phase 9 Wave D, D2): a manifest and a small
+ * The OGraf pointer package (D2): a manifest and a small
  * `graphic.mjs`, for an OGraf renderer to host.
  *
  * **It carries no runtime.** The module frames this server's own output page
  * for the composition (`/play/<project>/<composition>?hub=data&ograf=1`) and
  * forwards each OGraf action to it by `postMessage`; the page answers with the
- * real runtime (`OgrafAdapter`). So Phase 7.5's rule — a bundle carries data,
- * never the runtime — holds, the LICENSING draft's objection to a
- * self-contained export does not arise, and GSAP is still loaded from this
+ * real runtime (`OgrafAdapter`). So the backup rule — a bundle carries data,
+ * never the runtime — holds, a self-contained export's licensing
+ * question does not arise, and GSAP is still loaded from this
  * server's vendor copy, never shipped in the zip.
  *
  * A frame rather than an `import()` of the runtime into the renderer's own
- * document, which is what PHASE9.md first sketched, for four reasons found
- * when building it: the runtime injects its styles and fonts into the
+ * document, for four reasons:
+ * the runtime injects its styles and fonts into the
  * document head, and the renderer's page is not ours to restyle; GSAP is a
  * global (`window.gsap`), and a second copy in a renderer already hosting
  * another graphic's GSAP is a collision waiting to happen; the module would
@@ -67,7 +67,7 @@ export function serverOrigin(raw: unknown): string | null {
  */
 export function pointerModule(opts: { server: string; projectId: string; compositionId: string; name: string }): string {
   const S = JSON.stringify;
-  return `/*! Breeze Overlay — OGraf pointer graphic (Phase 9 Wave D)
+  return `/*! Breeze Overlay — OGraf pointer graphic
  *  Mozilla Public License 2.0 — https://github.com/dwclarkphx/breeze-overlay
  *
  *  This file carries no renderer. It frames the live graphic from the Breeze

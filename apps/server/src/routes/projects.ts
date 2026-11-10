@@ -321,8 +321,8 @@ export async function registerProjectRoutes(app: FastifyInstance, registry?: Dat
       }
       const comp = { ...req.body, id: req.params.compId, name: name as string };
       // Asset-aware, so a mask `src` pointing at nothing in the bin is
-      // refused here rather than rendering as no mask at all, silently
-      // (MASKS.md §2.4).
+      // refused here rather than rendering as no mask at all, silently.
+      //
       const { assets } = await readAssets(req.params.id);
       assertValidComposition(comp, assets);
       return putComposition(req.params.id, comp);

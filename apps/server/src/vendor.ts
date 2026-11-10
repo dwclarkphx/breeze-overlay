@@ -72,7 +72,7 @@ function read(dir = 'gsap'): string {
 export const GSAP_VERSION = read();
 
 /**
- * hls.js (Wave 8), staged by `scripts/vendor-hls.mjs`. Not a script tag on
+ * hls.js, staged by `scripts/vendor-hls.mjs`. Not a script tag on
  * the page: the runtime loads it the first time a media layer plays an HLS
  * stream, so this is the URL it is handed, cache-busted the same way.
  */

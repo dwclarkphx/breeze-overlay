@@ -8,7 +8,7 @@
 /**
  * Google Sheets API v4 — the *private* sheet adapter.
  *
- * The published-CSV route from Wave 1 stays the recommended path and the panel
+ * The published-CSV route stays the recommended path and the panel
  * still says so: it needs no credential, no Cloud project and no consent
  * screen, and it is one URL an operator can paste. This adapter exists for the
  * case that route cannot serve — a sheet holding anything the league does not

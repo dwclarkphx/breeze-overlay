@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * The camera proxy and the media-check API (CYCLE.md, Wave 8).
+ * The camera proxy and the media-check API.
  *
  * `/media/…` is outside `/api` on purpose: output pages load it from `<img>`
  * tags that cannot send a key, exactly like `/play` and `/assets`. What it

@@ -8,8 +8,8 @@
 /**
  * The API client's request shaping.
  *
- * Written after every `DELETE` in the editor turned out to be broken in the
- * browser while passing its server-side tests. The helper set
+ * These guard against a `DELETE` that is broken in the
+ * browser while passing its server-side tests. The helper once set
  * `content-type: application/json` on every request including bodyless ones,
  * and Fastify rightly refuses a request that promises JSON and sends none.
  * `app.inject` sets no content-type unless given a payload, so the server suite

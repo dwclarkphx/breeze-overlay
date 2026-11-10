@@ -139,8 +139,7 @@ function buildMaskShape(
   }
 
   /*
-   * A path mask — Wave D, and the reason the phase's first bullet ("shape/path
-   * masks") finally reads literally.
+   * A path mask.
    *
    * `x`/`y` translate it and nothing reads `width`/`height`: the geometry is
    * all in `d`, exactly as it is for a path *shape*, which is what lets one

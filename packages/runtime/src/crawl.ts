@@ -107,7 +107,7 @@ export function crawlBlockText(items: string[], separator: string): string {
 }
 
 /**
- * One column of a DataSet as ticker items — the Wave-2 RSS-feeds-a-ticker path.
+ * One column of a DataSet as ticker items — the RSS-feeds-a-ticker path.
  *
  * Two decisions worth stating, both about what *not* to put on air:
  *

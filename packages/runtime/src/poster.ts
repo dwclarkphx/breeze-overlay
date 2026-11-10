@@ -9,7 +9,7 @@
  * One frame from a video, captured and then let go of.
  *
  * **What this is for.** A still (`RuntimeOptions.still`) exists to be a
- * thumbnail, and until now a video layer inside one built a real `<video>` with
+ * thumbnail, and without this a video layer inside one builds a real `<video>` with
  * `preload="auto"` — a decoder and a download per thumbnail, held for as long
  * as the panel showing it was on screen. Twenty compositions with a stinger in
  * them were twenty of those, none of which would ever play a frame. The fix is

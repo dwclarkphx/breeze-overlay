@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * The asset index — `projects/<id>/assets.json` (ASSETS.md §6, Phase 7.5).
+ * The asset index — `projects/<id>/assets.json`.
  *
  * Three things are under test here and only one of them is visible through the
  * HTTP surface:

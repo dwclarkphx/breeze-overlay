@@ -33,16 +33,15 @@ afterAll(async () => {
 });
 
 describe('health and shell', () => {
-  it('reports healthy, and says which build is answering', async () => {
+  it('reports healthy, and says what is answering and which build', async () => {
     /*
-     * `version` used to be the composition format version — a hardcoded 1 — so
-     * a health check asked "what is running?" answered the same thing for every
-     * build ever shipped. The two are separate fields now because they are
-     * separate facts on separate clocks.
+     * Three separate facts: `app` never changes and is how a client tells
+     * Breeze from another server on the wrong port, `version` moves with every
+     * release, and `formatVersion` is the composition document's own clock.
      */
     const res = await app.inject({ method: 'GET', url: '/healthz' });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ ok: true, version: APP_VERSION, formatVersion: 1 });
+    expect(res.json()).toEqual({ ok: true, app: 'breeze-overlay', version: APP_VERSION, formatVersion: 1 });
     expect(APP_VERSION).toMatch(/^\d+\.\d+/);
   });
 
@@ -267,7 +266,7 @@ describe('control API', () => {
   });
 });
 
-describe('table verbs (CYCLE.md)', () => {
+describe('table verbs', () => {
   const base = '/api/control/demo-1iixd/l3rd-name-2a94g';
 
   it('accepts prev, over GET and POST', async () => {
@@ -428,7 +427,7 @@ describe('control page — source-fed fields', () => {
     expect(res.body).toContain('datasets:');
     expect(res.body).toContain('dataKey:');
   });
-  it('lists the fetched sources a graphic reads, for the Data block (Wave 5)', async () => {
+  it('lists the fetched sources a graphic reads, for the Data block', async () => {
     const sourcesOf = (body: string) => {
       const match = /sources: (\[.*?\]),\n/s.exec(body);
       return match ? (JSON.parse(match[1]!) as Array<Record<string, unknown>>) : null;
@@ -501,7 +500,7 @@ describe('output page', () => {
     expect(res.body).toContain('autoPlay: false');
   });
 
-  /* Switcher-friendly outputs (Phase 9 Wave C). */
+  /* Switcher-friendly outputs. */
 
   it('paints ?bg= into the head, outranking the bundle’s transparent rule', async () => {
     const res = await app.inject({ method: 'GET', url: '/play/demo-1iixd/l3rd-name-2a94g?bg=green' });
@@ -613,7 +612,7 @@ describe('interface themes', () => {
   });
 });
 
-describe('project mode (Wave 6)', () => {
+describe('project mode', () => {
   const BASE = '/api/projects/demo-1iixd/mode';
 
   it('starts with none, sets one, and says so to a page loaded afterwards', async () => {

@@ -8,16 +8,15 @@
 /**
  * Asset routes — upload, list, delete.
  *
- * Phase 2 accepted an asset bin for uploading images and fonts, and it never
- * landed: `registerAsset` and `assetPath` have sat in the store with no caller,
- * and every image, video and font has been referenced by a path typed into a
- * text field and copied into the project directory by hand. That is workable
- * for one demo and untenable for a station, and Phase 7 cannot start without
- * it — "upload a ProRes .mov and transcode it" has nowhere to put the .mov.
+ * Without these routes every image, video and font is a path typed into a
+ * text field and a file copied into the project directory by hand. That is
+ * workable for one demo and untenable for a station, and transcoding depends
+ * on them — "upload a ProRes .mov and transcode it" needs somewhere to put
+ * the .mov.
  *
  * **Raw body, not multipart.** The upload is a `POST` whose entire body is the
- * file, with the name in the query string. Same argument as the CSV parser in
- * Wave 1 and the XML reader in Wave 2, and it lands harder here than either:
+ * file, with the name in the query string. Same argument as the CSV parser
+ * and the XML reader, and it lands harder here than either:
  * multipart is a parser, parsers have bugs, and this one would sit directly in
  * front of a filesystem write taking an attacker-supplied filename. A server
  * that cannot parse multipart cannot be confused by a crafted boundary,
@@ -69,8 +68,8 @@ import {
  * Above the app-wide `bodyLimit` (64MB), which is sized for compositions
  * carrying base64 assets, because a ProRes 4444 stinger is routinely hundreds
  * of megabytes — that is the format's whole point and the reason it needs
- * transcoding at all. Rejecting one at the door would make the phase's
- * headline feature unusable.
+ * transcoding at all. Rejecting one at the door would make
+ * transcoding unusable.
  */
 const MAX_ASSET_BYTES = 1024 * 1024 * 1024;
 

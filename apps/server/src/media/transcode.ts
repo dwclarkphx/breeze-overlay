@@ -9,7 +9,7 @@
  * Transcode queue — ProRes 4444 (and anything else ffmpeg reads) → VP9/WebM
  * with alpha.
  *
- * The Phase 7 acceptance criterion was "an animated
+ * The goal is "an animated
  * alpha stinger plays inside a graphic in OBS with clean edges". A ProRes 4444
  * `.mov` is what a motion designer delivers and what no browser will play, so
  * this is the conversion that makes the format usable at all.
@@ -74,7 +74,7 @@ export interface TranscodeJob {
  *
  * **Both alpha flags are defensive, not load-bearing on a current ffmpeg, and
  * this comment used to say otherwise.** Measured against ffmpeg 8.0.1 /
- * libvpx-vp9 by `dev/transcode-check.mjs`: dropping `-pix_fmt yuva420p` still
+ * libvpx-vp9: dropping `-pix_fmt yuva420p` still
  * produced alpha, because ffmpeg negotiates `yuva420p` from an alpha-bearing
  * source; and encoding with and without `-auto-alt-ref 0` produced
  * **byte-identical** output, including on a 75-frame source with fast,
@@ -91,7 +91,7 @@ export interface TranscodeJob {
  * for a day claiming it did.** The reasoning looked sound — PNG frames decode
  * as `rgba` and arrive through the concat demuxer, so the negotiation that
  * saves the ProRes path is a different negotiation — and it is wrong.
- * `dev/sequence-check.mjs` encoded a 24-frame rgba sequence with the flag
+ * A check encoded a 24-frame rgba sequence with the flag
  * removed and got `alpha_mode=1` and an alpha plane that decodes to the same
  * ramp, left 62.0 / right 191.0 of 255, identical to the flagged encode.
  * ffmpeg negotiates `yuva420p` here too.

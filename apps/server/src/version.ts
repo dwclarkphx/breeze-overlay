@@ -48,10 +48,13 @@ function read(): string {
 /** Resolved once — the file cannot change under a running process. */
 export const APP_VERSION = read();
 
+/** What `/healthz` answers as. Fixed for the life of the product — clients match it exactly. */
+export const APP_ID = 'breeze-overlay';
+
 /**
  * Composition format version, which is a different thing and has its own
  * lifecycle: the app moves every week, the document format has been at 1 since
- * Phase 0. `/healthz` reported only this one, under the name `version`, which
- * is how a health check came to answer "1" when asked what was running.
+ * the first release. `/healthz` reports both, each under its own name, so a
+ * health check never answers "1" when asked what is running.
  */
 export { FORMAT_VERSION } from '@breeze/schema';

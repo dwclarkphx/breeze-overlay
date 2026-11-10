@@ -12,7 +12,7 @@
  *
  * **Chrome only, never graphics.** The portal, editor, control panels, backup,
  * activity, connections and guide pages take a theme. `/play` does not and
- * never will: it is frozen (I18N.md §2) and what it draws is the show. Inside
+ * never will: it is frozen and what it draws is the show. Inside
  * the editor the same line holds — a theme recolours panels, the timeline and
  * the pasteboard around the stage, never a layer on it.
  *

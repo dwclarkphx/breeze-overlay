@@ -8,7 +8,7 @@
 // @vitest-environment happy-dom
 
 /**
- * Cue → take (Phase 9 Wave A): a TAKE never shows new values on the old pose.
+ * Cue → take: a TAKE never shows new values on the old pose.
  * Off air it is update + play; on air it runs the outro, then puts the new
  * values up and plays them in.
  */

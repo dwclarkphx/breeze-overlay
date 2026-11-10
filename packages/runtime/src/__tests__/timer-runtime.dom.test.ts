@@ -8,7 +8,7 @@
 // @vitest-environment happy-dom
 
 /**
- * Operator timers in the runtime (Phase 9 Wave B): the value is solved
+ * Operator timers in the runtime: the value is solved
  * locally from the hub's anchor, against the hub's clock, and a rule can read it.
  */
 

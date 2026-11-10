@@ -114,7 +114,7 @@ export const MENU: Array<{ type: DataSourceDef['type']; labelKey: string }> = [
   { type: 'air-quality', labelKey: 'editor.data.menuAirQuality' },
   { type: 'cap', labelKey: 'editor.data.menuCap' },
   { type: 'ftp', labelKey: 'editor.data.menuFtp' },
-  // Wave R: long text for rolls, and an operator-run poll.
+  // Long text for rolls, and an operator-run poll.
   { type: 'text', labelKey: 'editor.data.menuText' },
   { type: 'poll', labelKey: 'editor.data.menuPoll' },
 ];
@@ -124,7 +124,7 @@ export const MENU: Array<{ type: DataSourceDef['type']; labelKey: string }> = [
  *
  * These are not labels — they are the *value* a new source is created with.
  * `name` is persisted into the project and `columns[].label` renders on air
- * through a table layer, so both are operator data under I18N.md §1.3, the same
+ * through a table layer, so both are operator data, the same
  * call already made for `WEATHER_COLUMNS`. Translating them would mean a
  * project built in one locale and opened in another silently disagrees with
  * itself about what a column is called, and a graphic changing wording because
@@ -232,7 +232,7 @@ export function blankSource(type: DataSourceDef['type'], id: string): DataSource
     };
   }
 
-  // Wave R. Option labels are poll data, persisted and shown on air — frozen like NEW_NAME.
+  // Option labels are poll data, persisted and shown on air — frozen like NEW_NAME.
   if (type === 'text') {
     return {
       id,
@@ -356,7 +356,7 @@ export function DataPanel(): JSX.Element {
   const projectId = useEditor((s) => s.projectId);
   const [sources, setSources] = useState<DataSourceSummary[]>([]);
   const [editing, setEditing] = useState<DataSourceDef | null>(null);
-  /** The sport-template creator is open (Phase 9 Wave B). */
+  /** The sport-template creator is open. */
   const [templating, setTemplating] = useState(false);
   /** The server-level source picker is open (0.80.0). */
   const [linking, setLinking] = useState(false);
@@ -972,7 +972,7 @@ export function SourceEditor({ projectId, others, def, onChange, onCancel, onSav
             </label>
           )}
 
-          {/* Wave R: a poll arriving as a feed — the columns it needs, and a check of what came back. */}
+          {/* A poll arriving as a feed — the columns it needs, and a check of what came back. */}
           {(def.type === 'http-csv' || def.type === 'http-json' || def.type === 'sheets' || def.type === 'ftp' || def.type === 'xml') && (
             <PollFeedGuide data={preview?.ok ? preview.data : undefined} />
           )}
@@ -1089,7 +1089,7 @@ export function SourceEditor({ projectId, others, def, onChange, onCancel, onSav
         </>
       )}
 
-      {/* Any source can be a camera list — a manual table most of all. Not a text or a poll (Wave R). */}
+      {/* Any source can be a camera list — a manual table most of all. Not a text or a poll. */}
       {def.type !== 'text' && def.type !== 'poll' && def.type !== 'link' && <MediaFields def={def} onChange={onChange} />}
 
       <div className="source-actions">
@@ -1103,7 +1103,7 @@ export function SourceEditor({ projectId, others, def, onChange, onCancel, onSav
 /* ----------------------------------------------------------------- media */
 
 /**
- * A camera list's health in the source list (Wave 8): the counts, a button to
+ * A camera list's health in the source list: the counts, a button to
  * check every camera now, and — opened on demand — the ones that are not ok
  * and why.
  */
@@ -1172,7 +1172,7 @@ function MediaStatusLine({
 }
 
 /**
- * Media checks on a source (Wave 8): which column holds each camera's URL,
+ * Media checks on a source: which column holds each camera's URL,
  * and how the server watches them. Folded away until switched on.
  */
 function MediaFields({
@@ -1313,7 +1313,7 @@ function optionalNumber(text: string): number | undefined {
 }
 
 /**
- * When the data is bad (CYCLE.md, Wave 5): the guard a fetch must pass, how
+ * When the data is bad: the guard a fetch must pass, how
  * long last-good may stay up, and the backup that takes over.
  *
  * Folded away unless something is set — most sources need none of it, and the
@@ -1657,7 +1657,7 @@ function XmlRowPathField({
  * the overflow flag is: the cost of missing it is paid on air, or in a letter.
  */
 /**
- * **Show attribution** (Phase 9 Wave 0). Off blanks the `attribution` column —
+ * **Show attribution**. Off blanks the `attribution` column —
  * it never drops it — so an `attribution is empty → hide` rule takes the credit
  * strap off air. Warns, never refuses, where the licence obliges a credit.
  */
@@ -2687,7 +2687,7 @@ function FtpFields({
         </label>
       </div>
 
-      {/* Wave R: a lyrics or credits file dropped in the folder. */}
+      {/* A lyrics or credits file dropped in the folder. */}
       {def.format === 'text' && (
         <div className="field-row">
           <label>

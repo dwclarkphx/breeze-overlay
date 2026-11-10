@@ -23,6 +23,8 @@ import {
   assertKey,
   assetReferences,
   createProject,
+  collectScrolls,
+  collectTimers,
   displayName,
   makeKeyedId,
   pagedTables,
@@ -145,7 +147,7 @@ export async function writeProject(project: Project): Promise<Project> {
  *
  * `id` is a fully explicit id — the power-user escape hatch, kept because the
  * route has always accepted it. `key` is the guided path: the chosen half of
- * the id, with the generated half appended (SCENES.md §6). An explicit `id`
+ * the id, with the generated half appended. An explicit `id`
  * wins if both arrive.
  */
 export async function newProject(name: string, id?: string, key?: string): Promise<Project> {
@@ -343,6 +345,15 @@ export interface ChannelRef {
    * same function the runtime uses (`tableAddress` in `@breeze/schema`).
    */
   tables: PagedTable[];
+  /**
+   * Ids of the operator timers this channel shows, its mounts' included, in
+   * layer order. What a blank `id` on a timer command is resolved against
+   * (`defaultTimerId`), and what a control surface needs to offer a button per
+   * timer before any output has reported in.
+   */
+  timers: string[];
+  /** Ids of the rolls this channel shows, on the same terms as `timers`. */
+  scrolls: string[];
 }
 
 /*
@@ -368,6 +379,14 @@ export async function listChannels(projectId: string): Promise<ChannelRef[]> {
     const target = byId.get(ref);
     return target ? pagedTables(target, resolve) : [];
   };
+  const timersOf = (ref: string): string[] => {
+    const target = byId.get(ref);
+    return target ? collectTimers(target.layers, resolve).map((t) => t.id) : [];
+  };
+  const scrollsOf = (ref: string): string[] => {
+    const target = byId.get(ref);
+    return target ? collectScrolls(target.layers, resolve).map((s) => s.id) : [];
+  };
   const seen = new Set<string>();
 
   const claim = (entry: ChannelRef): void => {
@@ -392,6 +411,8 @@ export async function listChannels(projectId: string): Promise<ChannelRef[]> {
       sceneId: null,
       layerId: null,
       tables: pagedTables(comp, resolve),
+      timers: timersOf(comp.id),
+      scrolls: scrollsOf(comp.id),
     });
   }
 
@@ -406,6 +427,8 @@ export async function listChannels(projectId: string): Promise<ChannelRef[]> {
         // An element plays its own composition on its own runtime, so its
         // tables are addressed from that composition's top, not the scene's.
         tables: tablesOf(element.ref),
+        timers: timersOf(element.ref),
+        scrolls: scrollsOf(element.ref),
       });
     }
   }
@@ -484,10 +507,10 @@ export async function assetPath(projectId: string, relative: string): Promise<st
 /**
  * The asset index — `projects/<id>/assets.json`.
  *
- * Moved out of `project.json` in Phase 7.5. `registerAsset` used to do a full
- * `readProject` → mutate → `writeProject`, so every upload rewrote every
- * composition in the project: the document grew with asset count, composition
- * saves slowed as the bin filled, and two callers raced for one file.
+ * Kept out of `project.json`. Inside it, `registerAsset` would do a full
+ * `readProject` → mutate → `writeProject`, so every upload would rewrite every
+ * composition in the project: the document grows with asset count, composition
+ * saves slow as the bin fills, and two callers race for one file.
  */
 export interface AssetsFile {
   formatVersion: typeof FORMAT_VERSION;
@@ -629,7 +652,7 @@ export class RundownValidationError extends Error {
 }
 
 /**
- * A project's rundowns — `projects/<id>/rundowns.json` (Phase 9 Wave A).
+ * A project's rundowns — `projects/<id>/rundowns.json`.
  *
  * Missing is an empty list, not an error, and nothing is written until the
  * first save. A corrupt file reads as empty rather than taking the project
@@ -654,7 +677,7 @@ export async function readRundowns(projectId: string): Promise<RundownsFile> {
 
 /**
  * Replace a project's rundowns, under the same per-project lock as the asset
- * index (ASSETS.md Wave A): two panels saving at once queue rather than race.
+ * index: two panels saving at once queue rather than race.
  * Every item must name a composition the project has.
  */
 export async function writeRundowns(projectId: string, doc: RundownsFile): Promise<RundownsFile> {
@@ -785,7 +808,7 @@ export function imageDimensions(buf: Buffer): { width?: number; height?: number 
  * - **Case collisions.** A project directory is written on Windows and read
  *   inside the Alpine container the harness runs in. `Logo.PNG` and `logo.png`
  *   are one file on one and two on the other — the same reason project ids are
- *   forced lowercase (SCENES.md, URL keys).
+ *   forced lowercase (URL keys).
  * - **Cache busting.** Output pages are long-lived browser sources and assets
  *   are served immutable. Re-uploading a corrected logo under the same name
  *   would leave the old one on air until someone cleared a cache in vMix.
@@ -913,9 +936,9 @@ export interface AssetReplacement {
 /**
  * Replace one asset's bytes and repoint everything that referred to it.
  *
- * ASSETS.md §2 lists "no replace, no versioning" as the fifth wall: a corrected
+ * Assets are content-addressed, so without this a corrected
  * logo is a new path, and every `src` pointing at the old one keeps pointing at
- * it. §8 specifies the fix in one line — new bytes, rewrite every referencing
+ * it. The fix in one line — new bytes, rewrite every referencing
  * `src`, keep `supersedes` — and the usage index landed in 0.56.0 precisely so
  * this could be built. This is that.
  *

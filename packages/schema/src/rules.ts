@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Layers that react to data (CYCLE.md, Wave 6).
+ * Layers that react to data.
  *
  * A layer carries `rules`: each tests conditions against the data the graphic
  * has — a table cell's own row, a source's first row or row count, a dynamic
@@ -49,7 +49,7 @@ export interface RuleCondition {
   binding?: string;
   mode?: true;
   /**
-   * A timer on this graphic's channel, by id (Phase 9 Wave B): its value in
+   * A timer on this graphic's channel, by id: its value in
    * seconds — time left for a countdown — so `game lte 30` recolours the clock
    * for the last thirty seconds and `service lte 0` hides a finished countdown.
    */

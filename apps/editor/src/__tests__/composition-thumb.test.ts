@@ -181,7 +181,7 @@ describe('mountCompositionThumb', () => {
 
   it('applies exactly one scale, and the runtime applies none', () => {
     /*
-     * SCENES.md §3 records the inverse mistake: `scaleMode: 'contain'` makes the
+     * The inverse mistake is easy to make: `scaleMode: 'contain'` makes the
      * runtime measure its own container and scale itself, so a wrapper that also
      * scales double-applies.
      *

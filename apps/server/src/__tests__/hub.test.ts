@@ -300,7 +300,7 @@ describe('counting what a person has open', () => {
     expect(hub.peers()[0]?.kind).toBe('companion');
   });
 
-  it('counts an OGraf pointer graphic as no panel, and sends it state but never a command (Phase 9 Wave D)', () => {
+  it('counts an OGraf pointer graphic as no panel, and sends it state but never a command', () => {
     // A graphic in another system's renderer, following this channel's data.
     const hub = new ControlHub();
     const received: Array<{ type: string }> = [];
@@ -502,7 +502,7 @@ describe('late join (0.74.1)', () => {
     expect(hub.state(CHANNEL).sources[0]!.page).toHaveLength(64);
   });
 
-  it('marks a matte page among the outputs, and only a renderer may say it is one (Phase 9 Wave C)', () => {
+  it('marks a matte page among the outputs, and only a renderer may say it is one', () => {
     const hub = new ControlHub();
     fakeClient(hub, 'fill');
     fakeClient(hub, 'matte');
@@ -603,7 +603,7 @@ describe('heartbeats (0.75.0)', () => {
   });
 });
 
-describe('Phase 9 Wave A — take, retain and intercept', () => {
+describe('take, retain and intercept', () => {
   it('a take on a graphic is retained like an update', () => {
     const hub = new ControlHub();
     fakeClient(hub, 'out');
@@ -652,7 +652,7 @@ describe('Phase 9 Wave A — take, retain and intercept', () => {
   });
 });
 
-describe('timers (Phase 9 Wave B)', () => {
+describe('timers', () => {
   type Update = { type: 'command'; command: { verb: string; data?: Record<string, unknown> } };
   const timersIn = (m: ServerMessage | undefined) =>
     ((m as Update | undefined)?.command.data?.['$timers'] as { clock: number; timers: Record<string, { running: boolean }> } | undefined);

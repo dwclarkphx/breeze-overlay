@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Wave 5 in the schema (CYCLE.md): the guard a fetch must pass, and backups.
+ * In the schema: the guard a fetch must pass, and backups.
  * The registry applies both; these are the rules it applies.
  */
 

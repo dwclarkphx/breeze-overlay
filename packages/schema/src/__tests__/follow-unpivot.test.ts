@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Wave 4 in the schema: `unpivot`, and `TableLayer.follow`.
+ * In the schema: `unpivot`, and `TableLayer.follow`.
  *
  * Both directions again, for the cycle suite's reason: a validator only ever
  * asserted to reject cannot fail, because a fixture with an unrelated fault

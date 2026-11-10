@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * One source, many places (Phase 8.6 Wave 3 — CYCLE.md).
+ * One source, many places.
  *
  * The weather and air-quality adapters fetch one place at a time — no provider
  * here takes a list — so a statewide rotation is a loop. What this module owns
@@ -152,7 +152,7 @@ export async function eachPlace(
 /* ------------------------------------------------------------ local time */
 
 /*
- * Moved to `@breeze/schema` (`time.ts`) in Wave 7, so the output page's `date`
+ * These live in `@breeze/schema` (`time.ts`), so the output page's `date`
  * transform reads "today" exactly as these readers do. Re-exported here so
  * nothing that imported them from this module has to change.
  */

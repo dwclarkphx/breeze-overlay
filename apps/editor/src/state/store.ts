@@ -164,10 +164,9 @@ export interface EditorState {
    * unresolved refs, cycles, depth cut-offs.
    *
    * Published from the same place and for the same reason as the measurements
-   * above, but these are not measurements: `expandComposition` has produced
-   * them since Phase 6.5 and `TimelinePlan.warnings` has carried them the whole
-   * time under a comment reading "surfaced by the editor". Nothing surfaced
-   * them; they went to the browser console, where an author building a graphic
+   * above, but these are not measurements: `expandComposition` produces
+   * them and `TimelinePlan.warnings` carries them. Left unpublished
+   * they go to the browser console, where an author building a graphic
    * never looks. A nested comp pointing at a composition that was renamed
    * simply renders nothing, silently — which is the same failure mode
    * `compositionReferrers` refuses a delete to prevent.
@@ -203,7 +202,7 @@ export interface EditorState {
   /** Bumped whenever `datasets` changes, so the preview can re-push cheaply. */
   datasetRevision: number;
   /**
-   * The mode the stage previews in (Wave 6). The editor's own, not the air's:
+   * The mode the stage previews in. The editor's own, not the air's:
    * trying a First Alert rule here must not put the channel into it.
    */
   previewMode: string;
@@ -788,8 +787,8 @@ export const useEditor = create<EditorState>((set, get) => ({
           available: false,
           version: null,
           vp9Alpha: false,
-          // Shares a field with server-provided text, which stays English under
-          // I18N.md §1.2; translating only the client fallback would make one
+          // Shares a field with server-provided text, which stays English;
+          // translating only the client fallback would make one
           // field switch language by code path.
           // i18n-ignore-next-line
           reason: 'This server does not support transcoding.',
@@ -872,7 +871,7 @@ export const useEditor = create<EditorState>((set, get) => ({
           id: s.def.id,
           name: s.def.name,
           columns: s.columns,
-          // Sport template (Phase 9 Wave B): offers the sport's timers as presets.
+          // Sport template: offers the sport's timers as presets.
           ...(s.def.template ? { template: s.def.template } : {}),
         })),
         ...(changed
@@ -883,7 +882,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       return result.sources;
     } catch {
       // A project with no datasources.json is the normal case for everything
-      // built before this phase — an empty list, not an error banner.
+      // without data sources — an empty list, not an error banner.
       set({ dataSources: [] });
       return [];
     }

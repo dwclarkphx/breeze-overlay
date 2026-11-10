@@ -1515,7 +1515,7 @@
   "error.scrollAction": "action must be one of: {actions}",
   "error.scrollId": "a scroll id is lowercase letters, digits, - and _, up to 32",
   "error.scrollValue": "value must be a speed (1.5), a jog in seconds (-3, +0:05) or a position (1:30, 90, 50%)",
-  "error.pollAction": "a poll action is vote, set, open, close or reset",
+  "error.pollAction": "a poll action is vote, set, open, close, toggle or reset",
   "error.pollOption": "no such option in this poll",
   "error.pollValue": "a count is a whole number, and a set count is 0 or more",
   "error.pollOptions": "a poll needs 1 to 12 options, each with an id of letters, digits, - and _",

@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Media checks and the camera proxy (CYCLE.md, Wave 8).
+ * Media checks and the camera proxy.
  *
  * A source with `media` set is a list of cameras. Every `every` seconds each
  * row's URL is checked the way its kind needs — a snapshot fetched, one frame

@@ -360,7 +360,7 @@ export function parseFtpBody(
         ...(def.columns ? { columns: def.columns } : {}),
       });
     case 'text':
-      // Lyrics or credits dropped as a file (Wave R) — the text source's own parser.
+      // Lyrics or credits dropped as a file — the text source's own parser.
       return parseTextBody(def.id, body, {
         ...(def.split ? { split: def.split } : {}),
         ...(def.markup !== undefined ? { markup: def.markup } : {}),

@@ -8,10 +8,9 @@
 /**
  * Mounting a composition as a still, for a thumbnail.
  *
- * Phase 7.6's missing consumer. `RuntimeOptions.still` shipped in 0.58.0 and
- * nothing has called it since: a `composition` layer still renders as a `⧉`
- * glyph, so two nested comps in a layers panel look identical. This is the
- * piece that turns the glyph into a picture.
+ * The consumer of `RuntimeOptions.still`. Without it a `composition` layer
+ * renders as a `⧉` glyph, so two nested comps in a layers panel look
+ * identical. This is the piece that turns the glyph into a picture.
  *
  * Three traps are designed around here, all of them recorded before this file
  * existed and none of them obvious from the outside.
@@ -25,7 +24,7 @@
  *
  * **2. Scale once, on the outside.** `scaleMode: 'contain'` makes the runtime
  * measure its own container and scale itself; a wrapper that also scales
- * double-applies. SCENES.md §3 records this from the opposite direction. So the
+ * double-applies. So the
  * container is stage-sized, the runtime is pinned to `'none'`, and exactly one
  * `transform: scale()` sits above it.
  *
@@ -71,7 +70,7 @@ export interface ThumbMount {
    * The one thing a clone cannot copy is a running timer. A clock layer's
    * ticker belongs to the live runtime, so a preview freezes its clock at the
    * moment it was opened — acceptable for a hover, and the same tick-once gap
-   * Phase 7.6 already carries.
+   * every thumbnail carries.
    */
   preview: (maxSize: number) => HTMLElement;
   destroy: () => void;

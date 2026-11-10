@@ -8,7 +8,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * Phase 6 Wave 1 acceptance: a standings table driven
+ * Acceptance: a standings table driven
  * by a data source, re-sorting live on air.
  *
  * The unit tests cover the transform pipeline, the paging arithmetic and the

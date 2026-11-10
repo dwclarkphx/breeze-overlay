@@ -8,7 +8,7 @@
 // @vitest-environment happy-dom
 
 /**
- * OGraf actions against a real runtime (Phase 9 Wave D): `goToStep`, and the
+ * OGraf actions against a real runtime: `goToStep`, and the
  * `OgrafAdapter` a pointer package's page answers with — the step rule, when
  * each promise settles, and the custom actions.
  */

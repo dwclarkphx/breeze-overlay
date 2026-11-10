@@ -18,7 +18,7 @@
  * A page may carry more than one graphic. A composition holding `composition`
  * layers marked `independent` is a *scene*: the scene's own layers are one
  * runtime, and each independent element is another, on its own control channel,
- * triggered separately (SCENES.md §3). Single-graphic pages take exactly the
+ * triggered separately. Single-graphic pages take exactly the
  * path they always did.
  */
 
@@ -48,19 +48,19 @@ declare global {
       assetBase: string;
       /** Current DataSets by source id, inlined so tables paint with real rows. */
       datasets?: Record<string, DataSet>;
-      /** The project's mode (Wave 6), inlined so layer rules paint in it. */
+      /** The project's mode, inlined so layer rules paint in it. */
       mode?: string;
       /** Independently triggered elements, in paint order. Empty for a plain graphic. */
       elements?: SceneElement[];
       /**
-       * Set on an output page (`/out/<project>/<output>`, Phase 9 Wave A): the
+       * Set on an output page (`/out/<project>/<output>`): the
        * output's name. The page then has no composition of its own and mounts
        * whatever the rundown takes onto it, from `compositions`.
        */
       output?: string;
       /** Output pages: every composition in the project, so any of them can be mounted. */
       compositions?: Composition[];
-      /** Where hls.js is, for a media layer playing HLS (Wave 8). */
+      /** Where hls.js is, for a media layer playing HLS. */
       hlsScript?: string;
       autoPlay?: boolean;
       debug?: boolean;
@@ -118,7 +118,7 @@ function warnIfWindowSmallerThanStage(composition: Composition, scaled: boolean)
 /**
  * Page-level parameters that are never binding values.
  *
- * `bg` and `matte` (Phase 9 Wave C) shape the page for a hardware switcher; a
+ * `bg` and `matte` shape the page for a hardware switcher; a
  * field that happens to be called `bg` can still be set from the panel, just
  * not from this page's URL.
  */
@@ -301,7 +301,7 @@ function connectToHub(
         if (command.data) runtime.update(command.data);
         runtime.play();
         break;
-      // A cut stop (OGraf's skipAnimation, Phase 9 Wave D) is off at once.
+      // A cut stop (OGraf's skipAnimation) is off at once.
       case 'stop': if (command.cut) runtime.clear(); else runtime.stop(); break;
       case 'step': if (typeof command.step === 'number') runtime.goToStep(command.step, { cut: command.cut === true }); break;
       case 'next': runtime.next(table); break;
@@ -316,7 +316,7 @@ function connectToHub(
       case 'clear': runtime.clear(); break;
       case 'seek': runtime.seek(command.time ?? 0); break;
       case 'update': if (command.data) runtime.update(command.data); break;
-      // Cue → take (Phase 9 Wave A): on air, the outro runs before the values change.
+      // Cue → take: on air, the outro runs before the values change.
       case 'take': runtime.take(command.data ?? {}); break;
       default: return;
     }
@@ -401,7 +401,7 @@ function connectToHub(
   // panel's page readout is only as current as the last report.
   // `crawl` too (0.75.0): a ticker's copy changing is what a page joining late
   // has to match, and it happens with nobody pressing anything.
-  // `scroll` too (Wave R): a roll's extent is what the hub clamps the transport with.
+  // `scroll` too: a roll's extent is what the hub clamps the transport with.
   for (const event of ['play', 'hold', 'stop', 'finished', 'page', 'crawl', 'scroll'] as const) {
     runtime.on(event, () => report());
   }
@@ -433,7 +433,7 @@ function connectToHub(
 
 /**
  * Follow a channel's project-wide state without taking its commands
- * (`?hub=data`, Phase 9 Wave D).
+ * (`?hub=data`).
  *
  * For a pointer package's page inside an OGraf renderer. That graphic is its
  * own instance, driven by its OGraf controller, so the channel's PLAYs and
@@ -492,7 +492,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Answer OGraf actions from the frame's parent (`?ograf=1`, Phase 9 Wave D).
+ * Answer OGraf actions from the frame's parent (`?ograf=1`).
  *
  * The parent is a pointer package's `graphic.mjs`, in an OGraf renderer on
  * another origin, so the two talk by `postMessage`: `{ breezeOgraf: 1, id,
@@ -545,7 +545,7 @@ interface PageJoin {
 }
 
 /**
- * `?bg=` and `?matte=1` (Phase 9 Wave C).
+ * `?bg=` and `?matte=1`.
  *
  * The server has already written the CSS into the head, so the first frame is
  * right; the page reads the same parse only to tell the hub it is a matte and
@@ -707,14 +707,14 @@ async function main(): Promise<void> {
    */
   const join: PageJoin = { page: newPageId(), choice: params.get('sync')?.trim() || SYNC_AUTO, ...pageSignal(params) };
   /*
-   * `?hub=off` — no socket at all (Phase 9 Wave A). The rundown panel's
+   * `?hub=off` — no socket at all. The rundown panel's
    * "show cued" preview drives this page itself, through `window.breeze`, with
    * values that are not on air; following the channel would put the on-air
    * values back over them.
    */
   const hubMode = params.get('hub');
   if (hubMode === 'data') {
-    // An OGraf pointer graphic (Phase 9 Wave D): the project's data, not the channel's commands.
+    // An OGraf pointer graphic: the project's data, not the channel's commands.
     for (const item of mounted) followData(item.runtime, boot.projectId, item.channel);
   } else if (hubMode !== 'off') {
     for (const item of mounted) {
@@ -767,7 +767,7 @@ async function main(): Promise<void> {
 type OutputBoot = NonNullable<Window['__BREEZE__']> & { output: string };
 
 /**
- * An output page — `/out/<project>/<output>` (Phase 9 Wave A).
+ * An output page — `/out/<project>/<output>`.
  *
  * A channel with no composition of its own. It listens on the routing channel
  * `${project}/@<output>` and mounts whichever compositions the rundown takes
@@ -930,7 +930,7 @@ function runOutput(boot: OutputBoot): void {
           return;
         }
         /*
-         * OGraf on an output (Phase 9 Wave D): PLAY and a step go through this
+         * OGraf on an output: PLAY and a step go through this
          * routing channel, not the mount's own, because a composition loaded a
          * moment ago may not be mounted — or subscribed there — yet. Queued
          * here, the mount comes first and the command lands on it.

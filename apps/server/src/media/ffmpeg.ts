@@ -15,7 +15,7 @@
  * never redistributes ffmpeg. Detection also means an operator who
  * already has a tuned ffmpeg (hardware encoders, a specific libvpx) keeps it.
  *
- * Framed the same way as the FTP adapter in Phase 6 Wave 3: an optional
+ * Framed the same way as the FTP adapter: an optional
  * capability that announces its own absence, rather than a hard dependency that
  * makes the whole server refuse to start on a box that will never transcode
  * anything.

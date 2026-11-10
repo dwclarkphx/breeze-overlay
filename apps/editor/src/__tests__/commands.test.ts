@@ -407,10 +407,10 @@ describe('markers', () => {
 /*
  * Cells.
  *
- * The runtime has played per-cell keyframe tracks since 0.53.0, but the editor
- * could not address a cell: `mapLayer` and `findLayer` descended into a group's
- * `children` and stopped at a table. These cover the consequence of teaching
- * them about `row.cells` — that every command keyed on a layer id now reaches a
+ * The runtime plays per-cell keyframe tracks, and the editor can address a
+ * cell because `mapLayer` and `findLayer` descend into a table's `row.cells`
+ * as they do a group's `children`. These cover the consequence —
+ * that every command keyed on a layer id reaches a
  * cell without a case of its own.
  */
 describe('table cells', () => {

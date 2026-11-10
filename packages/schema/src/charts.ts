@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Data-driven graphics (Phase 9 Wave R, CHARTS.md).
+ * Data-driven graphics.
  *
  * No chart layer. A bar chart is a table whose bar cell has a `width` drive; a
  * gauge is an ellipse arc whose `sweep` is driven; a line chart is a path
@@ -144,7 +144,7 @@ function onEllipse(cx: number, cy: number, rx: number, ry: number, deg: number):
 }
 
 /**
- * SVG path data for an ellipse arc in a `width × height` box (CHARTS.md §4.2).
+ * SVG path data for an ellipse arc in a `width × height` box.
  *
  * With `thickness` the path runs along the middle of the ring and is meant to
  * be **stroked** `thickness` wide — which is what gives a gauge round caps for

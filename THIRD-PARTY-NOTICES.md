@@ -44,7 +44,7 @@ and loaded only by a graphic that plays an HLS stream.
 
 ## Bundled and installed dependencies
 
-122 packages. Licences present: MIT (103), ISC (7), BlueOak-1.0.0 (5), BSD-3-Clause (4), (MIT AND Zlib) (1), Apache-2.0 (1), Unlicense (1).
+103 packages. Licences present: MIT (90), ISC (6), BSD-3-Clause (4), (MIT AND Zlib) (1), Apache-2.0 (1), Unlicense (1).
 
 | Package | Version | License | Author | Homepage |
 | --- | --- | --- | --- | --- |
@@ -54,17 +54,13 @@ and loaded only by a graphic that plays an HLS stream.
 | `@egjs/children-differ` | 1.0.1 | MIT | NAVER Corp. | <https://github.com/naver/egjs-children-differ#readme> |
 | `@egjs/component` | 3.0.5 | MIT | NAVER Corp. | <https://naver.github.io/egjs-component> |
 | `@egjs/list-differ` | 1.0.1 | MIT | NAVER Corp. | <https://github.com/naver/egjs-list-differ#readme> |
-| `@fastify/accept-negotiator` | 2.0.1 | MIT | Aras Abbasi | <https://github.com/fastify/accept-negotiator#readme> |
 | `@fastify/ajv-compiler` | 4.0.5 | MIT | Manuel Spigolon | <https://github.com/fastify/ajv-compiler#readme> |
 | `@fastify/error` | 4.2.0 | MIT | Tomas Della Vedova | <https://github.com/fastify/fastify-error#readme> |
 | `@fastify/fast-json-stringify-compiler` | 5.1.0 | MIT | Manuel Spigolon | <https://github.com/fastify/fast-json-stringify-compiler#readme> |
 | `@fastify/forwarded` | 3.0.2 | MIT | Douglas Christopher Wilson | <https://github.com/fastify/forwarded#readme> |
 | `@fastify/merge-json-schemas` | 0.2.1 | MIT | Ivan Tymoshenko | <https://github.com/fastify/merge-json-schemas#readme> |
 | `@fastify/proxy-addr` | 5.1.0 | MIT | Douglas Christopher Wilson | <https://github.com/fastify/proxy-addr#readme> |
-| `@fastify/send` | 4.1.0 | MIT | TJ Holowaychuk | <https://github.com/fastify/send#readme> |
-| `@fastify/static` | 10.1.2 | MIT | Tommaso Allevi - @allevo | <https://github.com/fastify/fastify-static> |
 | `@fastify/websocket` | 11.3.0 | MIT | Matteo Collina | <https://github.com/fastify/fastify-websocket#readme> |
-| `@lukeed/ms` | 2.0.2 | MIT | Luke Edwards | <https://github.com/lukeed/ms#readme> |
 | `@pinojs/redact` | 0.4.0 | MIT | Matteo Collina | <https://github.com/pinojs/redact#readme> |
 | `@scena/dragscroll` | 1.4.0 | MIT | Daybrush | <https://github.com/daybrush/dragscroll#readme> |
 | `@scena/event-emitter` | 1.0.5 | MIT | Daybrush | <https://github.com/daybrush/gesture> |
@@ -77,25 +73,20 @@ and loaded only by a graphic that plays an HLS stream.
 | `asn1` | 0.2.6 | MIT | Joyent | <https://github.com/joyent/node-asn1#readme> |
 | `atomic-sleep` | 1.0.0 | MIT | David Mark Clements | <https://github.com/davidmarkclements/atomic-sleep#readme> |
 | `avvio` | 9.3.0 | MIT | Matteo Collina | <https://github.com/fastify/avvio#readme> |
-| `balanced-match` | 4.0.4 | MIT |  | <https://github.com/juliangruber/balanced-match#readme> |
 | `base64-js` | 1.5.1 | MIT | T. Jameson Little | <https://github.com/beatgammit/base64-js> |
 | `basic-ftp` | 6.2.0 | MIT | Patrick Juchli | <https://github.com/patrickjuchli/basic-ftp#readme> |
 | `bcrypt-pbkdf` | 1.0.2 | BSD-3-Clause |  | <https://github.com/joyent/node-bcrypt-pbkdf#readme> |
-| `brace-expansion` | 5.0.9 | MIT |  | <https://github.com/juliangruber/brace-expansion#readme> |
 | `buffer-from` | 1.1.2 | MIT |  | <https://github.com/LinusU/buffer-from#readme> |
 | `buildcheck` | 0.0.7 | MIT | Brian White | <https://github.com/mscdex/buildcheck#readme> |
 | `concat-stream` | 2.0.0 | MIT | Max Ogden | <https://github.com/maxogden/concat-stream#readme> |
-| `content-disposition` | 2.0.1 | MIT | Douglas Christopher Wilson | <https://github.com/jshttp/content-disposition#readme> |
 | `cookie` | 1.1.1 | MIT | Roman Shtylman | <https://github.com/jshttp/cookie#readme> |
 | `cpu-features` | 0.0.10 | MIT | Brian White | <https://github.com/mscdex/cpu-features#readme> |
 | `css-styled` | 1.0.8 | MIT | Daybrush | <https://github.com/daybrush/css-styled#readme> |
 | `css-to-mat` | 1.1.1 | MIT | Daybrush | <https://github.com/daybrush/css-to-mat#readme> |
 | `csstype` | 3.2.3 | MIT | Fredrik Nicol | <https://github.com/frenic/csstype#readme> |
-| `depd` | 2.0.0 | MIT | Douglas Christopher Wilson | <https://github.com/dougwilson/nodejs-depd#readme> |
 | `dequal` | 2.0.3 | MIT | Luke Edwards | <https://github.com/lukeed/dequal#readme> |
 | `duplexify` | 4.1.3 | MIT | Mathias Buus | <https://github.com/mafintosh/duplexify> |
 | `end-of-stream` | 1.4.5 | MIT | Mathias Buus | <https://github.com/mafintosh/end-of-stream> |
-| `escape-html` | 1.0.3 | MIT |  | <https://github.com/component/escape-html#readme> |
 | `fast-decode-uri-component` | 1.0.1 | MIT | Tomas Della Vedova - @delvedor | <https://github.com/delvedor/fast-decode-uri-component#readme> |
 | `fast-deep-equal` | 3.1.3 | MIT | Evgeny Poberezkin | <https://github.com/epoberezkin/fast-deep-equal#readme> |
 | `fast-json-stringify` | 7.0.1 | MIT | Matteo Collina | <https://github.com/fastify/fast-json-stringify#readme> |
@@ -108,8 +99,6 @@ and loaded only by a graphic that plays an HLS stream.
 | `find-my-way` | 9.7.0 | MIT | Tomas Della Vedova - @delvedor | <https://github.com/delvedor/find-my-way#readme> |
 | `framework-utils` | 1.1.0 | MIT | Daybrush | <https://github.com/daybrush/framework-utils#readme> |
 | `gesto` | 1.19.4 | MIT | Daybrush | <https://github.com/daybrush/gesto#readme> |
-| `glob` | 13.0.6 | BlueOak-1.0.0 | Isaac Z. Schlueter | <https://github.com/isaacs/node-glob#readme> |
-| `http-errors` | 2.0.1 | MIT | Jonathan Ong | <https://github.com/jshttp/http-errors#readme> |
 | `inherits` | 2.0.4 | ISC |  | <https://github.com/isaacs/inherits#readme> |
 | `ipaddr.js` | 2.4.0 | MIT | whitequark | <https://github.com/whitequark/ipaddr.js#readme> |
 | `json-schema-ref-resolver` | 3.0.0 | MIT | Ivan Tymoshenko | <https://github.com/fastify/json-schema-ref-resolver#readme> |
@@ -117,17 +106,12 @@ and loaded only by a graphic that plays an HLS stream.
 | `keycode` | 2.2.1 | MIT | Tim Oxley | <https://github.com/timoxley/keycode> |
 | `keycon` | 1.4.0 | MIT | Daybrush | <https://github.com/daybrush/keycon#readme> |
 | `light-my-request` | 6.6.0 | BSD-3-Clause | Tomas Della Vedova - @delvedor | <https://github.com/fastify/light-my-request#readme> |
-| `lru-cache` | 11.5.2 | BlueOak-1.0.0 | Isaac Z. Schlueter | <https://github.com/isaacs/node-lru-cache#readme> |
 | `marked` | 18.0.9 | MIT | Christopher Jeffrey | <https://marked.js.org> |
-| `mime` | 3.0.0 | MIT | Robert Kieffer | <https://github.com/broofa/mime#readme> |
-| `minimatch` | 10.2.6 | BlueOak-1.0.0 | Isaac Z. Schlueter | <https://github.com/isaacs/minimatch#readme> |
-| `minipass` | 7.1.3 | BlueOak-1.0.0 | Isaac Z. Schlueter | <https://github.com/isaacs/minipass#readme> |
 | `nan` | 2.28.0 | MIT |  | <https://github.com/nodejs/nan#readme> |
 | `on-exit-leak-free` | 2.1.2 | MIT | Matteo Collina | <https://github.com/mcollina/on-exit-or-gc#readme> |
 | `once` | 1.4.0 | ISC | Isaac Z. Schlueter | <https://github.com/isaacs/once#readme> |
 | `overlap-area` | 1.1.0 | MIT | Daybrush | <https://github.com/daybrush/overlap-area#readme> |
 | `pako` | 2.1.0 | (MIT AND Zlib) |  | <https://github.com/nodeca/pako#readme> |
-| `path-scurry` | 2.0.2 | BlueOak-1.0.0 | Isaac Z. Schlueter | <https://github.com/isaacs/path-scurry#readme> |
 | `pino` | 10.3.1 | MIT | Matteo Collina | <https://getpino.io> |
 | `pino-abstract-transport` | 3.0.0 | MIT | Matteo Collina | <https://github.com/pinojs/pino-abstract-transport#readme> |
 | `pino-std-serializers` | 7.1.0 | MIT | James Sumners | <https://github.com/pinojs/pino-std-serializers#readme> |
@@ -153,17 +137,14 @@ and loaded only by a graphic that plays an HLS stream.
 | `selecto` | 1.26.3 | MIT | Daybrush | <https://github.com/daybrush/selecto#readme> |
 | `semver` | 7.8.5 | ISC | GitHub Inc. | <https://github.com/npm/node-semver#readme> |
 | `set-cookie-parser` | 2.7.2 | MIT | Nathan Friedly | <https://github.com/nfriedly/set-cookie-parser> |
-| `setprototypeof` | 1.2.0 | ISC | Wes Todd | <https://github.com/wesleytodd/setprototypeof> |
 | `sonic-boom` | 4.2.1 | MIT | Matteo Collina | <https://github.com/pinojs/sonic-boom#readme> |
 | `split2` | 4.2.0 | ISC | Matteo Collina | <https://github.com/mcollina/split2#readme> |
 | `ssh2` | 1.17.0 | MIT | Brian White | <https://github.com/mscdex/ssh2#readme> |
 | `ssh2-sftp-client` | 12.1.1 | Apache-2.0 | Tim Cross | <https://github.com/theophilusx/ssh2-sftp-client#readme> |
-| `statuses` | 2.0.2 | MIT |  | <https://github.com/jshttp/statuses#readme> |
 | `stream-shift` | 1.0.3 | MIT | Mathias Buus | <https://github.com/mafintosh/stream-shift> |
 | `string_decoder` | 1.3.0 | MIT |  | <https://github.com/nodejs/string_decoder> |
 | `thread-stream` | 4.2.0 | MIT | Matteo Collina | <https://github.com/mcollina/thread-stream#readme> |
 | `toad-cache` | 3.7.4 | MIT | Igor Savin | <https://github.com/kibertoad/toad-cache> |
-| `toidentifier` | 1.0.1 | MIT | Douglas Christopher Wilson | <https://github.com/component/toidentifier#readme> |
 | `tweetnacl` | 0.14.5 | Unlicense | TweetNaCl-js contributors | <https://tweetnacl.js.org> |
 | `typedarray` | 0.0.6 | MIT | James Halliday | <https://github.com/substack/typedarray> |
 | `util-deprecate` | 1.0.2 | MIT | Nathan Rajlich | <https://github.com/TooTallNate/util-deprecate> |

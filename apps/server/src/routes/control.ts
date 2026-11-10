@@ -51,7 +51,7 @@ function eachMount(layers: Layer[], fn: (ref: string) => void): void {
 
 const VERBS: ControlVerb[] = ['play', 'stop', 'next', 'prev', 'clear'];
 
-/** Verbs that may be aimed at one table with `?table=` (CYCLE.md). */
+/** Verbs that may be aimed at one table with `?table=`. */
 const AIMABLE: ReadonlySet<ControlVerb> = new Set(['next', 'prev']);
 
 /**
@@ -333,16 +333,17 @@ export async function registerControlRoutes(
   app.post('/api/control/:id/:compId/cycle', cycle);
 
   /**
-   * Operator timers (Phase 9 Wave B): `?action=start|pause|toggle|reset|set|add`,
-   * `&id=` (default `main`), `&value=` for set (`8:00`) and add (`-10`).
+   * Operator timers: `?action=start|pause|toggle|reset|set|add`,
+   * `&id=`, `&value=` for set (`8:00`) and add (`-10`). A blank id is `main`
+   * if this graphic has it, otherwise its first timer; the answer says which.
    * Per channel — this graphic's own timers.
    */
   const timer = async (
     req: FastifyRequest<{ Params: { id: string; compId: string } }>,
     reply: FastifyReply,
   ) => {
-    await getChannel(req.params.id, req.params.compId);
-    const parsed = readTimerRequest(tableParams(req));
+    const ref = await getChannel(req.params.id, req.params.compId);
+    const parsed = readTimerRequest(tableParams(req), ref.timers);
     if (!parsed.ok) {
       reply.code(400);
       return fail(parsed.code, parsed.params);
@@ -366,17 +367,17 @@ export async function registerControlRoutes(
   app.post('/api/control/:id/:compId/timer', timer);
 
   /**
-   * The roll transport (Wave R, ROLLS.md §5.3): `?action=` one of play, pause,
+   * The roll transport: `?action=` one of play, pause,
    * toggle, forward, backward, reverse, faster, slower, speed, jog, seek,
-   * restart, end, reset; `&id=` (default `main`); `&value=` for speed (`1.5`),
+   * restart, end, reset; `&id=` (blank as for a timer); `&value=` for speed (`1.5`),
    * jog (`-3`) and seek (`1:30`, `50%`). Per channel, like timers.
    */
   const scroll = async (
     req: FastifyRequest<{ Params: { id: string; compId: string } }>,
     reply: FastifyReply,
   ) => {
-    await getChannel(req.params.id, req.params.compId);
-    const parsed = readScrollRequest(tableParams(req));
+    const ref = await getChannel(req.params.id, req.params.compId);
+    const parsed = readScrollRequest(tableParams(req), ref.scrolls);
     if (!parsed.ok) {
       reply.code(400);
       return fail(parsed.code, parsed.params);
@@ -465,7 +466,7 @@ export async function registerControlRoutes(
   app.post('/api/control/:id/:compId/update', update);
 
   /**
-   * Cue → take (Phase 9 Wave A): field values and PLAY as one command. On air,
+   * Cue → take: field values and PLAY as one command. On air,
    * the graphic runs its outro and comes back with the new values; off air it
    * simply plays them in. Body for POST, query string for GET — no fields is
    * allowed, and is a plain take of what the graphic already holds.
@@ -623,7 +624,7 @@ export async function registerControlRoutes(
       const bindings = [...feds, ...editable, ...overrides];
 
       /*
-       * The Data block (CYCLE.md, Wave 5): every fetched source this graphic
+       * The Data block: every fetched source this graphic
        * reads — its own layers and those of compositions mounted in it — with
        * its backup, so an operator can see a feed failing and put the backup
        * on air from the panel they already have open.
@@ -635,7 +636,7 @@ export async function registerControlRoutes(
         visited.add(comp.id);
         for (const ref of collectSources(comp)) {
           const def = byId.get(ref.id);
-          // A typed camera list is watched too: its cameras are checked (Wave 8).
+          // A typed camera list is watched too: its cameras are checked.
           const media = def ? standsFor(def).media : undefined;
           if (!def || !(isFedSource(def.type) || media) || watched.some((w) => w.id === def.id)) continue;
           const backup = def.fallback !== undefined ? byId.get(def.fallback) : undefined;
@@ -655,7 +656,7 @@ export async function registerControlRoutes(
       walk(composition);
 
       /*
-       * Sport game tables this graphic reads (Phase 9 Wave B) — the Game
+       * Sport game tables this graphic reads — the Game
        * block's score buttons. Any table of a template counts as reading the
        * sport: a recap that shows only the teams table still wants the score
        * on its panel, so the game table of the same sport and rules is found.
@@ -679,7 +680,7 @@ export async function registerControlRoutes(
         });
 
       /*
-       * Polls and operator-changeable texts this graphic reads (Wave R) — the
+       * Polls and operator-changeable texts this graphic reads — the
        * Poll and Text blocks. Read through its mounts too, as the Game block's
        * sport is: a results board mounted in a full-screen scene still wants
        * its tally buttons on the scene's panel.

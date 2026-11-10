@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Live media (CYCLE.md, Wave 8): what a media layer can play, how a URL says
+ * Live media: what a media layer can play, how a URL says
  * which kind it is, and the columns a source's media checks add to its rows.
  *
  * Shared by the renderer, which plays the URL, and the server, which checks it

@@ -275,7 +275,7 @@ export function createTableLayer(init: Partial<TableLayer> = {}): TableLayer {
 }
 
 /**
- * A credits roll (Wave R, ROLLS.md): placeholder rows from the same parser a
+ * A credits roll: placeholder rows from the same parser a
  * text source uses, so a fresh roll shows a heading, pairs and a gap — every
  * kind of row it can style — before any source is chosen.
  */

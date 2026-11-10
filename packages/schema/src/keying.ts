@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Switcher-friendly outputs (Phase 9 Wave C): `?bg=` and `?matte=1`.
+ * Switcher-friendly outputs: `?bg=` and `?matte=1`.
  *
  * An output page is transparent, which is right for a browser source and no use
  * to a hardware switcher: an ATEM's HDMI input has no alpha. Two query
@@ -21,7 +21,7 @@
  *
  * Both are CSS on the page, never a second renderer: the matte is a filter over
  * the same runtime, so it has the same timing and the same late join as the
- * fill beside it. NDI and SDI output are not goals (PHASE9.md §4).
+ * fill beside it. NDI and SDI output are not goals.
  *
  * Pure and DOM-free: the server renders the CSS into the page head so the first
  * frame is already right, and the output page reads the same parse to tell the
@@ -53,7 +53,7 @@ export interface OutputKeying {
   matte: boolean;
   /**
    * What was asked for and not done, in frozen English for the console — the
-   * same register as every other `/play` diagnostic (I18N.md §2).
+   * same register as every other `/play` diagnostic.
    */
   problems: string[];
 }

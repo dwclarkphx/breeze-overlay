@@ -6,11 +6,11 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Phase 8.6 Wave 3 (CYCLE.md): many places per source, NWS observations and
+ * Many places per source, NWS observations and
  * paired daily periods, the CAP reader, air quality, and expiry.
  *
  * The EnviroFlash payloads below are the Phoenix (area 111) feeds as captured
- * on 2026-09-27 (`dev/wxnow/`), trimmed only of whitespace. They are the test
+ * on 2026-09-27, trimmed only of whitespace. They are the test
  * that matters for the AirNow reader: it reads prose, and prose is what breaks.
  */
 

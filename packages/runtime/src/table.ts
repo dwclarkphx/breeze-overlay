@@ -270,15 +270,15 @@ export interface TableBlockOptions {
    */
   onRowsBuilt?: () => void;
   /**
-   * What cell rules read besides their row — sources, fields, the mode
-   * (Wave 6). Absent: rules see no data but their own row.
+   * What cell rules read besides their row — sources, fields, the mode.
+   * Absent: rules see no data but their own row.
    */
   ruleContext?: () => Omit<RuleContext, 'row'>;
-  /** Other sources, for `lookup` and `union` transforms (Wave 7). */
+  /** Other sources, for `lookup` and `union` transforms. */
   transformSource?: (id: string) => DataSet | undefined;
-  /** A media cell set to `skip` failed on the row with this key (Wave 8). */
+  /** A media cell set to `skip` failed on the row with this key. */
   onMediaFail?: (rowKey: string) => void;
-  /** A media cell showed a picture (Wave 8). */
+  /** A media cell showed a picture. */
   onMediaPlay?: (rowKey: string) => void;
 }
 
@@ -549,7 +549,7 @@ export class TableBlock {
   /* -------------------------------------------------------------- follow */
 
   /**
-   * Show only the rows whose `column` equals `key` (CYCLE.md, Wave 4).
+   * Show only the rows whose `column` equals `key`.
    *
    * Set by the runtime from the leader's page key. `null` is a real key — the
    * leader's page has no name — and matches nothing: a tile blank because its
@@ -723,7 +723,7 @@ export class TableBlock {
 
     this.paging = paging(
       this.view.rows.length,
-      // Rows step across the box for `axis: 'x'` (Wave R) — a column chart.
+      // Rows step across the box for `axis: 'x'` — a column chart.
       (layer.axis === 'x' ? layer.size?.width : layer.size?.height) ?? 0,
       height,
       gap,
@@ -876,7 +876,7 @@ export class TableBlock {
     el.className = 'bz-table-row';
     el.dataset['rowKey'] = key;
     if (layer.axis === 'x') {
-      // Rows step across (Wave R): each is a column `row.height` wide, the table's height tall.
+      // Rows step across: each is a column `row.height` wide, the table's height tall.
       el.style.width = `${layer.row.height}px`;
       el.style.height = '100%';
     } else {
@@ -921,7 +921,7 @@ export class TableBlock {
       nodes.el.dataset['cell'] = cellLayer.id;
       if (!hasKeyframes(cellLayer) && drivesTransform(cellLayer)) {
         /*
-         * A drive moving part of the transform (Wave R) makes GSAP its owner,
+         * A drive moving part of the transform makes GSAP its owner,
          * for the reason keyframed cells hand theirs over: a hand-written
          * string beside GSAP's cache is a value about to be discarded.
          */
@@ -953,7 +953,7 @@ export class TableBlock {
 
   /**
    * Write one data row into an existing row element's cells. `mode` is how
-   * driven cells reach their values (Wave R): a row just built jumps there, a
+   * driven cells reach their values: a row just built jumps there, a
    * row already on screen animates.
    */
   private writeRow(handle: RowHandle, row: DataRow, mode: DriveMode = 'tween'): void {
@@ -964,7 +964,7 @@ export class TableBlock {
       const counted = layer.type === 'text' && layer.count && cell.nodes.textInner ? countable(value) : null;
 
       if (counted !== null && layer.type === 'text' && layer.count && cell.nodes.textInner) {
-        // Counting to a new number (Wave R) — 38 % rolls up to 41 %.
+        // Counting to a new number — 38 % rolls up to 41 %.
         const inner = cell.nodes.textInner;
         countTo(inner, counted, layer.count, {}, this.opts.animator, () => applyTextFit(inner, layer.fit, layer.size?.width ?? 0));
       } else if (cell.column && layer.type === 'text' && cell.nodes.textInner) {
@@ -986,7 +986,7 @@ export class TableBlock {
   }
 
   /**
-   * A cell's drives against its own row (Wave R, CHARTS.md §3). `max` and
+   * A cell's drives against its own row. `max` and
    * `total` range over every row the table holds after its transforms, not
    * just this page's, so a bar means the same length on page two.
    */

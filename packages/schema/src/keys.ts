@@ -12,7 +12,7 @@
  * project id, composition id, and `CompositionLayer.channel`. Three copies of
  * these rules would drift, and the drift would present as a 404 in a truck.
  *
- * Two rules exist on purpose, and the split matters (SCENES.md §6):
+ * Two rules exist on purpose, and the split matters:
  *
  *  - `KEY_PATTERN` below is the *creation* rule — strict, lowercase, capped.
  *    Applied by the factories and the REST routes when something new is made.

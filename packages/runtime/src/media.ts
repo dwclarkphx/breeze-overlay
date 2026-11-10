@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * The media layer's player (CYCLE.md, Wave 8): one URL at a time, in whichever
+ * The media layer's player: one URL at a time, in whichever
  * element plays its kind, with a timeout that turns "nothing arrived" into a
  * failure the layer can act on.
  *

@@ -164,7 +164,7 @@ describe('reportAgeSeconds (0.76.0)', () => {
   });
 });
 
-describe('key pairs (Phase 9 Wave C)', () => {
+describe('key pairs', () => {
   const ticker = { layer: 'al', text: 'Flood Watch • ', staged: null, offsetMs: 1_000, passMs: 20_000 };
   const paged = {
     state: 'holding', time: 1, step: 1,

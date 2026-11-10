@@ -122,7 +122,7 @@ export const IGNORE_NEXT = /(?:\/\/|\/\*|<!--)\s*i18n-ignore-next-line\b/;
  * `<script>` — a `//` there is shipped to the browser, and an HTML comment
  * would land inside JavaScript. Eight markers that each degrade the output are
  * worse than one pair that states the real fact: this whole function belongs to
- * `/play`, and `/play` is frozen English by design (I18N.md §2).
+ * `/play`, and `/play` is frozen English by design.
  *
  * Deliberately not a file-level switch. A block names its own extent, so the
  * next string added below the `end` is still caught.
@@ -297,7 +297,7 @@ export function findCandidates(text, { markup = false, allow = new Set() } = {})
   return out;
 }
 
-/* ── direction (I18N.md §6.2) ───────────────────────────────────────────────
+/* ── direction ───────────────────────────────────────────────
  *
  * Physical direction properties do not mirror. One surviving `margin-left` in
  * a mirrored panel is the three-pixel wrongness nobody can name and everybody

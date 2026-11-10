@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * The scroll transport behind roll layers (Phase 9 Wave R, ROLLS.md §5).
+ * The scroll transport behind roll layers.
  *
  * **The runtime solves the position; the hub owns the state** — the timer's
  * rule (timer.ts), applied to a clock with a speed and a sign. A scroll's state
@@ -38,6 +38,12 @@ export const SCROLLS_UPDATE_KEY = '$scrolls';
 export const DEFAULT_SCROLL_ID = 'main';
 
 export const SCROLL_ID_PATTERN = /^[a-z0-9](?:[a-z0-9_-]{0,30}[a-z0-9])?$/;
+
+/** The roll a command means when it names none — the rule `defaultTimerId` follows, for rolls. */
+export function defaultScrollId(declared: readonly string[] = []): string {
+  if (declared.length === 0 || declared.includes(DEFAULT_SCROLL_ID)) return DEFAULT_SCROLL_ID;
+  return declared[0]!;
+}
 
 /** One scroll's state, as the hub retains it. Times are hub-clock epoch ms. */
 export interface ScrollState {

@@ -9,9 +9,9 @@
  * Resolving `BREEZE_LOCALE` once, at start-up.
  *
  * Nothing here reads `Accept-Language`, and nothing ever should: the locale is
- * an installation setting (I18N.md §4.4), so `/play`, `/api/*`, `/ws/control`
- * and `/healthz` are byte-identical whatever a client asks for. In Wave 1 the
- * only consumer is `/api/status`, which is how the editor — static files with
+ * an installation setting, so `/play`, `/api/*`, `/ws/control`
+ * and `/healthz` are byte-identical whatever a client asks for. It is served
+ * by `/api/status`, which is how the editor — static files with
  * no access to env — finds out what language to render in.
  *
  * A bad value must not stop the server. A typo in `.env` logs one line
@@ -35,7 +35,7 @@ import {
 
 import { config } from './config.js';
 
-/** Coverage below which a locale is not considered shipped (I18N.md §8). */
+/** Coverage below which a locale is not considered shipped. */
 export const SHIP_THRESHOLD = 0.95;
 
 /**
@@ -90,8 +90,8 @@ export interface ServerI18n {
   /**
    * English, always — regardless of `BREEZE_LOCALE`.
    *
-   * The `error` field of an API response is English in every deployment
-   * (I18N.md §5.1), so building one needs a translator that ignores the
+   * The `error` field of an API response is English in every deployment,
+   * so building one needs a translator that ignores the
    * configured locale. Keeping it here rather than re-reading `en.json` at each
    * call site is what stops the two drifting.
    */

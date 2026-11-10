@@ -119,7 +119,7 @@ interface TableHandle {
   /** Self-paging state; null for a table with no `cycle`. */
   cycle: CycleState | null;
   /**
-   * The table this one follows (CYCLE.md, Wave 4), resolved once after the
+   * The table this one follows, resolved once after the
    * build; null when it follows nothing or its leader could not be found.
    */
   leader: string | null;
@@ -268,7 +268,7 @@ export type RuntimeEvent =
    */
   | 'crawl'
   /**
-   * A roll's scroll state or extent changed (Wave R). What an output page
+   * A roll's scroll state or extent changed. What an output page
    * reports, so the hub can clamp the transport and a panel draw its position.
    */
   | 'scroll';
@@ -282,7 +282,7 @@ export interface RuntimePayload {
   data: BindingData;
 }
 
-/** How long before a cycle's turn its next page's media is fetched (Wave 8). */
+/** How long before a cycle's turn its next page's media is fetched. */
 const MEDIA_PRELOAD_LEAD_MS = 4000;
 
 export interface RuntimeOptions {
@@ -297,7 +297,7 @@ export interface RuntimeOptions {
   resolveAsset?: (src: string) => string;
   /**
    * Where hls.js can be loaded from, for a media layer playing an HLS stream
-   * in a browser that cannot play HLS itself (Wave 8). Absent: such a stream
+   * in a browser that cannot play HLS itself. Absent: such a stream
    * fails, and the layer does what its `onError` says.
    */
   hlsScript?: string;
@@ -342,7 +342,7 @@ export interface RuntimeOptions {
    */
   still?: boolean;
   /**
-   * Show rolls with their first lines in view until something plays (Wave R) —
+   * Show rolls with their first lines in view until something plays —
    * the editor canvas, where a roll that enters from off screen would
    * otherwise be an empty box while it is being styled.
    */
@@ -364,11 +364,11 @@ const GSAP_PROP: Partial<Record<AnimatableProp, string>> = {
 /**
  * Filter/mask props that ride the GSAP proxy path rather than a real CSS
  * property — see `proxyFor`. Kept as one list so the proxy's shape and its
- * defaults cannot drift apart (MASKS.md §3.3).
+ * defaults cannot drift apart.
  */
 const FILTER_PROXY_PROPS = [
   'blur', 'brightness', 'contrast', 'saturate', 'hueRotate', 'grayscale', 'sepia', 'maskOffset',
-  // Wave R: an outline's draw-on and an arc's sweep, written to the shape's SVG.
+  // An outline's draw-on and an arc's sweep, written to the shape's SVG.
   'trim', 'sweep',
 ] as const satisfies readonly AnimatableProp[];
 
@@ -421,11 +421,11 @@ export class BreezeRuntime {
    * because a composition with no clock should not own a timer at all.
    */
   private clocks: ClockTicker | null = null;
-  /** Operator timers (Phase 9 Wave B) — built on first use, like `clocks`. */
+  /** Operator timers — built on first use, like `clocks`. */
   private timers: TimerTicker | null = null;
-  /** Rolls and their scroll transport (Wave R) — built only when the graphic has one. */
+  /** Rolls and their scroll transport — built only when the graphic has one. */
   private rolls: RollSync | null = null;
-  /** Typed-field declarations by binding name (Phase 9 Wave B), the root's and its mounts'. */
+  /** Typed-field declarations by binding name, the root's and its mounts'. */
   private fieldSpecs = new Map<string, FieldSpec>();
   private listeners = new Map<RuntimeEvent, Set<RuntimeListener>>();
   /** Last DataSet seen per source id, so a late-built table can catch up. */
@@ -434,7 +434,7 @@ export class BreezeRuntime {
   private stateValue: PlaybackState = 'idle';
   /**
    * Every change of playback state goes through here, so live media follows
-   * the graphic on and off air (Wave 8) without each transition having to
+   * the graphic on and off air without each transition having to
    * remember to tell it.
    */
   private get state(): PlaybackState {
@@ -456,14 +456,14 @@ export class BreezeRuntime {
    * graphic is not holding, which is the only state cycles run in.
    */
   private cycleTimer: ReturnType<typeof setTimeout> | null = null;
-  /** Warms the next page's media ahead of a cycle's turn (Wave 8). */
+  /** Warms the next page's media ahead of a cycle's turn. */
   private preloadTimer: ReturnType<typeof setTimeout> | null = null;
   /** Consecutive `skip`s per table since anything last played. */
   private readonly mediaSkips = new Map<string, number>();
   /** Re-runs `date` transforms as the clock moves — see `startClockTransforms`. */
   private transformTimer: ReturnType<typeof setInterval> | null = null;
   private data: BindingData = {};
-  /** The channel's mode (Wave 6) — what `mode` rule conditions read. '' is none. */
+  /** The channel's mode — what `mode` rule conditions read. '' is none. */
   private modeValue = '';
   private destroyed = false;
 
@@ -480,7 +480,7 @@ export class BreezeRuntime {
     this.still = options.still ?? false;
     this.poseRolls = options.poseRolls === true;
     this.plan = buildPlan(options.composition, { resolve: options.resolveComposition });
-    // Typed fields (Phase 9 Wave B): the root's declarations win over a mounted
+    // Typed fields: the root's declarations win over a mounted
     // composition's for the same name, as its field values do.
     for (const [name, spec] of Object.entries(options.composition.fields ?? {})) this.fieldSpecs.set(name, spec);
     for (const instance of this.plan.instances) {
@@ -569,7 +569,7 @@ export class BreezeRuntime {
            *
            * `maskUnits` is `userSpaceOnUse`, so the region and the mask shape
            * share one coordinate space and the region's only job is to be big
-           * enough — the shape carries the geometry (MASKS.md §2.3). Deriving
+           * enough — the shape carries the geometry. Deriving
            * it from the layer used to make a mask on an unsized layer (text
            * has no `size`) fall back to the stage and look right by accident,
            * then cut off square the moment the same mask was given to a sized
@@ -657,7 +657,7 @@ export class BreezeRuntime {
     }
 
     /*
-     * Rolls (Wave R), for the crawl's reason: built against a tree in the
+     * Rolls, for the crawl's reason: built against a tree in the
      * document so their text can be measured, and given whatever scroll state
      * the page was booted with so a reloaded output is on the right line on
      * its first frame.
@@ -676,7 +676,7 @@ export class BreezeRuntime {
     }
     if (this.rolls && SCROLLS_UPDATE_KEY in this.data) this.rolls.setPayload(this.data[SCROLLS_UPDATE_KEY]);
 
-    // Plotted lines (Wave R): drawn from whatever rows the page booted with.
+    // Plotted lines: drawn from whatever rows the page booted with.
     for (const node of this.nodes.values()) {
       const layer = node.layer;
       if (layer.type !== 'shape' || !layer.plot?.source) continue;
@@ -721,7 +721,7 @@ export class BreezeRuntime {
     }
 
     /*
-     * Operator timers (Phase 9 Wave B), for the clock's reason: the value is
+     * Operator timers, for the clock's reason: the value is
      * written before the first paint, from whatever `$timers` state the
      * runtime was built with — a reloaded output shows the running game clock
      * on its first frame. With no state yet a timer shows where it would start.
@@ -825,7 +825,7 @@ export class BreezeRuntime {
     // transforms. Paint frame 0 now or the graphic flashes un-animated for one
     // frame when it goes on air.
     this.renderAt(0);
-    // Drives (Wave R) after the baselines: `buildTimeline` sets every static
+    // Drives after the baselines: `buildTimeline` sets every static
     // transform with gsap.set, which would otherwise put a driven x back.
     this.refreshDrives('set');
     this.applyVisibilityWindows(0);
@@ -1278,7 +1278,7 @@ export class BreezeRuntime {
 
     /*
      * Crawls bound to the same source. An RSS feed's natural consumer is a
-     * ticker, so this is the Wave-2 path that makes a headline crawl work
+     * ticker, so this is the path that makes a headline crawl work
      * without an operator retyping anything.
      *
      * `setItems` queues rather than applies — the loop swaps the new list in at
@@ -1294,7 +1294,7 @@ export class BreezeRuntime {
       if (own) this.crawlFor(id)?.setItems(crawlItemsFrom(own, layer, this.transformContext()));
     }
 
-    // Rolls and plotted lines reading it (Wave R).
+    // Rolls and plotted lines reading it.
     for (const [id, node] of this.nodes) {
       const layer = node.layer;
       if (layer.type === 'roll' && layer.source) {
@@ -1315,7 +1315,7 @@ export class BreezeRuntime {
   /* -------------------------------------------------------------- drives */
 
   /**
-   * Put every top-level drive's value on its property (Wave R, CHARTS.md §3).
+   * Put every top-level drive's value on its property.
    * Table cells are driven by their own table, against their own row.
    */
   private refreshDrives(mode: DriveMode): void {
@@ -1352,7 +1352,7 @@ export class BreezeRuntime {
     return this.rolls;
   }
 
-  /** Every scroll this graphic shows, as an output reports it (Wave R). */
+  /** Every scroll this graphic shows, as an output reports it. */
   get scrollStates(): ScrollReport[] {
     return this.rolls?.reports ?? [];
   }
@@ -1430,7 +1430,7 @@ export class BreezeRuntime {
        * by hand. `layerMotion` only emits a baseline `set` when it differs
        * from `defaultFor(prop)`, so a proxy constructed with the wrong
        * default resets a layer's static effect to that wrong value the first
-       * time the timeline ticks — visible only while playing (MASKS.md §3.3).
+       * time the timeline ticks — visible only while playing.
        * One list removes the chance to disagree.
        */
       p = Object.fromEntries(
@@ -1580,7 +1580,7 @@ export class BreezeRuntime {
 
     this.masks.get(layerId)?.setOffset(proxy.maskOffset);
 
-    // Wave R: a keyframed or static draw-on and arc sweep. A driven one is the drive's.
+    // A keyframed or static draw-on and arc sweep. A driven one is the drive's.
     const layer = node.layer;
     if (layer.type === 'shape' && node.shapePath) {
       const driven = (prop: string) => (layer.drives ?? []).some((d) => d.property === prop);
@@ -1608,7 +1608,7 @@ export class BreezeRuntime {
       this.sprites.tick(holdAt);
       this.startCycles();
       this.emit('hold');
-      // A `continue` roll (Wave R) that ran out during the intro carries the graphic on now.
+      // A `continue` roll that ran out during the intro carries the graphic on now.
       if (this.rolls?.continueDone) this.continueAfterRoll();
       return;
     }
@@ -1634,7 +1634,7 @@ export class BreezeRuntime {
     this.stopCrawls();
     this.videos.pause();
     this.emit('finished');
-    // A TAKE waiting on this outro (Phase 9 Wave A): the new values go up now,
+    // A TAKE waiting on this outro: the new values go up now,
     // on a graphic that is off air, and roll straight back in.
     const waiting = this.pendingTake;
     if (waiting && !this.destroyed) {
@@ -1645,7 +1645,7 @@ export class BreezeRuntime {
   }
 
   /**
-   * Cue → take (Phase 9 Wave A): put new values on air without ever showing
+   * Cue → take: put new values on air without ever showing
    * them on the old pose.
    *
    * Off air (idle or finished) it is `update` then `play`. On air it runs the
@@ -2046,7 +2046,7 @@ export class BreezeRuntime {
 
   /**
    * Go to one hold — `step` counts holds the way `currentStep` does, so 1 is
-   * the first STOP marker (Phase 9 Wave D, for OGraf's `playAction({ goto })`).
+   * the first STOP marker (for OGraf's `playAction({ goto })`).
    *
    * Forward from where the graphic is, it plays there and holds, running
    * through any holds in between rather than stopping at each: a controller
@@ -2136,7 +2136,7 @@ export class BreezeRuntime {
   }
 
   /**
-   * What a fresh run starts (Wave R): rolls from the top on a page with no hub
+   * What a fresh run starts: rolls from the top on a page with no hub
    * (the hub resets them itself on PLAY), and driven bars growing in.
    */
   private startRun(): void {
@@ -2188,9 +2188,9 @@ export class BreezeRuntime {
     if (this.destroyed) return;
     this.data = { ...this.data, ...data };
     if (MODE_UPDATE_KEY in data) this.modeValue = String(data[MODE_UPDATE_KEY] ?? '');
-    // Timer state from the hub (Phase 9 Wave B). Not a field: no layer binds it.
+    // Timer state from the hub. Not a field: no layer binds it.
     if (TIMERS_UPDATE_KEY in data) this.timers?.setPayload(data[TIMERS_UPDATE_KEY]);
-    // Scroll state from the hub (Wave R), the same way.
+    // Scroll state from the hub, the same way.
     if (SCROLLS_UPDATE_KEY in data) this.rolls?.setPayload(data[SCROLLS_UPDATE_KEY]);
 
     /*
@@ -2250,7 +2250,7 @@ export class BreezeRuntime {
       this.applyBinding(node, data[layer.binding]);
     }
 
-    // Colour fields (Phase 9 Wave B): a team colour on a bar or a name.
+    // Colour fields: a team colour on a bar or a name.
     for (const node of this.nodes.values()) {
       const layer = node.layer;
       if ((layer.type !== 'text' && layer.type !== 'shape') || !layer.colorBinding) continue;
@@ -2314,7 +2314,7 @@ export class BreezeRuntime {
         () => {
           if (this.destroyed) return;
           this.refreshRules();
-          // A drive reading a timer — a shot-clock bar emptying (Wave R).
+          // A drive reading a timer — a shot-clock bar emptying.
           this.refreshDrives('tween');
           this.refitAfterTextChange();
         },
@@ -2343,7 +2343,7 @@ export class BreezeRuntime {
          * put the old name back and quietly discard what the operator just typed,
          * live on air.
          */
-        // A typed field (Phase 9 Wave B): a colour recolours rather than retypes,
+        // A typed field: a colour recolours rather than retypes,
         // and a number, option or toggle shows formatted.
         const spec = layer.binding ? this.fieldSpecs.get(layer.binding) : undefined;
         if (spec?.kind === 'color') {
@@ -2356,7 +2356,7 @@ export class BreezeRuntime {
           handle.split.revert();
           handle.stale = true;
         }
-        // Counting to a new number (Wave R), formatted as its number field would be.
+        // Counting to a new number, formatted as its number field would be.
         const counted = layer.count ? countable(value) : null;
         if (counted !== null && layer.count) {
           const format = spec?.kind === 'number' ? spec : {};
@@ -2416,7 +2416,7 @@ export class BreezeRuntime {
   /**
    * Re-run Fit Width on every text layer. Cheap; called after data changes.
    * Returns the layers whose text still overflows after scaling, so the editor
-   * (Phase 2) and the debug overlay can warn about a strap that is too short
+   * and the debug overlay can warn about a strap that is too short
    * for the name it has been given.
    */
   refit(): Map<string, FitResult> {
@@ -2589,7 +2589,7 @@ export class BreezeRuntime {
   /* --------------------------------------------------------------- follow */
 
   /**
-   * Find each follower's leader (CYCLE.md, Wave 4).
+   * Find each follower's leader.
    *
    * Among several tables answering to the name, the one sharing the longest
    * mount path with the follower wins: six copies of a tile composition each
@@ -2784,7 +2784,7 @@ export class BreezeRuntime {
   }
 
   /**
-   * A media cell failed on air and says `skip` (Wave 8): turn its table on to
+   * A media cell failed on air and says `skip`: turn its table on to
    * the next page, as NEXT would — only while that table's cycle is running,
    * only for a row the audience is looking at, and not round and round a
    * rotation where nothing plays: after a whole lap of failures it rests
@@ -2947,7 +2947,7 @@ export class BreezeRuntime {
 
   /**
    * A few seconds before the soonest turn, fetch what the next page will show
-   * (Wave 8) — the snapshot is in the cache when the page arrives, and a
+   * — the snapshot is in the cache when the page arrives, and a
    * camera that is down is already known to be, so `skip` passes it at once.
    */
   private armPreload(soonest: number, now: number): void {

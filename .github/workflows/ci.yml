@@ -49,6 +49,12 @@ jobs:
       - name: License headers
         run: pnpm license:check
 
+      # Development bookkeeping stays out of published files: work-package
+      # labels, references to private notes, phrasing true only on the day it
+      # was written. See MAINTAINING.md, "Comments and docs".
+      - name: Comments and docs
+        run: pnpm comments:check
+
       - name: i18n catalogue
         run: pnpm i18n:check
 

@@ -90,7 +90,7 @@ describe('installing demos', () => {
 
   it('does not write an asset index for a bin nobody has filled', async () => {
     // What an operator-created project actually looks like before its first
-    // upload — `readAssets` materialises the file on demand (ASSETS.md §6).
+    // upload — `readAssets` materialises the file on demand.
     for (const id of demoIds) {
       expect(await exists(path.join(projectDir(id), 'assets.json')), id).toBe(false);
       expect(await store.listAssets(id)).toEqual([]);

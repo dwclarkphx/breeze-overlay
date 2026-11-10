@@ -12,7 +12,7 @@
 
 :root {
   /*
-   * Tracking and capitals are Latin-script assumptions — I18N.md §6.3.
+   * Tracking and capitals are Latin-script assumptions.
    *
    * `letter-spacing` on Arabic, Farsi or Urdu breaks the cursive join: the
    * glyphs separate and the text stops reading as words. `text-transform:
@@ -90,7 +90,7 @@ html, body, #root {
   background: var(--bg);
   color: var(--text);
   /*
-   * Per-script fallbacks — I18N.md §6.4. Segoe UI has no CJK coverage and
+   * Per-script fallbacks. Segoe UI has no CJK coverage and
    * patchy Arabic; without these the OS substitutes per glyph and one
    * label ends up in three typefaces. UI chrome may use system fonts —
    * the "always serve the same woff2" rule is about graphics, where the
@@ -438,7 +438,7 @@ img.layer-thumb {
 }
 .mask-preset-btn:hover { border-color: var(--accent); color: var(--accent); }
 
-/* Path authoring (Wave D). Two coordinates and two small buttons share the row
+/* Path authoring. Two coordinates and two small buttons share the row
    a single field usually holds, so the numbers take what is left rather than
    each claiming a full column. */
 .path-data { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
@@ -451,7 +451,7 @@ img.layer-thumb {
 .path-btn.on { color: var(--key); }
 .path-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
-/* Nested composition: the still, its name, and the override rows (Wave C). */
+/* Nested composition: the still, its name, and the override rows. */
 .comp-ref-preview { display: flex; align-items: center; gap: 8px; margin: 2px 0 8px; }
 .comp-ref-name { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .prop-subhead {
@@ -1452,7 +1452,7 @@ img.layer-thumb {
 }
 .dialog-actions .danger:disabled { opacity: 0.45; }
 
-/* Layer rules (Wave 6). */
+/* Layer rules. */
 .rules-section .rule { border: 1px solid var(--border); border-radius: 4px; padding: 6px; margin-bottom: 6px; }
 .rules-section .rule-head, .rules-section .rule-then { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .rules-section .rule-head > span, .rules-section .rule-then > span { color: var(--muted); font-size: 11px; }
@@ -1463,7 +1463,7 @@ img.layer-thumb {
 .rules-section .rule-then input[type='color'] { width: 28px; padding: 0; }
 .stage-toolbar .stage-mode { background: var(--danger-emphasis); border: 1px solid var(--danger-border); color: var(--on-accent); border-radius: 999px; padding: 1px 10px; font-size: 11px; cursor: pointer; }
 
-/* Sport templates (Phase 9 Wave B). */
+/* Sport templates. */
 .sport-creator h4 { margin: 0 0 8px; font-size: 13px; }
 .sport-tables { width: 100%; border-collapse: collapse; font-size: 11px; margin: 6px 0; }
 .sport-tables td { padding: 3px 4px; vertical-align: middle; }

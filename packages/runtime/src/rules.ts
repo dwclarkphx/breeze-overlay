@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Putting a rule's outcome on a layer (CYCLE.md, Wave 6). The deciding is in
+ * Putting a rule's outcome on a layer. The deciding is in
  * `@breeze/schema`'s `resolveRules`; this is only the DOM half.
  *
  * Every change is reversible. The first time a rule overrides a property the
@@ -53,7 +53,7 @@ function shapeTarget(nodes: LayerNodes): HTMLElement | SVGElement | null {
 
 /**
  * Which SVG paint a recolour sets. A ring arc or a plotted line is drawn with
- * its stroke and `fill="none"` (Wave R) — painting its fill would flood the
+ * its stroke and `fill="none"` — painting its fill would flood the
  * wedge it encloses, so the stroke takes the colour instead.
  */
 function paintOf(path: Element): 'fill' | 'stroke' {
@@ -98,7 +98,7 @@ function applyColor(nodes: LayerNodes, color: string | undefined): void {
 }
 
 /**
- * A colour from a typed field (Phase 9 Wave B) — the layer's *own* colour, a
+ * A colour from a typed field — the layer's *own* colour, a
  * team colour an operator picked. Under a rule's recolour it becomes what the
  * layer goes back to when the rule stops, the way `setRuleBaseSrc` treats a
  * new picture; otherwise it is painted now.

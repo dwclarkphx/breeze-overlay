@@ -109,7 +109,7 @@ el('download')?.addEventListener('click', () => {
    *
    * A whole-station backup can be gigabytes, and fetching it into memory to
    * hand the browser a blob URL means holding all of it in the tab — the exact
-   * reason ASSETS.md put the zip on the server in the first place. A plain
+   * reason the zip is built on the server in the first place. A plain
    * navigation streams to disk and gets the browser's own download UI,
    * including resume and a progress readout this page would otherwise have to
    * reimplement.

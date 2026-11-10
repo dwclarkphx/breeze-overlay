@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * A project's mode (CYCLE.md, Wave 6) — the one value every graphic's layer
+ * A project's mode — the one value every graphic's layer
  * rules can read: `first-alert`, `election-night`, '' for none.
  *
  * Per project, not per channel: a station going into severe-weather coverage
@@ -39,7 +39,7 @@ export async function readMode(projectId: string): Promise<string> {
     const parsed = JSON.parse(await fs.readFile(file(projectId), 'utf8')) as { mode?: unknown };
     if (typeof parsed.mode === 'string') mode = parsed.mode;
   } catch {
-    // No file is no mode — every project before this wave.
+    // No file is no mode.
   }
   cache.set(projectId, mode);
   return mode;

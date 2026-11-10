@@ -8,7 +8,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * Phase 6.5 acceptance: two graphics from **one** browser source, triggering
+ * Acceptance: two graphics from **one** browser source, triggering
  * independently, with `clear-all` taking the page down in one call.
  *
  * The last acceptance criterion in the project that unit and route tests could
@@ -52,7 +52,7 @@ async function elementState(page: Page, channel: string): Promise<string> {
  * triggered sits at 0; one that has played is somewhere past it. Together the
  * two say "not started" in a way neither says alone.
  *
- * **This replaced an inline-style check, which was wrong here.** The Phase 5
+ * **This replaced an inline-style check, which was wrong here.** The text-reveal
  * lesson is that computed opacity cannot separate "never played" from
  * "finished", and that inline style can — but the mechanism behind that does
  * not transfer to a scene. `build()` ends in `renderAt(0)`, which scrubs the

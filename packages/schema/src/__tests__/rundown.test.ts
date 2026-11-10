@@ -5,7 +5,7 @@
 // Copyright (C) 2026 Dave Clark
 // SPDX-License-Identifier: MPL-2.0
 
-/** Rundowns and outputs (Phase 9 Wave A). */
+/** Rundowns and outputs. */
 
 import { describe, expect, it } from 'vitest';
 

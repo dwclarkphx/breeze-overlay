@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Wave 4 weather providers — MET Norway and Bright Sky.
+ * The MET Norway and Bright Sky weather providers.
  *
  * Same principle as `data-weather.test.ts`: captured payload *shapes*, not live
  * origins, and assertions about normalization rather than about the wire. The
@@ -321,8 +321,8 @@ describe('Bright Sky normalization', () => {
 
 describe('licensing and poll floors', () => {
   it('offers a commercially usable option outside the US that needs no self-hosting', () => {
-    // The whole point of this wave. Before it, the only free commercial option
-    // outside the US was a self-hosted Open-Meteo — a single point of failure
+    // The whole point of these two providers. Without them, the only free commercial option
+    // outside the US is a self-hosted Open-Meteo — a single point of failure
     // that also needs a box to run on.
     const global = Object.values(WEATHER_PROVIDER_INFO).filter(
       (i) => i.commercialUse === 'yes' && !i.needsBaseUrl && i.id !== 'nws',

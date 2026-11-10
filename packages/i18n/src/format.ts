@@ -9,7 +9,7 @@
  * ICU MessageFormat — the subset Breeze uses, and a loud refusal for the rest.
  *
  * The catalogue format is real ICU so that Crowdin, Weblate and every other
- * translation tool can read it unmodified (I18N.md §4.2). The *implementation*
+ * translation tool can read it unmodified. The *implementation*
  * is only as much of ICU as Breeze's ~500 strings actually need, because a full
  * MessageFormat engine is a library and this is a file.
  *

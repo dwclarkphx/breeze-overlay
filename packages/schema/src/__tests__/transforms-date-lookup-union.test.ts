@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Wave 7 in the schema: the `date`, `lookup` and `union` transforms, and the
+ * In the schema: the `date`, `lookup` and `union` transforms, and the
  * `readTime` reader under `date`.
  *
  * Every clock here is fixed and every zone named. Phoenix keeps no daylight

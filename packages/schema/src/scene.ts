@@ -10,7 +10,7 @@
  *
  * A scene is not a document type. It is an ordinary composition holding
  * `composition` layers marked `independent`, each of which becomes its own
- * graphic on its own control channel (SCENES.md §3).
+ * graphic on its own control channel.
  *
  * This lives in `@breeze/schema` rather than in `runtime/expand.ts` for one
  * practical reason: the server and the control panel both need the element list

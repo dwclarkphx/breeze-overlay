@@ -6,20 +6,24 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Reading a timer command off a request (Phase 9 Wave B) — shared by the
+ * Reading a timer command off a request — shared by the
  * graphic's `/api/control/:id/:compId/timer` and the output's
  * `/api/out/:id/:output/timer`, so both say the same thing about a bad one.
  *
- * `action=start|pause|toggle|reset|set|add`, `id=` (default `main`) and
+ * `action=start|pause|toggle|reset|set|add`, `id=` and
  * `value=` — for `set` a time (`8:00`, `480`, `1:02:03`, `12.5`), for `add` a
  * signed one (`-10`, `+0:30`). Seconds, as an operator types them; the hub
  * takes milliseconds.
+ *
+ * A blank `id` is resolved against the timers the target declares
+ * (`defaultTimerId`): `main` if it has one, otherwise its first. The answer
+ * carries the id that was used.
  */
 
 import {
-  DEFAULT_TIMER_ID,
   TIMER_ACTIONS,
   TIMER_ID_PATTERN,
+  defaultTimerId,
   parseTimerInput,
   type TimerAction,
 } from '@breeze/schema';
@@ -28,12 +32,12 @@ export type TimerRequest =
   | { ok: true; action: TimerAction; id: string; value?: number }
   | { ok: false; code: string; params?: Record<string, string> };
 
-export function readTimerRequest(params: Record<string, unknown>): TimerRequest {
+export function readTimerRequest(params: Record<string, unknown>, declared: readonly string[] = []): TimerRequest {
   const action = typeof params['action'] === 'string' ? params['action'].trim() : '';
   if (!(TIMER_ACTIONS as readonly string[]).includes(action)) {
     return { ok: false, code: 'error.timerAction', params: { actions: TIMER_ACTIONS.join(', ') } };
   }
-  const rawId = typeof params['id'] === 'string' && params['id'].trim() !== '' ? params['id'].trim() : DEFAULT_TIMER_ID;
+  const rawId = typeof params['id'] === 'string' && params['id'].trim() !== '' ? params['id'].trim() : defaultTimerId(declared);
   if (!TIMER_ID_PATTERN.test(rawId)) return { ok: false, code: 'error.timerId' };
 
   const raw = params['value'];

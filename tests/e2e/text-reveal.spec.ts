@@ -8,7 +8,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * Phase 5 acceptance: an animated name strap with one-click
+ * Acceptance: an animated name strap with one-click
  * presets, and a news ticker.
  *
  * The unit tests cover the preset table and the wiring in happy-dom. What only a
@@ -217,7 +217,7 @@ test.describe('a reveal under live update', () => {
 });
 
 test('the ticker still crawls, with its items bound', async ({ page }) => {
-  // The other half of the Phase 5 acceptance criterion.
+  // The other half of the acceptance criterion.
   await page.goto('/play/demo-1iixd/ticker-40hbh?autoplay=1');
   await page.waitForFunction(() => Boolean((window as { breeze?: unknown }).breeze));
   await page.waitForFunction(

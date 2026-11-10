@@ -259,6 +259,15 @@ describe('GET /docs', () => {
     expect(anchors.filter((a) => !res.body.includes(`id="${a}"`))).toEqual([]);
   });
 
+  it('serves the developer API reference, linked from the guide, with every in-page link landing', async () => {
+    expect(html).toContain('href="/docs/api"');
+    const res = await app.inject({ method: 'GET', url: '/docs/api' });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('id="5-controlling-a-graphic"');
+    const anchors = [...res.body.matchAll(/href="#([^"]+)"/g)].map((m) => m[1]!);
+    expect(anchors.filter((a) => !res.body.includes(`id="${a}"`))).toEqual([]);
+  });
+
   it('refuses to serve anything outside docs/images', async () => {
     const res = await app.inject({
       method: 'GET',

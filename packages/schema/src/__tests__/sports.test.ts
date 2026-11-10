@@ -5,7 +5,7 @@
 // Copyright (C) 2026 Dave Clark
 // SPDX-License-Identifier: MPL-2.0
 
-/** Sport templates (Phase 9 Wave B): the catalogue, the scoring, the guide and the check. */
+/** Sport templates: the catalogue, the scoring, the guide and the check. */
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';

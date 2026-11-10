@@ -8,7 +8,7 @@
 /**
  * PNG image sequences → VP9/WebM with alpha.
  *
- * The second half of Phase 7's media work, and the same destination as the
+ * The same destination as the
  * ProRes path by a different road: a motion designer who cannot deliver ProRes
  * delivers a numbered PNG sequence, and a browser will play neither.
  *
@@ -24,7 +24,7 @@
  *
  * **Frames are inputs, not assets.** They are staged outside the assets
  * directory and deleted when the encode finishes. Registering 300 PNGs in the
- * bin would undo what Phase 7.5 Wave B built: a library whose purpose is
+ * bin would undo the asset library: a library whose purpose is
  * finding one logo among 200 does not survive three hundred rows nobody will
  * ever pick from a dropdown.
  *

@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * The OGraf Graphic actions, answered by a runtime (Phase 9 Wave D, D2).
+ * The OGraf Graphic actions, answered by a runtime (D2).
  *
  * A pointer package's `graphic.mjs` carries no runtime: it frames the output
  * page from the Breeze server and forwards each OGraf action into it (the
@@ -59,7 +59,7 @@ const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim
 export class OgrafAdapter {
   /** This instance's own operator timers — see the module comment. */
   private timers: Record<string, TimerState> = {};
-  /** A scroll verb has pinned this instance's rolls (Wave R); a fresh run must unpin them. */
+  /** A scroll verb has pinned this instance's rolls; a fresh run must unpin them. */
   private scrollsPinned = false;
 
   constructor(private readonly runtime: BreezeRuntime) {}
@@ -128,7 +128,7 @@ export class OgrafAdapter {
   }
 
   /**
-   * A run starting from off air takes its rolls back to the top (Wave R). Once
+   * A run starting from off air takes its rolls back to the top. Once
    * a scroll verb has given this instance a payload the runtime stops timing
    * rolls from its own PLAY, so the reset is sent here, as the hub sends it
    * for a channel.
@@ -191,7 +191,7 @@ export class OgrafAdapter {
   }
 
   /**
-   * A roll transport verb (Wave R), kept on this instance like its timers. The
+   * A roll transport verb, kept on this instance like its timers. The
    * instance runs its rolls from its own PLAY until told otherwise, so the
    * first verb pins every roll's current state before changing the one named —
    * an untouched credits roll must not stop because its neighbour was paused.

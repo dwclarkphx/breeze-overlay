@@ -8,7 +8,7 @@
 // @vitest-environment happy-dom
 
 /**
- * Wave 8: the media layer's player, and a media cell in a cycling table — the
+ * The media layer's player, and a media cell in a cycling table — the
  * camera rotation. No network here: loads and failures are dispatched by hand,
  * which is also the only way to make them happen on a known frame.
  */

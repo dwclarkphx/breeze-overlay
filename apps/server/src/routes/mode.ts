@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * The project mode API (CYCLE.md, Wave 6; see `mode.ts`).
+ * The project mode API (see `mode.ts`).
  *
  * `GET /api/projects/:id/mode` reads it, with every mode the project's rules
  * name. `…/mode/set?value=first-alert` sets it — GET as well as POST, for
@@ -36,8 +36,8 @@ export type ModeResult =
 
 /**
  * Set a project's mode and send it to every open graphic of the project. Shared
- * by the REST route and the OGraf Server API's renderer action (Phase 9 Wave
- * D), so the two cannot differ in what a mode change does or records.
+ * by the REST route and the OGraf Server API's renderer action,
+ * so the two cannot differ in what a mode change does or records.
  */
 export function setProjectMode(
   hub: ControlHub,

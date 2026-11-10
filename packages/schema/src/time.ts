@@ -7,7 +7,7 @@
 
 /**
  * Wall-clock time in a named zone — shared by the server's weather and alert
- * readers and the `date` transform (CYCLE.md, Wave 7), which runs in the
+ * readers and the `date` transform, which runs in the
  * output page and must agree with them about what "today" is.
  *
  * Intl throughout rather than offset arithmetic: a zone may observe daylight

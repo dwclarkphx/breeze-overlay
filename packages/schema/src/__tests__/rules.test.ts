@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Layer rules (CYCLE.md, Wave 6): what a condition reads, how rules combine,
+ * Layer rules: what a condition reads, how rules combine,
  * and what the validator refuses.
  */
 

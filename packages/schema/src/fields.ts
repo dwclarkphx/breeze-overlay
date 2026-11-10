@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Typed fields (Phase 9 Wave B, PHASE9.md §3).
+ * Typed fields.
  *
  * A binding's kind used to come only from the layer that carried it — a text
  * layer was a `string`, an image an `image`. A composition can now say more
@@ -15,7 +15,7 @@
  * an on/off **toggle**, that `teamColor` is a **colour**, that `logo` is an
  * **asset** picked from the bin. The control panel renders the matching
  * control, the bindings JSON Schema describes it (so any OGraf form generator
- * reads it, Wave D), and the runtime shows it:
+ * reads it), and the runtime shows it:
  *
  *  - a text layer bound to a number shows it formatted — `pad`, `decimals`,
  *    `prefix`, `suffix`;

@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Layer rules (CYCLE.md, Wave 6): when something in the data or the mode is
+ * Layer rules: when something in the data or the mode is
  * true, show or hide this layer, recolour it, or change its image.
  *
  * Kept out of `PropertiesPanel.tsx`, which is long enough, and because rules

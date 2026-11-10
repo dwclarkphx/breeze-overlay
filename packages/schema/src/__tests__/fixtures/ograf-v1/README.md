@@ -4,7 +4,7 @@ Copied unmodified from the EBU's OGraf repository, `v1/specification/json-schema
 at commit `164fb10bb361e249bc0cd915b0af3d6ed70083d8` (2026-10-04):
 <https://github.com/ebu/ograf>.
 
-`ograf.test.ts` validates the manifests Breeze generates (Phase 9 Wave D) against
+`ograf.test.ts` validates the manifests Breeze generates against
 them with Ajv, offline. Each file keeps its `$id`, so the `$ref`s between them
 resolve exactly as they do at `ograf.ebu.io`.
 

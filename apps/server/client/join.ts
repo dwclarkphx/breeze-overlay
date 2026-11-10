@@ -40,7 +40,7 @@ export interface PlaybackLike {
   }>;
   /** Rotating tickers: copy and position. Absent from outputs older than 0.75.0. */
   crawls?: Array<{ layer: string; text: string; staged: string | null; offsetMs: number; passMs: number }>;
-  /** Rolls (Wave R): extent and position per scroll. */
+  /** Rolls: extent and position per scroll. */
   scrolls?: Array<{ id: string; extent?: number; end?: 'hold' | 'loop' | 'continue'; start?: 'play' | 'operator'; travel: number; running: boolean; rate: number }>;
 }
 
@@ -49,7 +49,7 @@ export interface SourceLike {
   page?: string;
   label: string;
   ip: string;
-  /** `matte` for a key-signal page (`?matte=1`, Phase 9 Wave C); absent for a fill. */
+  /** `matte` for a key-signal page (`?matte=1`); absent for a fill. */
   signal?: 'matte';
   connectedAt: number;
   playback: PlaybackLike | null;
@@ -85,7 +85,7 @@ export type JoinTarget = PlaybackLike & { ageMs: number };
 export const SYNC_AUTO = 'auto';
 export const SYNC_OFF = 'off';
 /**
- * The control panel's third preview mode in cue → take (Phase 9 Wave A): the
+ * The control panel's third preview mode in cue → take: the
  * frame has no socket and shows the panel's cued values, not air. Never sent
  * to an output page as `?sync=`; the panel turns it into `?hub=off`.
  */
@@ -148,7 +148,7 @@ export interface RuntimeLike {
     follows?: string;
   }>;
   crawlStates?: Array<{ layer: string; text: string; staged: string | null; offsetMs: number; passMs: number }>;
-  /** Rolls (Wave R): each scroll's extent and position, for the hub's clamp and a panel's position bar. */
+  /** Rolls: each scroll's extent and position, for the hub's clamp and a panel's position bar. */
   scrollStates?: Array<{ id: string; extent?: number; end?: 'hold' | 'loop' | 'continue'; start?: 'play' | 'operator'; travel: number; running: boolean; rate: number }>;
 }
 
@@ -307,7 +307,7 @@ export function compareReports(output: PlaybackLike, ageMs: number, preview: Pla
 /* ------------------------------------------------------------ key pairs */
 
 /**
- * A matte output and the fill it keys (Phase 9 Wave C).
+ * A matte output and the fill it keys.
  *
  * A switcher keying fill + matte from two pages needs the two to be showing
  * the same moment of the same graphic; if the matte page reloaded and missed a

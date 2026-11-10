@@ -8,7 +8,7 @@
 /**
  * Project backup and restore bundles.
  *
- * ASSETS.md's rule, and the reason this is a *backup* rather than an export:
+ * The rule, and the reason this is a *backup* rather than an export:
  * **a bundle carries data, never the runtime.** Composition JSON,
  * `datasources.json` and referenced assets — nothing executable. That is what
  * makes it inert without a Breeze install, so it can be copied, archived or
@@ -29,7 +29,7 @@
  *   projects/<id>/rundowns.json            (omitted when the project has none)
  *   projects/<id>/assets/<file>
  *
- * Rundowns (Phase 9 Wave A) travel with a whole-project backup only. A merge
+ * Rundowns travel with a whole-project backup only. A merge
  * and a single-composition export leave them behind: their items name
  * compositions by id, and both of those paths can rename or drop compositions.
  */
@@ -275,7 +275,7 @@ export async function buildBundle(projectIds: readonly string[]): Promise<{
 /**
  * Build a bundle carrying one composition and nothing else.
  *
- * ASSETS.md's "the usage index read backwards", and the difference between a
+ * The usage index read backwards, and the difference between a
  * 4 MB handover and a 900 MB one. A project bundle answers "everything here";
  * this answers "what does *this graphic* need", which is the question someone
  * asks when they are sending one lower third to whoever is covering next
@@ -698,7 +698,7 @@ export async function mergeIntoProject(
    *
    * Content addressing means the same path is the same bytes, so a row that is
    * already there needs no second entry — and appending would give the library
-   * two rows for one file, which is the duplicate the index split in Wave A was
+   * two rows for one file, which is the duplicate the separate asset index is
    * meant to stop appearing.
    */
   const targetAssets = await readAssets(targetId);
@@ -773,7 +773,7 @@ export async function restoreProject(
    * field. Composition ids, channel keys and asset paths are all relative to
    * the project, which is what makes `${projectId}/${name}` a stable channel
    * key and what lets a project folder be dropped on another machine without
-   * an export step (SCENES.md, store.ts). If that ever stops being true, this
+   * an export step (store.ts). If that ever stops being true, this
    * is the function that will be wrong.
    */
   const restored: Project = { ...project, id: targetId, updatedAt: new Date().toISOString() };

@@ -1545,6 +1545,8 @@ Opening an **Output URL** in a desktop browser will look wrong, and is not. See 
 
 Everything the control panel does, a URL can do. This is how a Stream Deck, a Bitfocus Companion button, a hardware panel or a script drives Breeze.
 
+This section covers the calls an operator's buttons need. The **[developer API reference](API.md)** is the full list: every route with its parameters and answers, the control WebSocket, the OGraf Server API and the output page's scripting hooks.
+
 ### The shape of it
 
 ```
@@ -1645,7 +1647,7 @@ Checks every camera in a camera list now, and answers with each one's state — 
 
 | What | URL (GET or POST, key required) |
 |---|---|
-| Start, pause, set or adjust a timer | `/api/control/<project>/<graphic>/timer?action=toggle&id=game` — `action` is `start`, `pause`, `toggle`, `reset`, `set` (`&value=8:00`) or `add` (`&value=-10`) |
+| Start, pause, set or adjust a timer | `/api/control/<project>/<graphic>/timer?action=toggle&id=game` — `action` is `start`, `pause`, `toggle`, `reset`, `set` (`&value=8:00`) or `add` (`&value=-10`). `&id=` picks the timer; blank is `main` if the graphic has one, otherwise its first timer |
 | The same on an output | `/api/out/<project>/<output>/timer?action=start&id=game` |
 | TAKE new values on a graphic | `/api/control/<project>/<graphic>/take` with the fields as the body or query |
 | Arm, step and take a rundown | `/api/rundown/<project>/<rundown>/cue?item=<id>`, `…/next`, `…/prev`, `…/take`, `…/out` |
@@ -1672,9 +1674,9 @@ A refresh asked for sooner than the source allows fetches nothing. It still answ
 
 | What | URL (GET or POST, key required) |
 |---|---|
-| Drive a roll | `/api/control/<project>/<graphic>/scroll?action=pause` — `action` is `play`, `pause`, `toggle`, `forward`, `backward`, `reverse`, `faster`, `slower`, `speed` (`&value=1.5`), `jog` (`&value=-3`, seconds), `seek` (`&value=1:30` or `&value=50%`), `restart`, `end` or `reset`. `&id=` picks the scroll id; blank is `main` |
+| Drive a roll | `/api/control/<project>/<graphic>/scroll?action=pause` — `action` is `play`, `pause`, `toggle`, `forward`, `backward`, `reverse`, `faster`, `slower`, `speed` (`&value=1.5`), `jog` (`&value=-3`, seconds), `seek` (`&value=1:30` or `&value=50%`), `restart`, `end` or `reset`. `&id=` picks the scroll id; blank is `main` if the graphic has one, otherwise its first roll |
 | The same on an output | `/api/out/<project>/<output>/scroll?action=toggle` |
-| Count a vote | `/api/projects/<project>/datasources/<poll>/poll?type=vote&option=yes` — `type` is `vote` (`&delta=-1` takes one off), `set` (`&value=412`), `open`, `close` or `reset` |
+| Count a vote | `/api/projects/<project>/datasources/<poll>/poll?type=vote&option=yes` — `type` is `vote` (`&delta=-1` takes one off), `set` (`&value=412`), `open`, `close`, `toggle` (whichever it is not) or `reset` |
 | Re-word a poll | `PUT /api/projects/<project>/datasources/<poll>/poll` with `{ "question": …, "options": [{ "id": "yes", "label": "Yes" }, …] }` — only when the poll is operator changeable |
 | Replace a text's words | `PUT /api/projects/<project>/datasources/<text>/text` with `{ "body": "…" }` — refused unless the text is operator changeable, and above 256 KB |
 

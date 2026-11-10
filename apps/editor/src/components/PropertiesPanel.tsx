@@ -270,7 +270,7 @@ export function PropertiesPanel(): JSX.Element {
 
   const isAnimated = (prop: AnimatableProp) => propIsAnimated(layer, prop);
 
-  /** A keyframable number with its stopwatch — what the effects rows are, for the chart props (Wave R). */
+  /** A keyframable number with its stopwatch — what the effects rows are, for the chart props. */
   const stopwatchField = (prop: AnimatableProp, label: string, step: number): JSX.Element => (
     <Field label={label}>
       <button className={`stopwatch${isAnimated(prop) ? ' on' : ''}`} onClick={() => toggleKeyframe(prop)}>⏱</button>
@@ -329,7 +329,7 @@ export function PropertiesPanel(): JSX.Element {
     (layer.keyframes?.[prop] ?? []).some((kf) => Math.abs(kf.t - playhead) < 1e-6);
 
   /**
-   * The wipe reveal — MASKS.md §2.2. Six numeric fields plus two keyframes is
+   * The wipe reveal. Six numeric fields plus two keyframes is
    * the entire content of the most common mask in broadcast, and nobody
    * builds it by typing: seed a `rect` mask the size of the layer with a
    * feather, and a two-keyframe `maskOffset` track that slides it across.
@@ -506,7 +506,7 @@ export function PropertiesPanel(): JSX.Element {
                    * the reason the factory does: a path shape with no `path`
                    * is refused by the validator, and offering a control that
                    * makes the composition unsavable the moment it is touched
-                   * is the fault this phase keeps refusing to ship.
+                   * is a fault this panel refuses to ship.
                    */
                   patch({
                     shape,
@@ -590,7 +590,7 @@ export function PropertiesPanel(): JSX.Element {
                 onChange={(path) => patch({ path } as Partial<Layer>)}
               />
             )}
-            {/* Wave R: arcs, draw-on and paths plotted from rows (CHARTS.md §4). */}
+            {/* Arcs, draw-on and paths plotted from rows. */}
             <ShapeChartFields layer={layer} sources={dataSources} stopwatch={stopwatchField} onPatch={patch} />
           </Section>
         )}
@@ -698,7 +698,7 @@ export function PropertiesPanel(): JSX.Element {
           </>
         )}
 
-        {/* Rolls (Wave R, ROLLS.md): long text under the operator's transport. */}
+        {/* Rolls: long text under the operator's transport. */}
         {layer.type === 'roll' && (
           <>
             <RollSection layer={layer} sources={dataSources} onPatch={patch} />
@@ -718,12 +718,10 @@ export function PropertiesPanel(): JSX.Element {
         )}
 
         {/*
-          Crawl authoring. The schema and the runtime have supported speed,
-          direction, a bound item list and live append since Phase 1 — but the
-          panel had no controls for any of it, so a crawl added in the editor was
-          stuck on its factory defaults and could only be changed by editing the
-          project JSON by hand. Found by auditing Phase 5 against the roadmap
-          rather than by anyone reporting it, which is the argument for the audit.
+          Crawl authoring. The schema and the runtime support speed, direction,
+          a bound item list and live append; without these controls a crawl added
+          in the editor is stuck on its factory defaults and can only be changed
+          by editing the project JSON by hand.
         */}
         {layer.type === 'crawl' && (
           <>
@@ -1086,7 +1084,7 @@ export function PropertiesPanel(): JSX.Element {
             </select>
           </Field>
           {/*
-            Drop shadow stays a static baseline, deliberately (MASKS.md §3.2):
+            Drop shadow stays a static baseline, deliberately:
             a keyframe track is scalars, a shadow is a 4-tuple, and four rows
             in the timeline for one visual property is not worth it for an
             effect whose broadcast use is a static lift off a busy plate.
@@ -1231,7 +1229,7 @@ function seedPathIn(size: { width: number; height: number }): string {
 }
 
 /**
- * Path authoring — the numeric half of the pen tool (MASKS.md §5).
+ * Path authoring — the numeric half of the pen tool.
  *
  * Serves a path `ShapeLayer` and a `LayerMask` of type `path` from one
  * component, because both carry the same `d` in the same coordinate space.
@@ -1370,12 +1368,12 @@ function PathEditor({
 }
 
 /**
- * The nested-composition panel — MASKS.md Wave C.
+ * The nested-composition panel.
  *
- * Nesting itself was finished in Phase 6.5: `expand.ts` flattens, guards cycles
+ * Nesting itself needs nothing from this panel: `expand.ts` flattens, guards cycles
  * and caps depth, and thumbnails, bundles and the usage index all understand a
- * `composition` layer. One field was never authorable — `overrides` — and it is
- * the field the whole phase's accept criterion turns on. A reusable badge comp
+ * `composition` layer. The one field that needs an editor is `overrides`, and it is
+ * the field that makes nesting worth having. A reusable badge comp
  * is only reusable if two mounts of it can show different badges.
  */
 function NestedCompositionSection({
@@ -1408,13 +1406,13 @@ function NestedCompositionSection({
   const allBindings = useMemo(() => (child ? collectBindings(child) : []), [child]);
 
   /*
-   * Table data is excluded, deliberately, and the exclusion is written down in
-   * MASKS.md rather than left to be rediscovered.
+   * Table data is excluded, deliberately, and the exclusion is written down
+   * here rather than left to be rediscovered.
    *
    * A `dataset` binding's value is a whole `{ columns, rows }` document. Ticking
    * an override for one would pin it — meaningful in principle — but this panel
    * has nowhere to *show* what it pinned, and a control that writes a value the
-   * author cannot see or edit is the exact shape of the fields this phase exists
+   * author cannot see or edit is exactly the kind of field this panel exists
    * to stop shipping. Tables are driven by a data source or by the operator
    * panel's grid, both of which already exist and both of which show the rows.
    */
@@ -1495,9 +1493,8 @@ function NestedCompositionSection({
 
       {/*
         The expander's own complaints about this layer — an unresolved ref, a
-        cycle, a depth cut-off. `TimelinePlan.warnings` has carried these since
-        Phase 6.5 under a comment saying the editor surfaced them; until Wave C
-        the only place they went was the browser console. Every one of them
+        cycle, a depth cut-off. `TimelinePlan.warnings` carries them, and
+        without this list the only place they go is the browser console. Every one of them
         renders on air as a graphic that is simply missing, with nothing
         anywhere saying why.
       */}
@@ -1509,8 +1506,7 @@ function NestedCompositionSection({
         <div className="comp-ref-preview">
           {/*
             The same still the layers panel draws, at panel size — including
-            its hover preview. Built in 0.68.4 and, until now, visible in
-            exactly one place.
+            its hover preview.
           */}
           <LayerThumb layer={layer} size={64} />
           <span className="comp-ref-name">{child.name}</span>
@@ -1739,11 +1735,11 @@ function describeDefault(value: unknown): string {
 }
 
 /**
- * Mask authoring — MASKS.md Wave A.
+ * Mask authoring.
  *
  * `packages/runtime/src/mask.ts` has rendered `rect`/`ellipse`/`image` masks,
- * feathered and invertible, since Phase 1; this is the first panel that can
- * write `layer.mask` at all. Shown for every layer type — masks are a
+ * feathered and invertible; this is the panel that
+ * writes `layer.mask`. Shown for every layer type — masks are a
  * `LayerBase` field and there is no type they are wrong for.
  */
 function MaskSection({
@@ -1836,7 +1832,7 @@ function MaskSection({
             Withheld for a path, where the renderer reads neither: the geometry
             is all in `d` and `x`/`y` above merely translate it. Leaving two
             live number fields that move nothing would be the same "field that
-            does nothing" this phase has now found three times.
+            does nothing" found elsewhere in this panel.
           */}
           {mask.type !== 'path' && (
             <>
@@ -1922,7 +1918,7 @@ function MaskSection({
             The same editor the path *shape* gets, on the same `d` in the same
             coordinate space — which is the entire reason `LayerMask.type:
             'path'` reuses the shape's string rather than inventing a mask
-            geometry of its own (MASKS.md §5).
+            geometry of its own.
           */}
           {mask.type === 'path' && (
             <PathEditor data={mask.path} onChange={(path) => setMask({ path })} />
@@ -1931,7 +1927,7 @@ function MaskSection({
       )}
 
       {/*
-        Always available, mask or no mask — MASKS.md §2.2. It writes the mask
+        Always available, mask or no mask. It writes the mask
         outright (a `rect` sized to the layer) rather than requiring one to
         already exist, since the whole point is to skip typing six fields by
         hand.
@@ -1950,7 +1946,7 @@ function TextStyleSection({
 }: {
   style: TextStyle;
   onChange: (style: TextStyle) => void;
-  /** A roll has two (Wave R): its lines and its headings. */
+  /** A roll has two: its lines and its headings. */
   title?: string;
 }): JSX.Element {
   const t = useT();
@@ -2036,7 +2032,7 @@ const CLOCK_FORMATS = [
 /**
  * Languages offered for a clock's month and weekday names.
  *
- * The UI locale set from I18N.md §8, reused because it is the same judgement —
+ * The UI locale set, reused because it is the same judgement —
  * these are the languages Breeze considers relevant — but the two are not the
  * same setting and must not be wired together. A station whose crew work in
  * English still broadcasts in its own language, and two graphics on one server
@@ -2214,7 +2210,7 @@ function ClockSection({
 }
 
 /**
- * Operator timer on a text layer (Phase 9 Wave B) — a game clock, a speaker
+ * Operator timer on a text layer — a game clock, a speaker
  * timer, a countdown to the service. The layer shows the timer; the operator
  * runs it from the control panel, Companion or REST, and the hub holds the
  * state per channel. The preview here is where it starts, from the real
@@ -2261,7 +2257,7 @@ function optionLines(text: string): Array<{ value: string; label?: string }> {
 }
 
 /**
- * Typed fields (Phase 9 Wave B): say what kind of value each field is, so the
+ * Typed fields: say what kind of value each field is, so the
  * control panel draws a number with buttons, a toggle, a select, a colour
  * picker or an asset picker. Lists every bound field, and takes new ones that
  * nothing binds to yet — a toggle a layer rule reads.
@@ -2424,7 +2420,7 @@ function TimerSection({
   const rt = useRichT();
   const timer = layer.timer;
   const [now, setNow] = useState(() => Date.now());
-  // The timers of the sports this project has templates for (Phase 9 Wave B).
+  // The timers of the sports this project has templates for.
   const dataSources = useEditor((s) => s.dataSources);
   const presets = useMemo(() => sportTimersFor(dataSources.map((d) => d.template)), [dataSources]);
   // An `until` countdown moves on its own; nothing else does until it is started.
@@ -2590,7 +2586,7 @@ function TimerSection({
 }
 
 /**
- * Text reveal gallery — Phase 5.
+ * Text reveal gallery.
  *
  * A preset picker plus the three controls that make one preset serve many
  * straps: stagger, per-piece duration, and ease. The numeric fields deliberately
@@ -2830,7 +2826,7 @@ function CrawlSeparatorField({
 /**
  * Feed a ticker from a data source instead of a typed list.
  *
- * An RSS feed *is* a ticker, so this is the pairing Wave 2 exists to make work:
+ * An RSS feed *is* a ticker, so this is the pairing that matters most:
  * point a crawl at the feed's `title` column and the headlines look after
  * themselves. The typed items stay visible above and keep their job — they are
  * what shows before the first fetch lands and if the feed later dies.
@@ -3069,7 +3065,7 @@ const MEDIA_FIT_LABEL: Record<(typeof MEDIA_FITS)[number], string> = {
 };
 
 /**
- * A media layer (Wave 8): where its picture comes from, what kind it is, and
+ * A media layer: where its picture comes from, what kind it is, and
  * what it does when the source goes down. The URL commits on blur — every
  * keystroke would otherwise reopen the camera on the stage.
  */
@@ -3229,7 +3225,7 @@ function lookupFieldsKey(layerId: string, index: number, t: LookupTransform): st
 }
 
 /**
- * The `date` editor (Wave 7). The day it resolves to is shown under the zone —
+ * The `date` editor. The day it resolves to is shown under the zone —
  * a graphics machine in UTC and a station in Phoenix disagree about "today"
  * for seven hours of every day, and this is the place to catch it.
  */
@@ -3366,7 +3362,7 @@ function MissingSource({ id, sources }: { id: string; sources: SourceChoice[] })
   );
 }
 
-/** The `lookup` editor (Wave 7). */
+/** The `lookup` editor. */
 function LookupFields({
   lookup,
   columns,
@@ -3434,7 +3430,7 @@ function LookupFields({
   );
 }
 
-/** The `union` editor (Wave 7). */
+/** The `union` editor. */
 function UnionFields({
   union,
   sources,
@@ -3972,7 +3968,7 @@ function TableSection({
               />
             )}
 
-            {/* Wave R: each row's share of a column's total, summing to exactly 100. */}
+            {/* Each row's share of a column's total, summing to exactly 100. */}
             {transform.op === 'share' && (
               <>
                 <select
@@ -4163,7 +4159,7 @@ function TableSection({
             onChange={(e) => onPatch({ rowsPerPage: Math.max(0, Number(e.target.value)) || undefined })}
           />
         </Field>
-        {/* Wave R: rows across for a column chart (CHARTS.md §4.1). */}
+        {/* Rows across for a column chart. */}
         <Field label={t('editor.charts.axis')}>
           <select
             value={layer.axis ?? 'y'}

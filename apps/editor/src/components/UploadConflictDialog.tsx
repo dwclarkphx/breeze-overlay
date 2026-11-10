@@ -8,9 +8,9 @@
 /**
  * The prompt that fronts Replace.
  *
- * Until now, dropping a corrected `logo.png` on a bin that already had one
- * produced a second row with the same label and left every graphic pointing at
- * the first — ASSETS.md §2 wall 5, "no replace, no versioning". Two rows called
+ * Without this dialog, dropping a corrected `logo.png` on a bin that already has one
+ * produces a second row with the same label and leaves every graphic pointing at
+ * the first. Two rows called
  * `logo.png` is not an error anyone sees; it is a bin that slowly fills with
  * near-duplicates and an operator who cannot tell which one is on air.
  *

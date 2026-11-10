@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Breeze Overlay — Phase 6 data model.
+ * Breeze Overlay — data model.
  *
  * One rule: **one canonical data shape, many adapters.** Every
  * source — a pasted table, an HTTP feed, later a scoreboard serial port —
@@ -228,7 +228,7 @@ export interface AdvanceTransform {
 }
 
 /**
- * Wide rows to long ones (CYCLE.md, Wave 4).
+ * Wide rows to long ones.
  *
  * A sheet laid out for people — `City | Mon | Tue | Wed` — becomes one row per
  * city and day: `City | key | value`. That is the shape a table, a follower or
@@ -247,7 +247,7 @@ export interface UnpivotTransform {
 }
 
 /**
- * Keep the rows whose date or time falls in a window of the clock (Wave 7):
+ * Keep the rows whose date or time falls in a window of the clock:
  * today, tomorrow, this week, still to come — in a named zone, so a graphics
  * machine in UTC agrees with the station about what "today" is.
  */
@@ -271,7 +271,7 @@ export const DATE_KEEPS = ['days', 'upcoming', 'past'] as const;
 export type DateKeep = (typeof DATE_KEEPS)[number];
 
 /**
- * Bring columns across from another source by a matching key (Wave 7) — the
+ * Bring columns across from another source by a matching key — the
  * city's display name, region and background from a Cities table, onto each
  * forecast row. Keys match trimmed and case-insensitively; the first match
  * wins. A matched row takes the other source's values, empty ones included;
@@ -289,7 +289,7 @@ export interface LookupTransform {
 }
 
 /**
- * Append another source's rows (Wave 7) — a feed's alerts and the station's
+ * Append another source's rows — a feed's alerts and the station's
  * own typed announcements in one crawl. Columns are the union of both; a value
  * one side does not have is empty.
  */
@@ -313,7 +313,7 @@ export type DataTransform =
   | ShareTransform;
 
 /**
- * Each row's percentage of a column's total (Wave R, CHARTS.md §4.4) — a
+ * Each row's percentage of a column's total — a
  * poll's share of the vote, a slice of a pie.
  *
  * Rounded by **largest remainder** (`largestRemainder`), so the shares add up
@@ -904,17 +904,17 @@ export const DATA_SOURCE_TYPES = [
   'manual',
   'http-json',
   'http-csv',
-  // Wave 2.
+  // Feeds and sheets.
   'rss',
   'xml',
   'sheets',
-  // Wave 3.
+  // Weather and file drops.
   'weather',
   'ftp',
-  // Phase 8.6 Wave 3 (CYCLE.md).
+  // Alerts and air quality.
   'cap',
   'air-quality',
-  // Phase 9 Wave R (ROLLS.md, CHARTS.md).
+  // Operator-run text and polls.
   'text',
   'poll',
   // 0.80.0: a project's link to a server-level source.
@@ -942,8 +942,8 @@ export interface DataSourceBase {
   enabled?: boolean;
   /**
    * Seconds after the last successful fetch at which cached rows stop being
-   * shown. Absent keeps last-good rows for ever — the rule every source has had
-   * since Phase 6, and still the right one for scores and schedules.
+   * shown. Absent keeps last-good rows for ever — the rule every source
+   * starts with, and the right one for scores and schedules.
    *
    * Exists for data whose publisher forbids showing it stale: AirNow's terms
    * require "the most current data", and an air-quality reading from yesterday
@@ -953,8 +953,8 @@ export interface DataSourceBase {
    */
   expireAfter?: number;
   /**
-   * Checks a fetch must pass before its rows replace last-good (CYCLE.md,
-   * Wave 5). A fetch that fails them is treated exactly like one that failed
+   * Checks a fetch must pass before its rows replace last-good.
+   * A fetch that fails them is treated exactly like one that failed
    * to connect: last-good stays on air, the status says why. Not offered on a
    * manual source — its rows are typed, not fetched.
    */
@@ -976,11 +976,11 @@ export interface DataSourceBase {
   fallbackOn?: FallbackTrigger;
   /**
    * Check every row's media — a list of cameras — and add the result as
-   * columns (`MEDIA_COLUMNS`), CYCLE.md Wave 8. See `MediaCheck`.
+   * columns (`MEDIA_COLUMNS`). See `MediaCheck`.
    */
   media?: MediaCheck;
   /**
-   * The sport template this source was made from (Phase 9 Wave B, sports.ts):
+   * The sport template this source was made from (sports.ts):
    * which sport, which rules, which of its five tables. The editor shows that
    * table's format guide and checks a fetched feed against it; on a manual
    * `game` table it is what the panel's score buttons act through.
@@ -1270,7 +1270,7 @@ export interface HttpCsvDataSource extends HttpDataSourceBase {
   columns?: DataColumn[];
 }
 
-/* ------------------------------------------------------------ Wave 2 defs */
+/* ------------------------------------------------------------ feeds and sheets */
 
 /**
  * RSS 2.0, RSS 1.0/RDF or Atom, normalized to one fixed column set.
@@ -1316,7 +1316,7 @@ export interface SheetsDataSource extends DataSourceBase {
   columns?: DataColumn[];
 }
 
-/* ------------------------------------------------------------ Wave 3 defs */
+/* ------------------------------------------------------------ weather and file drops */
 
 /**
  * Weather providers, keyed by the license they put the operator under.
@@ -1343,8 +1343,8 @@ export interface WeatherProviderInfo {
   /**
    * Catalogue key for the picker label, not the label itself.
    *
-   * `@breeze/schema` carries identifiers and values; it does not carry English
-   * (I18N.md §2.1). The key is a literal here rather than derived from `id` so
+   * `@breeze/schema` carries identifiers and values; it does not carry English.
+   * The key is a literal here rather than derived from `id` so
    * that `i18n:check` can find it by reading the source, and so a typo fails as
    * an orphan-key error instead of rendering the key on screen.
    */
@@ -1367,7 +1367,7 @@ export interface WeatherProviderInfo {
   /** Link the license obliges to sit next to the data, if any. */
   attributionUrl: string | null;
   /**
-   * The licence obliges a credit (Phase 9 Wave 0). Separate from `attribution`
+   * The licence obliges a credit. Separate from `attribution`
    * because NWS has a credit line the adapter fills as good practice while
    * obliging nothing: unticking **Show attribution** warns for every provider
    * where this is true and stays quiet for NWS.
@@ -1478,8 +1478,8 @@ export const WEATHER_PROVIDER_INFO: Record<WeatherProvider, WeatherProviderInfo>
     modes: ['current', 'hourly', 'daily'],
   },
   /*
-   * Wave 4. Both exist to answer the same problem: before them, the only free
-   * commercially-usable option outside the United States was a *self-hosted*
+   * Both exist to answer the same problem: without them, the only free
+   * commercially-usable option outside the United States is a *self-hosted*
    * Open-Meteo — a single point of failure, and one that needs a box to run on.
    */
   'met-norway': {
@@ -1540,7 +1540,7 @@ export const WEATHER_PROVIDER_INFO: Record<WeatherProvider, WeatherProviderInfo>
 /**
  * One fixed column set across every provider.
  *
- * Same argument as the RSS adapter in Wave 2, and it bites harder here: a
+ * Same argument as the RSS adapter, and it bites harder here: a
  * station that switches from NWS to a self-hosted Open-Meteo — because it opened
  * a bureau outside the US, or because it went commercial — must not have to
  * rebuild the graphic. Fields a provider does not supply come back null rather
@@ -1612,7 +1612,7 @@ export type WeatherIcon = (typeof WEATHER_ICONS)[number];
 
 /**
  * `current` is the provider's "now" — for NWS, the first forecast period.
- * `observed` is a measurement from a station, with its age (Phase 8.6 Wave 3).
+ * `observed` is a measurement from a station, with its age.
  */
 export const WEATHER_MODES = ['current', 'observed', 'hourly', 'daily'] as const;
 export type WeatherMode = (typeof WEATHER_MODES)[number];
@@ -1638,7 +1638,7 @@ export interface WeatherDataSource extends DataSourceBase {
   /** Self-hosted origin, e.g. `http://localhost:8282`. Only for `open-meteo-self`. */
   baseUrl?: string;
   /**
-   * One place. Optional since Phase 8.6: a source may instead list `places` or
+   * One place. Optional: a source may instead list `places` or
    * read them from a table with `placesFrom` — the validator requires one of
    * the three.
    */
@@ -1713,7 +1713,7 @@ export interface WeatherDataSource extends DataSourceBase {
 }
 
 /**
- * **Show attribution** (Phase 9 Wave 0). Omitted means `true`, so every project
+ * **Show attribution**. Omitted means `true`, so every project
  * saved before the setting existed reads exactly as it did.
  *
  * Off writes `''` into the `attribution` column rather than dropping it: a
@@ -1784,7 +1784,7 @@ export interface FtpDataSource extends DataSourceBase {
   header?: boolean;
   rowPath?: string;
   columns?: DataColumn[];
-  /** `format: 'text'` (Wave R): how the file splits into rows, as on a text source. */
+  /** `format: 'text'`: how the file splits into rows, as on a text source. */
   split?: TextSplit;
   markup?: boolean;
 }
@@ -2082,13 +2082,13 @@ export const AIR_QUALITY_COLUMNS: DataColumn[] = [
   { key: 'attribution', label: 'Attribution', type: 'string' },
 ];
 
-/* ---------------------------------------------------------------- Wave R */
+/* ---------------------------------------------------------------- text and polls */
 
 /** How a long text splits into rows: one per line, or one per blank-line-separated block. */
 export const TEXT_SPLITS = ['lines', 'stanzas'] as const;
 export type TextSplit = (typeof TEXT_SPLITS)[number];
 
-/** What each row of a text source is (ROLLS.md §3). */
+/** What each row of a text source is. */
 export const TEXT_KINDS = ['heading', 'line', 'pair', 'gap'] as const;
 export type TextKind = (typeof TEXT_KINDS)[number];
 
@@ -2108,7 +2108,7 @@ export const TEXT_COLUMNS: DataColumn[] = [
 ];
 
 /**
- * Long text — lyrics, credits, a statement — as rows (Wave R, ROLLS.md §3).
+ * Long text — lyrics, credits, a statement — as rows.
  *
  * The text lives in the project (`body`: typed, pasted, or filled from an
  * uploaded .txt) or is fetched (`url`), never both. A file dropped over FTP is
@@ -2151,7 +2151,7 @@ export interface PollOption {
 }
 
 /**
- * An operator-run poll (Wave R, CHARTS.md §5): the question, the options and
+ * An operator-run poll: the question, the options and
  * the tally, kept in the project and counted from the panel, REST or
  * Companion. Votes come from the operator, never the audience (decided
  * 2026-10-26).
@@ -2177,7 +2177,7 @@ export interface PollDataSource extends DataSourceBase {
  * so nothing else in the project knows the difference — and the id of the
  * server source whose rows it serves.
  *
- * **It links, where the shared asset store copies** (ASSETS.md §3), and the
+ * **It links, where the shared asset store copies**, and the
  * difference is the point. A copied logo going stale is a stale logo; a copied
  * weather source is a second poll against the same provider, which is what a
  * licence floor exists to prevent. The asymmetry that decided the asset store

@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Rundown panel client (Phase 9 Wave A).
+ * Rundown panel client.
  *
  * Prepare a list of items before the service — a composition, its field
  * values, where it goes — then walk it: the armed item shows in the preview
@@ -73,7 +73,7 @@ interface TargetState {
   item: string | null;
   state: string;
   renderers: number;
-  /** Rolls on the target (Wave R): each scroll's state and what its outputs reported. */
+  /** Rolls on the target: each scroll's state and what its outputs reported. */
   scrolls?: Array<{ id: string; state: ScrollState; info?: ScrollInfo }>;
   /** The hub's clock when this was read. */
   clock?: number;
@@ -195,7 +195,7 @@ function start(cfg: NonNullable<Window['__BREEZE_RUNDOWN__']>): void {
       return;
     }
     const path = verb === 'rundownNext' ? 'next' : verb === 'rundownPrev' ? 'prev' : verb;
-    // i18n-ignore-next-line — an API path, frozen per I18N.md §2
+    // i18n-ignore-next-line — an API path, frozen
     const url = `/api/rundown/${encodeURIComponent(pid)}/${encodeURIComponent(rundown.id)}/${path}`;
     void fetch(url, { method: 'POST', headers: headers(), body: JSON.stringify(extra) })
       .then(async (res) => {
@@ -486,7 +486,7 @@ function start(cfg: NonNullable<Window['__BREEZE_RUNDOWN__']>): void {
       const data: Record<string, unknown> = {};
       for (const [name, input] of inputs) {
         const binding = comp?.bindings.find((b) => b.name === name);
-        // Typed fields (Phase 9 Wave B) keep their type, so a score is sent as a number.
+        // Typed fields keep their type, so a score is sent as a number.
         data[name] =
           binding?.kind === 'stringList'
             ? input.value
@@ -706,7 +706,7 @@ function start(cfg: NonNullable<Window['__BREEZE_RUNDOWN__']>): void {
               type: 'button',
               title: t('rundown.clearOutputTitle'),
               onclick: () => {
-                // i18n-ignore-next-line — an API path, frozen per I18N.md §2
+                // i18n-ignore-next-line — an API path, frozen
                 const api = `/api/out/${encodeURIComponent(pid)}/${encodeURIComponent(output)}/clear`;
                 void fetch(api, { method: 'POST', headers: headers(), body: '{}' }).then(() => pollState());
               },
@@ -731,12 +731,12 @@ function start(cfg: NonNullable<Window['__BREEZE_RUNDOWN__']>): void {
   }
 
   /**
-   * One roll's transport under its target (Wave R): the output's own when the
+   * One roll's transport under its target: the output's own when the
    * target is an output, the graphic's when it is a graphic. REST, like CLEAR
    * beside it; the readout follows the next poll of the state.
    */
   function scrollRow(target: TargetState, scroll: NonNullable<TargetState['scrolls']>[number], isOutput: boolean, output: string): HTMLElement {
-    // i18n-ignore-next-line — an API path, frozen per I18N.md §2
+    // i18n-ignore-next-line — an API path, frozen
     const api = isOutput
       ? `/api/out/${encodeURIComponent(pid)}/${encodeURIComponent(output)}/scroll`
       : `/api/control/${encodeURIComponent(pid)}/${encodeURIComponent(target.target)}/scroll`;
@@ -783,7 +783,7 @@ function start(cfg: NonNullable<Window['__BREEZE_RUNDOWN__']>): void {
       return;
     }
     try {
-      // i18n-ignore-next-line — an API path, frozen per I18N.md §2
+      // i18n-ignore-next-line — an API path, frozen
       const res = await fetch(`/api/rundown/${encodeURIComponent(pid)}/${encodeURIComponent(rundown.id)}/state`);
       if (res.ok) targets = ((await res.json()) as { targets: TargetState[] }).targets;
     } catch {

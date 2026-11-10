@@ -8,7 +8,7 @@
 /**
  * Asset bin — the project's uploaded images, videos and fonts.
  *
- * Accepted as part of Phase 2 and never built: until now every asset was a
+ * Without a bin, every asset is a
  * path typed into a text field, with the file copied into the project directory
  * by hand. That works for one demo on one machine and fails everywhere else —
  * an operator has no shell on the graphics box, and a typo produces a layer
@@ -31,7 +31,7 @@ import { UploadConflictDialog } from './UploadConflictDialog.js';
 
 
 /*
- * `referencedAssets` moved to `@breeze/schema` in Phase 7.5. The server now asks
+ * `referencedAssets` lives in `@breeze/schema`. The server asks
  * the same question across every composition in a project — for honest delete
  * confirmation, composition-scoped export and expiry warnings — and two walks
  * would have diverged on the next layer type that grows a `src`.

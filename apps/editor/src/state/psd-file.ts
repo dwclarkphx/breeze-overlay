@@ -64,7 +64,7 @@ function toBlob(canvas: HTMLCanvasElement): Promise<Blob> {
  * Read a `.psd` and import it into a project.
  *
  * Uploads happen one layer at a time rather than in parallel. The asset route
- * is one request per file by design (Wave 0), and forty concurrent uploads of
+ * is one request per file by design, and forty concurrent uploads of
  * a print-resolution comp is how an operator discovers their venue LAN's
  * limits mid-import. Sequential also makes the progress readout honest.
  */

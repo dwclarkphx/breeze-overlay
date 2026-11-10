@@ -8,7 +8,7 @@
 // @vitest-environment happy-dom
 
 /**
- * Wave 7 on a live graphic: a `lookup` that re-runs when the source it reads
+ * Transforms on a live graphic: a `lookup` that re-runs when the source it reads
  * changes, a `union` feeding a crawl, and a `date` window that moves on at
  * midnight without anything being pushed.
  */

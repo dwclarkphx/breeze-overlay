@@ -13,7 +13,7 @@
  * being refused a link to nothing, the delete that will not reach into a
  * project, moving a source up without the graphic blinking, a Refresh held to
  * the source's limits, and a project that arrives by restore starting to poll
- * without anyone opening the editor — the gap this release was asked to close.
+ * without anyone opening the editor.
  */
 
 import fs from 'node:fs/promises';

@@ -56,7 +56,7 @@ import {
  *
  * Four decimals is ~11 m. More is noise, and MET Norway 403s on five —
  * truncating everywhere keeps one habit rather than one per provider. Throws
- * for a def with no coordinates, which since Phase 8.6 is a many-place def
+ * for a def with no coordinates, which is a many-place def
  * that reached a one-place code path — a bug, and worth a clear message.
  */
 function coords(def: WeatherDataSource): { lat: string; lon: string } {

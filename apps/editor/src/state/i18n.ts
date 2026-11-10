@@ -10,7 +10,7 @@
  *
  * The editor is a static bundle: it cannot read `BREEZE_LOCALE`, and there is
  * no server-rendered shell to template it into. So it asks — `/api/status`
- * carries the resolved tag (I18N.md §4.4), and the catalogue for that tag is
+ * carries the resolved tag, and the catalogue for that tag is
  * fetched as its own chunk so only the active language is downloaded.
  *
  * The first frame renders in English and swaps when the answer arrives. That is
@@ -93,7 +93,7 @@ export async function loadCatalogue(): Promise<Catalogue> {
  * Mirror the language onto `<html>`.
  *
  * `lang` drives hyphenation, font fallback and screen-reader pronunciation;
- * `dir` is what Wave 3's logical properties key off. Both are set here rather
+ * `dir` is what the stylesheet's logical properties key off. Both are set here rather
  * than in `index.html` so they follow the resolved locale instead of being
  * frozen at `en` in the markup.
  */
@@ -109,7 +109,7 @@ export function applyDocumentLocale(cat: Catalogue): void {
  * `.message` stays English so a stack trace, a devtools console and a bug
  * report all say the same thing wherever the editor is configured; `.detail`
  * carries the `Message` the UI renders. Same split as the server's error
- * contract (I18N.md §5.1): the machine-facing half is stable English, the
+ * contract: the machine-facing half is stable English, the
  * human-facing half is translated at the point of display.
  */
 export class LocalizedError extends Error {

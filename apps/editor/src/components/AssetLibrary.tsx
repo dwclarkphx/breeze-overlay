@@ -11,7 +11,7 @@
  * The docked bin is a good picker and a bad library. It is one column of a
  * three-panel stack, it folds, and every pixel it takes comes off the layer
  * list — so search, facets, folders, bulk editing and a detail panel cannot all
- * live there without making the thing it sits next to unusable. Wave B puts the
+ * live there without making the thing it sits next to unusable. So the bin keeps the
  * compact list where it was and gives everything that needs room a modal.
  *
  * Modal rather than a route or a docked fourth panel for two reasons. The bin

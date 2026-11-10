@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Error bodies that serve two callers at once — I18N.md §5.1.
+ * Error bodies that serve two callers at once.
  *
  * An endpoint like `/api/control/:id/:compId/update` is hit by the operator
  * panel *and* by a Companion button, a vMix script and someone's `curl`.

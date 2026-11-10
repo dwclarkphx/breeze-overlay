@@ -8,7 +8,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * Phase 9 Wave R in a real browser: the Rolls, Polls & Charts demo.
+ * In a real browser: the Rolls, Polls & Charts demo.
  *
  * The unit tests settle the arithmetic in happy-dom, which measures every
  * element as 0. What only a browser settles is the part that depends on

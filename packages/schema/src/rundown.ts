@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Rundowns and outputs (Phase 9 Wave A, PHASE9.md §3).
+ * Rundowns and outputs.
  *
  * **A rundown is a project document, not panel state.** It lives in
  * `projects/<id>/rundowns.json` beside `assets.json`, so two panels on two
@@ -19,7 +19,7 @@
  * rundown takes onto it — one vMix input carrying the lower thirds, the slate
  * and the bug. `@` is not a legal id character (`LEGACY_KEY_PATTERN`), so an
  * output name can never collide with a composition id, and the channel key
- * keeps the `${projectId}/${name}` shape SCENES.md fixed.
+ * keeps the `${projectId}/${name}` shape every channel has.
  *
  * Each composition mounted on an output gets a channel of its own,
  * `${projectId}/@<output>~<compositionId>`, so late join, playback reports and

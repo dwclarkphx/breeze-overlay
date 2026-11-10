@@ -6,8 +6,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Text and poll sources in the data panel (Phase 9 Wave R, ROLLS.md §3,
- * CHARTS.md §5), and the format guide for a poll arriving as a feed.
+ * Text and poll sources in the data panel,
+ * and the format guide for a poll arriving as a feed.
  *
  * Both sources are their own definition, like a manual table: the rows are
  * worked out here as the designer types, with the parser and the tally the
@@ -156,7 +156,7 @@ function freshOptionId(options: readonly PollOption[]): string {
 }
 
 /**
- * A poll: the question, its options and the tally (CHARTS.md §5.1). The
+ * A poll: the question, its options and the tally. The
  * operator counts from the control panel; here the designer sets the poll up,
  * and may correct a count.
  */
@@ -263,7 +263,7 @@ export function PollSourceFields({
 }
 
 /**
- * The Poll format guide for a feed (CHARTS.md §5.2): the columns a sheet, CSV
+ * The Poll format guide for a feed: the columns a sheet, CSV
  * or Forms export needs to drive a poll graphic, a starter file, and a check
  * of what the feed returned.
  */

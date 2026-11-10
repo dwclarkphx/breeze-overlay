@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Show attribution (Phase 9 Wave 0). The column survives, blank, so a layer
+ * Show attribution. The column survives, blank, so a layer
  * rule `attribution is empty → hide` can take the credit strap off air.
  */
 

@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Sources an operator changes on air (Phase 9 Wave R, ROLLS.md §3, CHARTS.md §5).
+ * Sources an operator changes on air.
  *
  *  - `PUT /api/projects/:id/datasources/:sourceId/text` — replace a text
  *    source's body: `{ body }`. Only a text kept in the project, and only when
@@ -81,6 +81,7 @@ export function readPollAction(p: Record<string, unknown>): PollAction | { error
     }
     case 'open':
     case 'close':
+    case 'toggle':
     case 'reset':
       return { type };
     default:
@@ -165,16 +166,19 @@ export async function registerLiveSourceRoutes(app: FastifyInstance, registry: D
       await putDataSource(req.params.id, next);
       await registry.upsert(req.params.id, next);
       // Opening, closing and resetting are logged; single votes would bury them.
-      if (parsed.type === 'open' || parsed.type === 'close' || parsed.type === 'reset') {
+      // A toggle is logged as what it did, which is what someone reading the log asks.
+      const status = next.status ?? 'open';
+      const logged = parsed.type === 'toggle' ? (status === 'open' ? 'open' : 'close') : parsed.type;
+      if (logged === 'open' || logged === 'close' || logged === 'reset') {
         void record({
           action: 'source.poll',
           actor: actorOf(req),
           project: req.params.id,
           name: def.name,
-          detail: { source: def.id, action: parsed.type },
+          detail: { source: def.id, action: logged },
         });
       }
-      return { ok: true, source: def.id, action: parsed, rows: pollDataSet(next).rows };
+      return { ok: true, source: def.id, action: parsed, status, rows: pollDataSet(next).rows };
     });
   };
   app.get<{ Params: SourceParams }>('/api/projects/:id/datasources/:sourceId/poll', act);

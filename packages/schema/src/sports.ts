@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Sport templates for data sources (Phase 9 Wave B — asked for 2026-10-25).
+ * Sport templates for data sources (asked for 2026-10-25).
  *
  * Pick a sport and its rules when creating a data source and you get the
  * tables a sports production needs, already shaped for it:
@@ -31,7 +31,7 @@
  * guide for building one and `checkSportTable` says what a feed is missing.
  *
  * **Data, not English, where it can be.** Sport and ruleset names are
- * catalogue keys (I18N.md §2.1). Column labels and period labels are values a
+ * catalogue keys. Column labels and period labels are values a
  * graphic shows, written the way a broadcast writes them — the same stance the
  * weather columns take — and an operator can retype any of them.
  *

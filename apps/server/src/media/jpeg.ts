@@ -6,8 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * JPEG frames out of a byte stream — a camera's motion-JPEG body (CYCLE.md,
- * Wave 8).
+ * JPEG frames out of a byte stream — a camera's motion-JPEG body.
  *
  * The multipart wrapping is not trusted. Cameras disagree about boundaries,
  * whether a part carries `Content-Length`, and whether that length is right,

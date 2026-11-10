@@ -8,7 +8,7 @@
 /**
  * Editor commands.
  *
- * The Phase 2 rule: every mutation is a serializable command. Two reasons
+ * The rule: every mutation is a serializable command. Two reasons
  * that matters beyond undo — a command log can later drive scripted template
  * generation and collaborative editing, and it makes the whole mutation layer
  * testable in Node with no React and no DOM.
@@ -83,14 +83,14 @@ export type Command =
   | { kind: 'setStage'; patch: Partial<Composition['stage']> }
   | { kind: 'setDuration'; duration: number }
   | { kind: 'renameComposition'; name: string }
-  /** Declare, change or (with no `spec`) remove a typed field — Phase 9 Wave B. */
+  /** Declare, change or (with no `spec`) remove a typed field. */
   | { kind: 'setField'; name: string; spec?: FieldSpec };
 
 /**
  * Label for the history UI, as a `Message` the caller translates.
  *
  * A `Message` rather than a string because this module has no translator and
- * the label lands in the undo button's tooltip — see I18N.md and
+ * the label lands in the undo button's tooltip — see
  * `@breeze/i18n`'s `Message`. The counted cases carry `count` so the catalogue
  * owns the plural; the single/plural pairs that used to be written as ternaries
  * here are one ICU message each now.
@@ -172,8 +172,8 @@ export function coalesceKey(command: Command): string | null {
  * cost of this function: every command below is keyed on `layerId` and routes
  * through here, so `patchLayer`, `setValues`, `setKeyframe`, `moveKeyframe`,
  * `deleteKeyframes` and `pasteKeyframes` all reach a cell with no case of
- * their own. The runtime and schema support shipped in 0.53.0; the editor
- * could not address a cell only because this walk stopped at the table.
+ * their own. The runtime and schema already support cell tracks; the editor
+ * can address a cell only because this walk does not stop at the table.
  */
 function mapLayer(layers: Layer[], layerId: string, fn: (layer: Layer) => Layer): Layer[] {
   let changed = false;
@@ -625,10 +625,10 @@ function applyValues(
     } else if (prop === 'maskOffset') {
       // Not a static field at all — `baselineValue` always reads 0 for it,
       // so a non-animated edit here has nothing to write to. The stopwatch
-      // is the only way this property does anything (MASKS.md §2.1).
+      // is the only way this property does anything.
       continue;
     } else if (prop === 'trim') {
-      // Wave R: a shape's own field, not part of the transform.
+      // A shape's own field, not part of the transform.
       if (next.type === 'shape') next = { ...next, trim: Math.min(1, Math.max(0, value)) };
       continue;
     } else if (prop === 'sweep') {

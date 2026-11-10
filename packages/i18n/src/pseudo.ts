@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Pseudo-locales: the highest-value artefact in the phase (I18N.md §9).
+ * Pseudo-locales: the highest-value artefact in localisation.
  *
  * `en-XA` accents every literal character, brackets the message and pads it
  * 40%. Two jobs in one pass. Anything rendering unbracketed is a string that

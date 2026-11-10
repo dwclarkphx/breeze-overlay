@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Bezier path editing — the pure half of the pen tool (MASKS.md §5).
+ * Bezier path editing — the pure half of the pen tool.
  *
  * Pure functions over a point model, with no DOM and no React, for the reason
  * `stage-math.ts` gives for the same split: the arithmetic of an editing
@@ -16,7 +16,7 @@
  *
  * One model serves a path `ShapeLayer` and a `LayerMask` of type `path`,
  * because the two carry the same `d` string in the same coordinate space — the
- * layer's own pixels — which is the whole reason Wave D builds one editor
+ * layer's own pixels — which is the whole reason there is one editor
  * rather than two.
  *
  * **The subset is deliberate, and refusing to parse is a feature.** A pen tool

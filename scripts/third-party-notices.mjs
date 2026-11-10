@@ -43,7 +43,7 @@ const check = process.argv.includes('--check');
 
 const gsapRequire = createRequire(path.join(repoRoot, 'packages', 'runtime', 'package.json'));
 
-// hls.js (Wave 8) is declared by apps/server and staged the same way as GSAP.
+// hls.js is declared by apps/server and staged the same way as GSAP.
 const hlsRequire = createRequire(path.join(repoRoot, 'apps', 'server', 'package.json'));
 
 function hlsVersion() {

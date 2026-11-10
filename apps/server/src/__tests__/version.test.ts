@@ -11,7 +11,7 @@
  * This exists because the failure it catches is silent and long-lived: the four
  * workspace packages sat at the 0.1.0 they were scaffolded with while the
  * product reached 0.44, so `pnpm start` announced `@breeze/server@0.1.0` on a
- * machine running Phase 5 and nobody noticed for forty-odd releases. A bump that
+ * machine running 0.44 and nobody noticed for forty-odd releases. A bump that
  * only half-lands now fails here rather than in a bug report.
  */
 

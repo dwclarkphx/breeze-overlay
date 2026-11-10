@@ -80,13 +80,13 @@ export type ControlVerb =
   | 'seek'
   | 'update'
   /**
-   * Cue → take (Phase 9 Wave A): `data` and PLAY as one command, so an output
+   * Cue → take: `data` and PLAY as one command, so an output
    * never shows new values on an old pose — on air, the runtime runs the
    * outro first. On a graphic channel `data` is retained like `update`'s.
    */
   | 'take'
   /*
-   * Rundown verbs (Phase 9 Wave A). Only meaningful on a project's rundown
+   * Rundown verbs. Only meaningful on a project's rundown
    * channel (`${project}/#rundowns`), where `routes/rundowns.ts` intercepts
    * them; nothing renders there, so nothing is dispatched.
    */
@@ -95,19 +95,19 @@ export type ControlVerb =
   | 'rundownPrev'
   | 'out'
   /**
-   * Operator timers (Phase 9 Wave B): `timer: { action, id?, value? }`. The
+   * Operator timers: `timer: { action, id?, value? }`. The
    * hub applies it to the timer's state and sends every renderer the result
    * as an `update` carrying `$timers` — renderers never see this verb.
    */
   | 'timer'
   /**
-   * The roll transport (Wave R, ROLLS.md §5): `scroll: { action, id?, value?,
+   * The roll transport: `scroll: { action, id?, value?,
    * percent? }`. Handled exactly as `timer` is — the result reaches renderers
    * as an `update` carrying `$scrolls`.
    */
   | 'scroll'
   /**
-   * Go to one hold (Phase 9 Wave D): `step` is 1-based, counted the way a
+   * Go to one hold: `step` is 1-based, counted the way a
    * playback report's `step` is, and `cut` skips the animation. What OGraf's
    * `playAction({ goto })` becomes — NEXT would turn a table's page first.
    */
@@ -154,7 +154,7 @@ export interface ControlCommand {
    * `id` defaults to `main`.
    */
   scroll?: { action: ScrollAction; id?: string; value?: number; percent?: boolean };
-  /** For `step`: the hold to go to, 1-based (Phase 9 Wave D). */
+  /** For `step`: the hold to go to, 1-based. */
   step?: number;
   /**
    * For `step` and `stop`: without the animation (OGraf's `skipAnimation`). A
@@ -167,7 +167,7 @@ export interface ControlCommand {
 }
 
 /**
- * One table's paging as the output page reported it (CYCLE.md).
+ * One table's paging as the output page reported it.
  *
  * Carried through the hub untouched — the hub has no idea what a table is, and
  * does not need one to relay what a renderer said to the panels watching it.
@@ -183,7 +183,7 @@ export interface TableReport {
   held: boolean;
   secondsLeft: number | null;
   group?: string;
-  /** The address of the table this one follows (Wave 4). Absent before 0.74's follow. */
+  /** The address of the table this one follows. Absent before 0.74's follow. */
   follows?: string;
 }
 
@@ -200,7 +200,7 @@ export interface PlaybackReport {
    */
   crawls?: CrawlReport[];
   /**
-   * Rolls (Wave R): each scroll's extent, end and start — what the hub clamps
+   * Rolls: each scroll's extent, end and start — what the hub clamps
    * the transport with — and where it is, for a panel's position bar.
    */
   scrolls?: ScrollReport[];
@@ -272,9 +272,9 @@ export interface SourceReport {
   label: string;
   ip: string;
   /**
-   * `matte` for a page opened with `?matte=1` (Phase 9 Wave C): it renders the
+   * `matte` for a page opened with `?matte=1`: it renders the
    * key signal for a fill page beside it, and the panel's sync check pairs the
-   * two. Absent for a fill — every page before Wave C, and any `?bg=` page.
+   * two. Absent for a fill, and for any `?bg=` page.
    */
   signal?: OutputSignal;
   connectedAt: number;
@@ -335,16 +335,16 @@ export interface ChannelState {
  * like a `monitor` it is shown on the peers page and left out of the panel
  * count and the activity log.
  *
- * `ograf` is a pointer package's page inside an OGraf renderer (Phase 9 Wave
- * D). It is a graphic, not a person: it subscribes for the project's data and
+ * `ograf` is a pointer package's page inside an OGraf renderer.
+ * It is a graphic, not a person: it subscribes for the project's data and
  * mode and is driven by its own controller, never by this channel's commands —
  * which is why it is a controller here and not a renderer. Not a panel either.
  */
 export type ControllerKind = 'panel' | 'editor' | 'monitor' | 'companion' | 'ograf';
 
 /**
- * What an output page renders, when it is not the ordinary fill (Phase 9
- * Wave C). One value today; a type rather than a boolean so a subscribe frame
+ * What an output page renders, when it is not the ordinary fill.
+ * One value today; a type rather than a boolean so a subscribe frame
  * reads as what it is.
  */
 export type OutputSignal = 'matte';
@@ -455,10 +455,10 @@ export class ControlHub {
   private clients = new Map<string, HubClient>();
   private channels = new Map<string, Channel>();
   private interceptors: CommandInterceptor[] = [];
-  /** Operator timers by home channel (`timerHome`). In memory, like everything here until Wave F. */
+  /** Operator timers by home channel (`timerHome`). In memory, like everything here. */
   private timers = new Map<string, Record<string, TimerState>>();
   /**
-   * Scroll transports by home channel (Wave R) — homed like timers, so every
+   * Scroll transports by home channel — homed like timers, so every
    * roll mounted on an output shares the output's. `playAt` is the last
    * fresh PLAY or TAKE: a roll nobody has touched since runs from it.
    */
@@ -592,7 +592,7 @@ export class ControlHub {
     if (command.verb === 'timer') return this.dispatchTimer(channelName, command);
     if (command.verb === 'scroll') return this.dispatchScroll(channelName, command);
     /*
-     * A fresh run starts its rolls from the top (Wave R). Before the command
+     * A fresh run starts its rolls from the top. Before the command
      * goes out, so a page already holds the reset when its intro begins. A
      * PLAY that steps a graphic on from a hold is not a fresh run — credits
      * rolling under the hold must not jump back to the start as the outro
@@ -662,7 +662,7 @@ export class ControlHub {
    * command — what a page joining later is welcomed with — and tell the
    * channel's panels.
    *
-   * For a composition mounted on an output (Phase 9 Wave A): the TAKE reaches
+   * For a composition mounted on an output: the TAKE reaches
    * it through the output's routing channel, so its own channel would
    * otherwise never learn the values it is showing, and a reloaded output
    * would bring the graphic back with the authored placeholder.
@@ -679,7 +679,7 @@ export class ControlHub {
   }
 
   /**
-   * Where a channel's timers live (Phase 9 Wave B). A graphic's own channel
+   * Where a channel's timers live. A graphic's own channel
    * keeps its own; every composition mounted on an output shares the output's
    * — the scorebug and the full-screen recap taken onto `@main` show one game
    * clock. Timers are per channel, as decided 2026-10-25; an output is one

@@ -8,9 +8,9 @@
 /**
  * `dataSourcesSchema`, against every source type it claims to describe.
  *
- * This exists because the schema shipped in Wave 1 and nothing ever called it.
+ * This exists because the schema once shipped with nothing calling it.
  * Adding a source type means editing `DataSourceDef` in `data.ts` *and*
- * `dataSourcesSchema` in `schema.ts`, and until now nothing checked that the two
+ * `dataSourcesSchema` in `schema.ts`, and without this suite nothing checks that the two
  * agreed — a type present in the union and missing from the schema would be
  * rejected on write, and one present in the schema with the wrong required
  * fields would be accepted and then fail to fetch, which is the worse of the two
@@ -230,7 +230,7 @@ describe('data sources schema rejections', () => {
 
   it('rejects an unknown source type', () => {
     /*
-     * This case used `type: 'ftp'` until Wave 3 made ftp a real type. It kept
+     * This case used `type: 'ftp'` until ftp became a real type. It kept
      * passing — an ftp def with no host or pattern fails the schema anyway — but
      * for the wrong reason, which is the same failure mode as an e2e drag test
      * that asserts only the end state: it could no longer fail for the reason it

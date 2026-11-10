@@ -10,7 +10,7 @@
  *
  * The React editor, the Fastify template literals in `pages.ts` and the
  * dependency-free esbuild bundles in `apps/server/client/` all render UI, and
- * any React-bound i18n library would serve exactly one of them (I18N.md §4.1).
+ * any React-bound i18n library would serve exactly one of them.
  * So the runtime lives here, in plain TypeScript with no dependency beyond
  * `Intl`, and the React binding is a hook on top of it — `@breeze/i18n/react`,
  * imported only by the editor.

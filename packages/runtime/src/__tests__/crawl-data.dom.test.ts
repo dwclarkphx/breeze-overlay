@@ -8,7 +8,7 @@
 // @vitest-environment happy-dom
 
 /**
- * Crawl layers fed from a data source — the Wave-2 pairing of an RSS feed with
+ * Crawl layers fed from a data source — the pairing of an RSS feed with
  * a ticker.
  *
  * Two seams, tested separately because they fail differently.

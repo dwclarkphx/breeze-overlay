@@ -114,7 +114,7 @@ async function writeAtomic(file: string, contents: string): Promise<void> {
 
 /**
  * Read a project's sources. A missing file is an empty list, not an error:
- * every project predating this phase has no such file, and none of them should
+ * a project with no data sources has no such file, and it should not
  * fail to open because of it.
  */
 export async function readDataSources(projectId: string): Promise<DataSourceDef[]> {
@@ -191,7 +191,7 @@ const sourceLocks = new Map<string, Promise<unknown>>();
 /**
  * Serialise read-modify-write of one project's `datasources.json`.
  *
- * Score taps (Phase 9 Wave B), poll votes and text edits (Wave R) each read
+ * Score taps, poll votes and text edits each read
  * the file, change one source and write it back. Two a frame apart must both
  * land, so every such action in a project queues on one chain — shared across
  * the routes, since a vote and a score in the same second touch the same file.

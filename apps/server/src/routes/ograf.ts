@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * OGraf interop (Phase 9 Wave D, PHASE9.md §3).
+ * OGraf interop.
  *
  * **D1 — the OGraf Server API, renderer side**, at `/ograf/v1`. The EBU's
  * controller ↔ renderer REST API (v1, stable since 2026-08-13), laid over the
@@ -19,7 +19,7 @@
  *  - a **render target** is a channel the renderer can show a graphic on —
  *    `{ "channel": "<composition or scene element>" }`, which shows its own
  *    composition and nothing else, or `{ "channel": "@<output>" }`, which
- *    shows any composition of the project (Phase 9 Wave A outputs);
+ *    shows any composition of the project (an output);
  *  - a **graphic instance** is a graphic on a target, and its id is the hub
  *    channel it plays on: the channel name, or `@<output>~<composition>`.
  *    Deterministic on purpose: an id survives a server restart, and a
@@ -51,8 +51,8 @@ import {
   OUTPUT_NAME_PATTERN,
   TIMER_ACTIONS,
   TIMER_ID_PATTERN,
-  DEFAULT_TIMER_ID,
-  DEFAULT_SCROLL_ID,
+  defaultTimerId,
+  defaultScrollId,
   SCROLL_ACTIONS,
   SCROLL_ID_PATTERN,
   bindingsJsonSchema,
@@ -490,7 +490,7 @@ export class OgrafFacade {
         if (typeof action !== 'string' || !(TIMER_ACTIONS as readonly string[]).includes(action)) {
           throw badRequest(`timer needs "action": one of ${TIMER_ACTIONS.join(', ')}.`);
         }
-        const timerId = typeof payload['id'] === 'string' && payload['id'].trim() !== '' ? payload['id'].trim() : DEFAULT_TIMER_ID;
+        const timerId = typeof payload['id'] === 'string' && payload['id'].trim() !== '' ? payload['id'].trim() : defaultTimerId(collectTimers(instance.composition.layers).map((t) => t.id));
         if (!TIMER_ID_PATTERN.test(timerId)) throw badRequest(`"${timerId}" is not a timer id.`);
         const value = typeof payload['value'] === 'number' && Number.isFinite(payload['value']) ? payload['value'] : undefined;
         if ((action === 'set' || action === 'add') && value === undefined) throw badRequest(`timer ${action} needs "value" in milliseconds.`);
@@ -508,12 +508,12 @@ export class OgrafFacade {
         };
       }
       case 'scroll': {
-        // Wave R: the roll transport, homed like timers (`ControlHub.timerHome`).
+        // The roll transport, homed like timers (`ControlHub.timerHome`).
         const action = payload['action'];
         if (typeof action !== 'string' || !(SCROLL_ACTIONS as readonly string[]).includes(action)) {
           throw badRequest(`scroll needs "action": one of ${SCROLL_ACTIONS.join(', ')}.`);
         }
-        const scrollId = typeof payload['id'] === 'string' && payload['id'].trim() !== '' ? payload['id'].trim() : DEFAULT_SCROLL_ID;
+        const scrollId = typeof payload['id'] === 'string' && payload['id'].trim() !== '' ? payload['id'].trim() : defaultScrollId(collectScrolls(instance.composition.layers).map((s) => s.id));
         if (!SCROLL_ID_PATTERN.test(scrollId)) throw badRequest(`"${scrollId}" is not a scroll id.`);
         const value = typeof payload['value'] === 'number' && Number.isFinite(payload['value']) ? payload['value'] : undefined;
         if ((action === 'speed' || action === 'jog' || action === 'seek') && value === undefined) {

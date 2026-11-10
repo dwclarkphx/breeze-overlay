@@ -8,7 +8,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 /**
- * The on-stage bezier surface (D′, MASKS.md §5.1).
+ * The on-stage bezier surface (D′).
  *
  * Written to the four rules the stage's earlier drag defects left behind:
  * every press is hit-tested before it is made, so a drag cannot pass by

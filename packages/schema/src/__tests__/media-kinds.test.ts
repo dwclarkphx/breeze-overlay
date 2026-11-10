@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Wave 8 in the schema: which kind a media URL is, the media layer, and a
+ * Media in the schema: which kind a media URL is, the media layer, and a
  * source's media checks.
  */
 

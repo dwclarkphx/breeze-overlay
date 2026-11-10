@@ -86,7 +86,7 @@ export const ANIMATABLE_PROPS = [
   'sepia',
   'maskOffset',
   /*
-   * Wave R (CHARTS.md §4.2–4.3). Shape-only: `trim` draws a path or arc on
+   * Shape-only: `trim` draws a path or arc on
    * (0–1), `sweep` is an ellipse arc's angle in degrees. Keyframable so a line
    * chart can draw itself on at PLAY; drivable (`LayerDrive`) so a gauge can
    * follow a number. On every other layer they are inert at their defaults.
@@ -202,18 +202,18 @@ export interface LayerBase {
    * future conditional.
    */
   cell?: string;
-  /** Rules that show, hide, recolour or re-source the layer from data (Wave 6, `rules.ts`). */
+  /** Rules that show, hide, recolour or re-source the layer from data (`rules.ts`). */
   rules?: LayerRule[];
   /**
-   * Numbers from data driving properties — a bar's width, a gauge's sweep
-   * (Wave R, CHARTS.md §3). Each tweens to its new value when the data changes.
+   * Numbers from data driving properties — a bar's width, a gauge's sweep.
+   * Each tweens to its new value when the data changes.
    */
   drives?: LayerDrive[];
 }
 
 /* ------------------------------------------------------------------ drives */
 
-/** What a drive can move (CHARTS.md §3). */
+/** What a drive can move. */
 export const DRIVE_PROPS = [
   'width', 'height',
   'x', 'y',
@@ -284,12 +284,10 @@ export interface LayerEffects {
 
 export interface LayerMask {
   /**
-   * `rect`/`ellipse`/`image` have been rendered by
-   * `packages/runtime/src/mask.ts` since Phase 1 — the first two as SVG
-   * primitives, the third as a luminance mask — but had no authoring surface
-   * until Phase 8 Wave A gave this field a panel (MASKS.md §2). `path` joined
-   * them in Wave D alongside the pen tool, which is what finally makes the
-   * phase's first bullet read literally.
+   * `rect`/`ellipse`/`image` are rendered by
+   * `packages/runtime/src/mask.ts` — the first two as SVG
+   * primitives, the third as a luminance mask. `path` is drawn
+   * with the pen tool.
    */
   type: 'rect' | 'ellipse' | 'image' | 'path';
   /**
@@ -317,8 +315,8 @@ export interface LayerMask {
 /**
  * A drawn shape.
  *
- * **`path` is a variant here rather than a `LayerType` of its own** (MASKS.md
- * §5), which is the opposite call from `sprite` and for the opposite reason.
+ * **`path` is a variant here rather than a `LayerType` of its own**,
+ * which is the opposite call from `sprite` and for the opposite reason.
  * Sprite earned a type because it needed its own frame model, its own
  * relationship to the clock and its own cache key. A path needs none of that:
  * it wants fills, strokes, masks, effects and keyframes, all of which a shape
@@ -346,22 +344,22 @@ export interface ShapeLayer extends LayerBase {
    * it to a filled blob would make every freshly drawn stroke look wrong.
    */
   path?: string;
-  /** A colour field (`Composition.fields`, kind `color`) whose value fills this shape — a team colour. Phase 9 Wave B. */
+  /** A colour field (`Composition.fields`, kind `color`) whose value fills this shape — a team colour. */
   colorBinding?: string;
   /**
-   * Ellipse only: draw an arc of it instead of the whole (Wave R, CHARTS.md
-   * §4.2). With `thickness` it is a ring segment — a gauge, a donut slice —
+   * Ellipse only: draw an arc of it instead of the whole.
+   * With `thickness` it is a ring segment — a gauge, a donut slice —
    * stroked in the fill; without, a pie wedge.
    */
   arc?: ShapeArc;
   /**
-   * Path or arc: how much of the outline is drawn, 0–1, from its start
-   * (Wave R, CHARTS.md §4.3). Default 1. Keyframe it to draw a line on.
+   * Path or arc: how much of the outline is drawn, 0–1, from its start.
+   * Default 1. Keyframe it to draw a line on.
    */
   trim?: number;
   /**
    * Path only: generate the path from rows instead of `path` — a line or
-   * area chart, or a sparkline (Wave R, CHARTS.md §4.4).
+   * area chart, or a sparkline.
    */
   plot?: ShapePlot;
 }
@@ -431,7 +429,7 @@ export interface TextFit {
 }
 
 /**
- * The text reveal gallery (Phase 5).
+ * The text reveal gallery.
  *
  * Two axes — what the text is split into, and how each piece arrives — which
  * keeps the set predictable to author against and to test. The ids live here
@@ -488,8 +486,8 @@ export interface TextClock {
   /**
    * BCP-47 tag for the month and weekday names — `de-DE` → `Montag`, `3. Aug`.
    *
-   * A property of the graphic, not of the installation. I18N.md §5.3 is explicit
-   * that wiring this to `BREEZE_LOCALE` would put the operator's UI language in
+   * A property of the graphic, not of the installation.
+   * Wiring this to `BREEZE_LOCALE` would put the operator's UI language in
    * charge of what a scoreboard says on air; a station whose crew work in
    * English still wants German day names if it broadcasts in German, and one
    * feed can differ from another on the same server.
@@ -527,7 +525,7 @@ export interface TextLayer extends LayerBase {
   text: string;
   /** Dynamic-field name; `update({ [binding]: value })` replaces `text`. */
   binding?: string;
-  /** A colour field whose value colours this text, independently of `binding`. Phase 9 Wave B. */
+  /** A colour field whose value colours this text, independently of `binding`. */
   colorBinding?: string;
   style: TextStyle;
   fit?: TextFit;
@@ -543,13 +541,13 @@ export interface TextLayer extends LayerBase {
    */
   clock?: TextClock;
   /**
-   * Turns this layer into a countdown, count-up or stopwatch (Phase 9 Wave B).
+   * Turns this layer into a countdown, count-up or stopwatch.
    * Like `clock`, a property rather than a layer type, and exclusive with both
    * `clock` and `binding`. The state lives in the hub per channel; see `timer.ts`.
    */
   timer?: TextTimer;
   /**
-   * Count to a new number instead of jumping to it (Wave R, CHARTS.md §4.5):
+   * Count to a new number instead of jumping to it:
    * 38 % rolls up to 41 %. Applies when the text shows a number — a number
    * field, or a table cell reading a numeric column.
    */
@@ -575,7 +573,7 @@ export interface ImageLayer extends LayerBase {
 }
 
 /**
- * Live media from a URL (CYCLE.md, Wave 8) — a webcam snapshot re-fetched on a
+ * Live media from a URL — a webcam snapshot re-fetched on a
  * timer, a motion-JPEG camera, a video file, a YouTube stream, an HLS stream.
  *
  * Not a `video` layer: that plays an asset on the graphic's own timeline and
@@ -703,7 +701,7 @@ export const DEFAULT_CRAWL_SEPARATOR = '   •   ';
 export interface CrawlSeparatorPreset {
   /**
    * Catalogue key for the picker label, not the label itself — `@breeze/schema`
-   * carries identifiers and values, never English (I18N.md §2.1).
+   * carries identifiers and values, never English.
    *
    * `value` is the opposite and stays exactly as written: it is the separator
    * that goes to air, its padding is part of it, and it is content rather than
@@ -749,8 +747,8 @@ export interface CrawlLayer extends LayerBase {
   /**
    * Data-source id feeding this ticker, and which column of it to read.
    *
-   * An RSS feed *is* a ticker — that is the shape of the thing — so Wave 2 lets
-   * a crawl take one column of a DataSet as its items instead of requiring
+   * An RSS feed *is* a ticker — that is the shape of the thing — so
+   * a crawl can take one column of a DataSet as its items instead of requiring
    * somebody to copy headlines into `items` by hand. Both fields together or
    * neither: a source without a column has no way to know which of `title`,
    * `link` and `description` to crawl.
@@ -870,14 +868,14 @@ export interface TableLayer extends LayerBase {
   layout?: 'rows';
   /**
    * Which way rows step: `y` down the layer (the default), or `x` across it —
-   * a column chart, or a row of labels under a line (Wave R, CHARTS.md §4.1).
+   * a column chart, or a row of labels under a line.
    * With `x`, `row.height` is the step across and paging fits the layer width.
    */
   axis?: TableAxis;
   rowAnim?: RowAnimPreset;
   flip?: RowFlipOptions;
   /**
-   * Turn pages on a timer while the graphic holds (CYCLE.md, Wave 1).
+   * Turn pages on a timer while the graphic holds.
    *
    * Absent means the table pages only when told to — the behaviour every table
    * had before this existed. Needs more rows than one page holds to do
@@ -885,8 +883,8 @@ export interface TableLayer extends LayerBase {
    */
   cycle?: TableCycle;
   /**
-   * Show only the rows that belong to another table's current page (CYCLE.md,
-   * Wave 4) — the tiles that change with the city a rotation is on.
+   * Show only the rows that belong to another table's current page —
+   * the tiles that change with the city a rotation is on.
    */
   follow?: TableFollow;
 }
@@ -972,7 +970,7 @@ export type TableAxis = (typeof TABLE_AXES)[number];
 
 /* ------------------------------------------------------------------- rolls */
 
-/** Wave R (ROLLS.md §4). */
+/** Which way a roll travels. */
 export const ROLL_DIRECTIONS = ['up', 'down', 'left', 'right'] as const;
 export type RollDirection = (typeof ROLL_DIRECTIONS)[number];
 
@@ -994,7 +992,7 @@ export type RollStart = (typeof ROLL_STARTS)[number];
 
 /**
  * Long text that scrolls under the operator's control — credits, lyrics, a
- * long announcement (Wave R, ROLLS.md).
+ * long announcement.
  *
  * Finite where a crawl is endless: it has a start and an end, lays out rows of
  * different kinds (`heading`, `line`, `pair`, `gap` — what a text source emits)
@@ -1049,7 +1047,7 @@ export interface CompositionLayer extends LayerBase {
   overrides?: Record<string, unknown>;
   /**
    * Mount this reference as its own independently triggered graphic instead of
-   * inlining it into the parent timeline (SCENES.md §2).
+   * inlining it into the parent timeline.
    *
    * Absent or false is the original behavior and stays the default: the child
    * is flattened into the parent's timeline at `in`, which is what a reusable
@@ -1143,7 +1141,7 @@ export interface Composition {
    */
   posterTime?: number;
   /**
-   * Typed fields by binding name (Phase 9 Wave B) — a number with buttons, a
+   * Typed fields by binding name — a number with buttons, a
    * select, a toggle, a colour, an asset. See `fields.ts`. A name here with no
    * layer bound to it is still a field: a toggle read only by a layer rule.
    */
@@ -1162,7 +1160,7 @@ export interface Project {
   compositions: Composition[];
   /**
    * **Legacy — read on migration, never written.** The asset index moved to a
-   * sibling `assets.json` in Phase 7.5 (ASSETS.md §6) because `registerAsset`
+   * sibling `assets.json` because `registerAsset`
    * rewrote the whole project document, compositions included, on every upload.
    * The key stays in the type so a project written before the split still
    * parses; `readAssets` lifts it into `assets.json` on first read and the next
@@ -1174,11 +1172,11 @@ export interface Project {
 /**
  * One file in a project's asset bin.
  *
- * Grouped by who fills each field in, which is the distinction that matters
- * (ASSETS.md §4): technical fields are derived at ingest and must never be
+ * Grouped by who fills each field in, which is the distinction that matters:
+ * technical fields are derived at ingest and must never be
  * hand-edited, descriptive and rights fields are manual and must never be
  * guessed. Everything past `kind` is optional, so an `AssetRef` written before
- * Phase 7.5 is still valid.
+ * those fields existed is still valid.
  */
 export interface AssetRef {
   /** Content hash prefix. The bytes *are* the identity. */
@@ -1190,7 +1188,7 @@ export interface AssetRef {
   /* technical — derived at ingest, never hand-edited */
   originalName?: string;
   bytes?: number;
-  /** ISO 8601. Absent on assets uploaded before Phase 7.5. */
+  /** ISO 8601. Absent on assets uploaded before the field existed. */
   addedAt?: string;
   width?: number;
   height?: number;
@@ -1216,11 +1214,11 @@ export interface AssetRef {
   tags?: string[];
   /**
    * Organizing label — typically a composition name, since a "scene" is a
-   * composition (SCENES.md).
+   * composition.
    *
    * A label, deliberately not a directory and not a foreign key. As a path it
    * would break content addressing, and it would land inside every referencing
-   * layer's `src`, so re-filing an asset would blank the graphic (ASSETS.md §3).
+   * layer's `src`, so re-filing an asset would blank the graphic.
    */
   folder?: string;
 
@@ -1236,7 +1234,7 @@ export interface AssetRef {
   expiresAt?: string;
 
   /* provenance */
-  /** Set when the file was copied in from the shared store (ASSETS.md §3). */
+  /** Set when the file was copied in from the shared store. */
   origin?: AssetOrigin;
   /** Previous asset id, set by Replace. */
   supersedes?: string;

@@ -50,7 +50,7 @@ function resolve(src: string, assetBase: string | undefined): string {
 /**
  * A nested composition, rendered as a still posed at its rest frame.
  *
- * Phase 7.6's payoff: without this, every `composition` layer in a project is
+ * Without this, every `composition` layer in a project is
  * the same `⧉` and two nested comps in a list are indistinguishable.
  *
  * Scenes render too: the mount builds one runtime per independent element, each
@@ -117,7 +117,7 @@ function CompositionThumb({
     }
 
     // Ownership is ours. A still no longer holds a clock timer or a live
-    // `<video>` — both were cost this phase removed — but it still holds masks,
+    // `<video>` — both cost more than a thumbnail is worth — but it still holds masks,
     // a GSAP timeline and any poster capture in flight, and a panel that
     // re-renders per keystroke would leak one set per render.
     return () => {
@@ -388,7 +388,7 @@ function render(
               key={i}
               className="stack-item"
               // A thumbnail is a miniature of the graphic, and the graphic does
-              // not mirror (I18N.md §6.1).
+              // not mirror.
               // dir-ok
               style={{ left: i * 3, top: i * 3 }}
             >

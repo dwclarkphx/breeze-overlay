@@ -63,7 +63,7 @@ export class ApiError extends Error {
    * invents rather than receives.
    *
    * A refusal that came from the server carries the server's own English
-   * (I18N.md §5.1) and leaves this undefined, so the UI shows that text inside a
+   * and leaves this undefined, so the UI shows that text inside a
    * translated wrapper. A network error or a cancel never reached a server, so
    * there is no English to respect and the words are ours to translate.
    */
@@ -209,7 +209,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
       response.status,
       body.issues ?? [],
       body,
-      // I18N.md §5.1: a coded refusal is one a person meets in the product, and
+      // A coded refusal is one a person meets in the product, and
       // the code is the catalogue key. `body.error` stays the English the
       // server sent — it is what reaches a log — while this is what the UI
       // renders. An uncoded error leaves it undefined and the English shows
@@ -537,20 +537,20 @@ export const api = {
       { method: 'POST' },
     ),
 
-  /** Every camera's check, for a source with media checks (Wave 8). */
+  /** Every camera's check, for a source with media checks. */
   dataSourceMedia: (projectId: string, sourceId: string) =>
     request<{ summary: MediaSummary | null; rows: MediaRowStatus[] }>(
       `${sourcesBase(projectId)}/datasources/${encodeURIComponent(sourceId)}/media`,
     ),
 
-  /** Check every camera now (Wave 8). */
+  /** Check every camera now. */
   checkDataSourceMedia: (projectId: string, sourceId: string) =>
     request<{ summary: MediaSummary | null; rows: MediaRowStatus[]; done?: boolean }>(
       `${sourcesBase(projectId)}/datasources/${encodeURIComponent(sourceId)}/media/check`,
       { method: 'POST' },
     ),
 
-  /** Whose rows a source serves: automatic, its own, or its backup (Wave 5). */
+  /** Whose rows a source serves: automatic, its own, or its backup. */
   setDataSourceUse: (projectId: string, sourceId: string, mode: SourceUse) =>
     request<{ status: DataSourceStatus }>(
       `${sourcesBase(projectId)}/datasources/${encodeURIComponent(sourceId)}/use`,

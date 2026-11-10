@@ -7,7 +7,7 @@
 
 // @vitest-environment happy-dom
 
-/** Typed fields in the runtime (Phase 9 Wave B): how a bound layer shows each kind. */
+/** Typed fields in the runtime: how a bound layer shows each kind. */
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { createComposition, createShapeLayer, createTextLayer, type Composition, type Layer } from '@breeze/schema';

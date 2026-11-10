@@ -8,10 +8,10 @@
 /**
  * PSD → Breeze layers.
  *
- * The last item in Phase 7, and the one place a format parser was deliberately
+ * The one place a format parser was deliberately
  * kept **out** of the server. Every other import this project accepts arrives as
- * a raw body precisely so nothing has to parse it before a filesystem write
- * (Wave 0), and PSD is a far richer surface than the zip that earned the one
+ * a raw body precisely so nothing has to parse it before a filesystem write,
+ * and PSD is a far richer surface than the zip that earned the one
  * exception. Running ag-psd in the browser means a malformed PSD costs the
  * operator a tab, not the machine feeding the switcher — and it buys two things
  * the server could not offer anyway: per-layer progress, and a plan the operator

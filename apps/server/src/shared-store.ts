@@ -9,7 +9,7 @@
  * The shared store — one station's logos, fonts and plates, reusable across
  * every project without being *shared* by any of them.
  *
- * **It copies. It does not link.** ASSETS.md §3, and the decision the whole
+ * **It copies. It does not link.** That is the decision the whole
  * file turns on. A `shared://` reference was considered and rejected on one
  * asymmetry: a central delete reaches projects nobody has open, mid-show.
  * Stale is a stale logo; a broken link is a blank graphic over live pictures.

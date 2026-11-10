@@ -8,10 +8,9 @@
 /**
  * Backup and restore routes.
  *
- * Phase 7.5's last wave, and the second caller the archive reader was written
- * for. The reader shipped with sequences in 0.65.0 on the argument that a
- * reader exercised weekly is safer than one written the day it ships; this is
- * where that bet is settled.
+ * The second caller the archive reader was written
+ * for. Image sequences use the same reader, on the argument that a
+ * reader exercised weekly is safer than one only a restore ever runs.
  *
  * **The reader's `REFUSED` list is not the policy here.** It answers "would a
  * browser execute this in our origin", which is the right question for a
@@ -385,10 +384,10 @@ export async function registerBackupRoutes(app: FastifyInstance, registry?: Data
           /*
            * Start the restored projects' sources polling (0.80.0).
            *
-           * Until now nothing did: a project that arrived while the server was
-           * running had its `datasources.json` on disk and no timers, and its
-           * graphics showed their authored snapshot until a source was saved
-           * in the editor or the server restarted. The server scope first, for
+           * Without this, a project that arrives while the server is
+           * running has its `datasources.json` on disk and no timers, and its
+           * graphics show their authored snapshot until a source is saved
+           * in the editor or the server restarts. The server scope first, for
            * any source the bundle's copies just created; an overwrite is
            * covered by the same call, which also drops sources the restored
            * file no longer has.

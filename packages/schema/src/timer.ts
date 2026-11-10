@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Timers on text layers (Phase 9 Wave B, PHASE9.md §3).
+ * Timers on text layers.
  *
  * A timer is a property of a text layer, beside `TextClock` and for the same
  * reason: Fit Width, styling, reveals and masks for free. Countdown, count-up
@@ -42,6 +42,20 @@ export type TimerEnd = (typeof TIMER_ENDS)[number];
 export const DEFAULT_TIMER_ID = 'main';
 
 export const TIMER_ID_PATTERN = /^[a-z0-9](?:[a-z0-9_-]{0,30}[a-z0-9])?$/;
+
+/**
+ * The timer a command means when it names none: `main` when the graphic
+ * declares it, otherwise the first timer the graphic declares, and `main`
+ * again when it declares none (a timer nothing shows can still be set).
+ *
+ * One function so a button, a panel and a REST call that all leave the id
+ * blank reach the same timer — a control that shows one clock and starts
+ * another is worse than one that does nothing.
+ */
+export function defaultTimerId(declared: readonly string[] = []): string {
+  if (declared.length === 0 || declared.includes(DEFAULT_TIMER_ID)) return DEFAULT_TIMER_ID;
+  return declared[0]!;
+}
 
 export interface TextTimer {
   /**
