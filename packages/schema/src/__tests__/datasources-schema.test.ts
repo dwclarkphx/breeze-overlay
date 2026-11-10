@@ -28,7 +28,14 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { DATA_SOURCE_TYPES, type DataSourceDef } from '../data.js';
+import {
+  DATA_SOURCE_TYPES,
+  canBeServerSource,
+  isInlineSource,
+  isLinkSource,
+  isPolledSource,
+  type DataSourceDef,
+} from '../data.js';
 import { validateDataSources } from '../validate.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -149,6 +156,13 @@ const ONE_OF_EACH: Record<DataSourceDef['type'], DataSourceDef> = {
     ],
     votes: { pep: 12, mush: 7 },
     status: 'open',
+  },
+  // 0.80.0: a link to a server-level source.
+  link: {
+    id: 'wx',
+    name: 'Phoenix weather',
+    type: 'link',
+    source: 'wx-phoenix',
   },
 };
 
@@ -298,5 +312,38 @@ describe('data sources schema rejections', () => {
 
   it('rejects a wrong formatVersion', () => {
     expect(validateDataSources({ formatVersion: 2, sources: [] }).valid).toBe(false);
+  });
+
+  describe('links to server-level sources (0.80.0)', () => {
+    it('takes a backup, which names a source in the same project', () => {
+      const backup: DataSourceDef = { id: 'canned', name: 'Unavailable', type: 'manual', columns: [], rows: [] };
+      const link: DataSourceDef = { id: 'wx', name: 'Weather', type: 'link', source: 'wx-phoenix', fallback: 'canned', fallbackOn: 'failing' };
+      expect(validateDataSources(wrap([backup, link])).valid).toBe(true);
+    });
+
+    it('refuses a link with no source, and one carrying a fetched source\'s fields', () => {
+      expect(validateDataSources(wrap([{ id: 'wx', name: 'Weather', type: 'link' } as unknown as DataSourceDef])).valid).toBe(false);
+      expect(
+        validateDataSources(wrap([{ id: 'wx', name: 'Weather', type: 'link', source: 'wx-phoenix', pollInterval: 30 }])).valid,
+      ).toBe(false);
+    });
+
+    it('is neither inline nor polled, and cannot itself be server-level', () => {
+      const link = ONE_OF_EACH.link as DataSourceDef;
+      expect(isInlineSource(link)).toBe(false);
+      expect(isPolledSource(link)).toBe(false);
+      expect(isLinkSource(link)).toBe(true);
+      expect(canBeServerSource(link)).toBe(false);
+    });
+
+    it('lets only fetched sources be server-level', () => {
+      const allowed = Object.entries(ONE_OF_EACH)
+        .filter(([, def]) => canBeServerSource(def as DataSourceDef))
+        .map(([type]) => type)
+        .sort();
+      // A text counts only when it is fetched; the fixture's is typed in.
+      expect(allowed).toEqual(['air-quality', 'cap', 'ftp', 'http-csv', 'http-json', 'rss', 'sheets', 'weather', 'xml']);
+      expect(canBeServerSource({ id: 't', name: 'T', type: 'text', url: 'https://example.com/a.txt' })).toBe(true);
+    });
   });
 });

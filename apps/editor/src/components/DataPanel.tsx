@@ -28,8 +28,11 @@ import {
   MIN_POLL_INTERVAL,
   WEATHER_PROVIDERS,
   WEATHER_PROVIDER_INFO,
+  SERVER_SCOPE,
   applyTransforms,
   attributionShown,
+  canBeServerSource,
+  isLinkSource,
   isPolledSource,
   type DataGuard,
   MEDIA_CHECK_DEFAULTS,
@@ -49,6 +52,7 @@ import {
   type DataRow,
   type DataSet,
   type DataSourceDef,
+  type LinkDataSource,
   type PlaceRef,
   type PlacesFrom,
   type WeatherMode,
@@ -57,6 +61,7 @@ import {
 import { useRichT, useT, type Translate } from '@breeze/i18n/react';
 
 import { api, type DataSourceSummary } from '../api/client.js';
+import { sourcesPageUrl } from '../state/sources-page.js';
 import {
   carriedColumns,
   firstRound,
@@ -70,7 +75,7 @@ import { SportGuide, SportTemplateCreator } from './SportTemplates.js';
 import { FloatingDialog } from './FloatingDialog.js';
 import { PollFeedGuide, PollSourceFields, TextSourceFields } from './LiveSourceFields.js';
 
-const TYPE_LABEL_KEY: Record<DataSourceDef['type'], string> = {
+export const TYPE_LABEL_KEY: Record<DataSourceDef['type'], string> = {
   manual: 'editor.data.typeManual',
   'http-json': 'editor.data.typeHttpJson',
   'http-csv': 'editor.data.typeHttpCsv',
@@ -83,6 +88,7 @@ const TYPE_LABEL_KEY: Record<DataSourceDef['type'], string> = {
   'air-quality': 'editor.data.typeAirQuality',
   text: 'editor.data.typeText',
   poll: 'editor.data.typePoll',
+  link: 'editor.data.typeLink',
 };
 
 /**
@@ -94,8 +100,10 @@ const TYPE_LABEL_KEY: Record<DataSourceDef['type'], string> = {
  */
 /** The add menu's entry for the sport-template creator — not a source type. */
 const SPORT_OPTION = '@sport';
+/** And its entry for linking a server-level source (0.80.0) — a picker, not a blank form. */
+const LINK_OPTION = '@link';
 
-const MENU: Array<{ type: DataSourceDef['type']; labelKey: string }> = [
+export const MENU: Array<{ type: DataSourceDef['type']; labelKey: string }> = [
   { type: 'manual', labelKey: 'editor.data.menuManual' },
   { type: 'http-csv', labelKey: 'editor.data.menuHttpCsv' },
   { type: 'http-json', labelKey: 'editor.data.menuHttpJson' },
@@ -135,12 +143,14 @@ const NEW_NAME: Record<DataSourceDef['type'], string> = {
   'air-quality': 'New air quality',  // i18n-ignore
   text: 'New text',  // i18n-ignore
   poll: 'New poll',  // i18n-ignore
+  // Never used to make one: a link takes the name of what it links to.
+  link: 'Linked source',  // i18n-ignore
 };
 
 /** RSS feeds change on a slower clock than a scoreboard; don't poll them like one. */
 const RSS_POLL_INTERVAL = 300;
 
-function blankSource(type: DataSourceDef['type'], id: string): DataSourceDef {
+export function blankSource(type: DataSourceDef['type'], id: string): DataSourceDef {
   if (type === 'manual') {
     return {
       id,
@@ -330,7 +340,7 @@ function cellText(value: unknown): string {
 }
 
 /** "4s ago", "2m ago" — relative because absolute timestamps need arithmetic. */
-function ago(iso: string | undefined, t: Translate): string {
+export function ago(iso: string | undefined, t: Translate): string {
   if (!iso) return t('editor.data.agoNever');
   const delta = Math.max(0, Date.now() - Date.parse(iso));
   const s = Math.round(delta / 1000);
@@ -348,6 +358,10 @@ export function DataPanel(): JSX.Element {
   const [editing, setEditing] = useState<DataSourceDef | null>(null);
   /** The sport-template creator is open (Phase 9 Wave B). */
   const [templating, setTemplating] = useState(false);
+  /** The server-level source picker is open (0.80.0). */
+  const [linking, setLinking] = useState(false);
+  /** Something worth saying that is not an error — a refresh asked for too soon. */
+  const [notice, setNotice] = useState<string | null>(null);
   /**
    * Where the source being edited is shown (0.79.1): `panel` under the list, as
    * Edit always has, or `window`, the movable, resizable dialog that Open and
@@ -415,6 +429,48 @@ export function DataPanel(): JSX.Element {
     }
   };
 
+  const fail = (err: unknown) => setError(err instanceof Error ? err.message : String(err));
+
+  /** Refresh, saying so when the server held it to the source's poll floor (0.80.0). */
+  const refresh = async (def: DataSourceDef) => {
+    try {
+      const result = await api.refreshDataSource(projectId, def.id);
+      setNotice(
+        result.throttled
+          ? t('editor.data.refreshThrottled', { name: def.name, seconds: result.throttled.retryIn })
+          : null,
+      );
+      await reload();
+    } catch (err) {
+      fail(err);
+    }
+  };
+
+  /** Link a server-level source: its own id if that is free here, so the two lists read the same. */
+  const link = async (target: DataSourceDef) => {
+    const taken = new Set(sources.map((s) => s.def.id));
+    const id = taken.has(target.id) ? `src${Date.now().toString(36)}` : target.id;
+    const def: LinkDataSource = { id, name: target.name, type: 'link', source: target.id };
+    try {
+      await api.saveDataSource(projectId, def);
+      setLinking(false);
+      await reload();
+    } catch (err) {
+      fail(err);
+    }
+  };
+
+  const moveToServer = async (def: DataSourceDef) => {
+    if (!confirm(t('editor.data.moveToServerConfirm', { name: def.name }))) return;
+    try {
+      await api.moveSourceToServer(projectId, def.id);
+      setNotice(t('editor.data.movedToServer', { name: def.name }));
+      await reload();
+    } catch (err) {
+      fail(err);
+    }
+  };
+
   return (
     /*
       `data-collapsed` drives the layout, not just the caret.
@@ -451,6 +507,7 @@ export function DataPanel(): JSX.Element {
             value=""
             onChange={(e) => {
               if (e.target.value === SPORT_OPTION) setTemplating(true);
+              else if (e.target.value === LINK_OPTION) setLinking(true);
               else if (e.target.value) add(e.target.value as DataSourceDef['type']);
               e.target.value = '';
             }}
@@ -460,11 +517,13 @@ export function DataPanel(): JSX.Element {
               <option key={m.type} value={m.type}>{t(m.labelKey)}</option>
             ))}
             <option value={SPORT_OPTION}>{t('editor.data.menuSport')}</option>
+            <option value={LINK_OPTION}>{t('editor.data.menuLink')}</option>
           </select>
         </span>
       </div>
 
       {error && <div className="panel-error">{error}</div>}
+      {notice && <div className="panel-notice">{notice}</div>}
 
       {!collapsed && (
         <div className="source-list">
@@ -479,21 +538,25 @@ export function DataPanel(): JSX.Element {
             </p>
           )}
 
-          {sources.map(({ def, status, interval, rowCount }) => {
+          {sources.map(({ def, status, interval, rowCount, linked }) => {
             const failing = (status.failures ?? 0) > 0;
+            const isLink = isLinkSource(def);
             const nameOf = (id: string) => sources.find((s) => s.def.id === id)?.def.name ?? id;
             return (
               <div key={def.id} className={`source-row${failing ? ' failing' : ''}`}>
                 <div className="source-head">
                   <span className="source-name">{def.name}</span>
                   <code className="source-id">{def.id}</code>
-                  <span className="source-type">{t(TYPE_LABEL_KEY[def.type])}</span>
+                  <span className="source-type">
+                    {linked ? t('editor.data.typeLinked', { type: t(TYPE_LABEL_KEY[linked.type]) }) : t(TYPE_LABEL_KEY[def.type])}
+                  </span>
                 </div>
                 <div className="source-meta">
                   <span>{t('editor.data.rowCount', { count: rowCount })}</span>
                   {isPolledSource(def) && (
                     <span>{t('editor.data.everySeconds', { seconds: interval })}</span>
                   )}
+                  {linked && <span>{t('editor.data.everySeconds', { seconds: linked.interval })}</span>}
                   <span title={status.lastFetch}>
                     {t('editor.data.fetchedAgo', { when: ago(status.lastFetch, t) })}
                   </span>
@@ -554,18 +617,26 @@ export function DataPanel(): JSX.Element {
                   >
                     {t('editor.data.edit')}
                   </button>
-                  {isPolledSource(def) && (
-                    <button onClick={() => void api.refreshDataSource(projectId, def.id).then(reload)}>
+                  {(isPolledSource(def) || isLink) && (
+                    <button onClick={() => void refresh(def)}>
                       {t('editor.data.refresh')}
+                    </button>
+                  )}
+                  {/* A fetched source can be shared by other projects: one poll for all of them. */}
+                  {canBeServerSource(def) && (
+                    <button title={t('editor.data.moveToServerTitle')} onClick={() => void moveToServer(def)}>
+                      {t('editor.data.moveToServer')}
                     </button>
                   )}
                   <button
                     onClick={() => {
-                      if (!confirm(t('editor.data.deleteConfirm', { name: def.name }))) return;
-                      void api.deleteDataSource(projectId, def.id).then(reload);
+                      // Unlinking deletes nothing on the server; say which this is.
+                      const question = isLink ? 'editor.data.unlinkConfirm' : 'editor.data.deleteConfirm';
+                      if (!confirm(t(question, { name: def.name }))) return;
+                      void api.deleteDataSource(projectId, def.id).then(reload).catch(fail);
                     }}
                   >
-                    {t('editor.bin.delete')}
+                    {t(isLink ? 'editor.data.unlink' : 'editor.bin.delete')}
                   </button>
                 </div>
               </div>
@@ -595,6 +666,21 @@ export function DataPanel(): JSX.Element {
               setTemplating(false);
               void reload();
             }}
+          />
+        </FloatingDialog>
+      )}
+
+      {linking && (
+        <FloatingDialog
+          title={t('editor.data.linkTitle')}
+          label={t('editor.data.linkTitle')}
+          closeLabel={t('editor.data.dialogClose')}
+          onClose={() => setLinking(false)}
+        >
+          <ServerSourcePicker
+            linked={new Set(sources.map((s) => s.def).filter(isLinkSource).map((d) => d.source))}
+            onPick={(target) => void link(target)}
+            onCancel={() => setLinking(false)}
           />
         </FloatingDialog>
       )}
@@ -636,7 +722,155 @@ const URL_PLACEHOLDER: Record<string, string> = {
 
 /* ------------------------------------------------------------------ editor */
 
-interface SourceEditorProps {
+/* ------------------------------------------------------------------ links */
+
+/**
+ * The server-level sources, to link one into this project (0.80.0).
+ *
+ * A list with a button per row rather than a select: what is being chosen is
+ * a feed someone else set up, and its name, kind and whether it is working
+ * are what tell an operator they have the right one.
+ */
+function ServerSourcePicker({
+  linked,
+  onPick,
+  onCancel,
+}: {
+  /** Server-level ids this project already links. */
+  linked: ReadonlySet<string>;
+  onPick: (target: DataSourceDef) => void;
+  onCancel: () => void;
+}): JSX.Element {
+  const t = useT();
+  const rt = useRichT();
+  const [available, setAvailable] = useState<DataSourceSummary[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    api
+      .listDataSources(SERVER_SCOPE)
+      .then((r) => live && setAvailable(r.sources))
+      .catch((err: unknown) => live && setError(err instanceof Error ? err.message : String(err)));
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const page = (
+    <a href={sourcesPageUrl()} target="_blank" rel="noreferrer">
+      {t('editor.data.sourcesPage')}
+    </a>
+  );
+
+  return (
+    <div className="source-editor source-picker">
+      <p className="hint">{rt('editor.data.linkHint', { page })}</p>
+      {error && <div className="source-error">{error}</div>}
+      {available?.length === 0 && <p className="hint">{rt('editor.data.linkNone', { page })}</p>}
+      {available?.map(({ def, status, rowCount }) => (
+        <div key={def.id} className={`source-row${(status.failures ?? 0) > 0 ? ' failing' : ''}`}>
+          <div className="source-head">
+            <span className="source-name">{def.name}</span>
+            <code className="source-id">{def.id}</code>
+            <span className="source-type">{t(TYPE_LABEL_KEY[def.type])}</span>
+          </div>
+          <div className="source-meta">
+            <span>{t('editor.data.rowCount', { count: rowCount })}</span>
+            <span title={status.lastFetch}>{t('editor.data.fetchedAgo', { when: ago(status.lastFetch, t) })}</span>
+          </div>
+          {status.lastError && <div className="source-error">{status.lastError}</div>}
+          <div className="source-actions">
+            {linked.has(def.id) ? (
+              <span className="hint">{t('editor.data.linkAlready')}</span>
+            ) : (
+              <button className="primary" onClick={() => onPick(def)}>{t('editor.data.linkThis')}</button>
+            )}
+          </div>
+        </div>
+      ))}
+      <div className="source-actions">
+        <button onClick={onCancel}>{t('editor.upload.cancel')}</button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * What a link lets a project decide for itself: what it is called here, and a
+ * backup from the project's own sources. Everything else about the feed — its
+ * address, its interval, its guard — is the server-level source's, and is
+ * edited once, on the Data sources page, for every project that shows it.
+ */
+function LinkFields({
+  def,
+  others,
+  onChange,
+}: {
+  def: LinkDataSource;
+  others: DataSourceDef[];
+  onChange: (def: DataSourceDef) => void;
+}): JSX.Element {
+  const t = useT();
+  const rt = useRichT();
+  return (
+    <>
+      <p className="hint">
+        {rt('editor.data.linkFieldsHint', {
+          source: <code>{def.source}</code>,
+          page: (
+            <a href={sourcesPageUrl()} target="_blank" rel="noreferrer">
+              {t('editor.data.sourcesPage')}
+            </a>
+          ),
+        })}
+      </p>
+      <div className="field-row">
+        <label>
+          <span>{t('editor.data.guard.backup')}</span>
+          <select
+            value={def.fallback ?? ''}
+            onChange={(e) => {
+              const next = { ...def };
+              if (e.target.value) next.fallback = e.target.value;
+              else {
+                delete next.fallback;
+                delete next.fallbackOn;
+              }
+              onChange(next);
+            }}
+          >
+            <option value="">{t('editor.data.guard.noBackup')}</option>
+            {others.map((o) => (
+              <option key={o.id} value={o.id}>{o.name}</option>
+            ))}
+          </select>
+        </label>
+        {def.fallback !== undefined && (
+          <label>
+            <span>{t('editor.data.guard.fallbackOn')}</span>
+            <select
+              value={def.fallbackOn ?? 'expired'}
+              onChange={(e) => {
+                const next = { ...def };
+                if (e.target.value === 'failing') next.fallbackOn = e.target.value as FallbackTrigger;
+                else delete next.fallbackOn;
+                onChange(next);
+              }}
+            >
+              <option value="expired">{t('editor.data.guard.fallbackOnExpired')}</option>
+              <option value="failing">{t('editor.data.guard.fallbackOnFailing')}</option>
+            </select>
+          </label>
+        )}
+      </div>
+      {def.fallback !== undefined && <p className="hint">{t('editor.data.linkBackupHint')}</p>}
+    </>
+  );
+}
+
+export interface SourceEditorProps {
+  /** The project — or `SERVER_SCOPE`, on the Data sources page (0.80.0). */
   projectId: string;
   /** The project's other sources — candidates for a table of places. */
   others: DataSourceDef[];
@@ -646,7 +880,7 @@ interface SourceEditorProps {
   onSave: () => void;
 }
 
-function SourceEditor({ projectId, others, def, onChange, onCancel, onSave }: SourceEditorProps): JSX.Element {
+export function SourceEditor({ projectId, others, def, onChange, onCancel, onSave }: SourceEditorProps): JSX.Element {
   const t = useT();
   const rt = useRichT();
   const [preview, setPreview] = useState<
@@ -681,7 +915,8 @@ function SourceEditor({ projectId, others, def, onChange, onCancel, onSave }: So
    * URL a self-hosted instance needs.
    */
   const canPreview =
-    def.type === 'sheets' ? Boolean(def.spreadsheet)
+    def.type === 'link' ? false
+    : def.type === 'sheets' ? Boolean(def.spreadsheet)
     : def.type === 'weather' ? !WEATHER_PROVIDER_INFO[def.provider]?.needsBaseUrl || Boolean(def.baseUrl)
     : def.type === 'air-quality' ? !AIR_QUALITY_PROVIDER_INFO[def.provider]?.needsBaseUrl || Boolean(def.baseUrl)
     : def.type === 'ftp' ? Boolean(def.host && def.pattern)
@@ -707,7 +942,9 @@ function SourceEditor({ projectId, others, def, onChange, onCancel, onSave }: So
         />
       )}
 
-      {def.type === 'manual' ? (
+      {def.type === 'link' ? (
+        <LinkFields def={def} others={others} onChange={onChange} />
+      ) : def.type === 'manual' ? (
         <ManualTableEditor def={def} onChange={onChange} />
       ) : def.type === 'poll' ? (
         <PollSourceFields def={def} onChange={onChange} preview={showPreview} />
@@ -853,7 +1090,7 @@ function SourceEditor({ projectId, others, def, onChange, onCancel, onSave }: So
       )}
 
       {/* Any source can be a camera list — a manual table most of all. Not a text or a poll (Wave R). */}
-      {def.type !== 'text' && def.type !== 'poll' && <MediaFields def={def} onChange={onChange} />}
+      {def.type !== 'text' && def.type !== 'poll' && def.type !== 'link' && <MediaFields def={def} onChange={onChange} />}
 
       <div className="source-actions">
         <button className="primary" onClick={onSave}>{t('editor.data.saveSource')}</button>
@@ -1054,7 +1291,7 @@ function MediaFields({
  * A value check added and never given a column is dropped on save rather than
  * refused by the server; an emptied guard goes altogether.
  */
-function withoutBlankChecks(def: DataSourceDef): DataSourceDef {
+export function withoutBlankChecks(def: DataSourceDef): DataSourceDef {
   if (def.type === 'manual' || !def.guard) return def;
   const guard: DataGuard = { ...def.guard };
   if (guard.ranges) {

@@ -11,23 +11,34 @@
  * CRUD over the definitions, plus the two things the editor actually needs to
  * build a source against a feed it has never seen: `preview`, which fetches a
  * candidate URL without saving anything, and `refresh`, which forces a poll.
+ *
+ * Every route here exists twice (0.80.0): under `/api/projects/:id/…` for a
+ * project's sources, and under `/api/server/…` for the server-level ones that
+ * projects link to. One set of handlers, mounted on both prefixes — the Data
+ * sources page is the editor's own source form pointed at the other prefix,
+ * and two implementations would be two forms that drift.
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import {
   MIN_POLL_INTERVAL,
+  SERVER_SCOPE,
   SOURCE_USES,
   applyGuard,
   applyTransforms,
+  canBeServerSource,
   isInlineSource,
+  isLinkSource,
   isPolledSource,
+  placesSourceOf,
   type DataSourceDef,
+  type LinkDataSource,
   type SourceUse,
   type DataTransform,
 } from '@breeze/schema';
 
-import type { DataRegistry } from '../data/registry.js';
+import type { DataEntry, DataRegistry } from '../data/registry.js';
 import { loadDataSource } from '../data/registry.js';
 import { guessRowPath } from '../data/parse.js';
 import { feedTitle, inspectXml } from '../data/parse-xml.js';
@@ -36,32 +47,199 @@ import {
   deleteDataSource,
   effectiveInterval,
   getDataSource,
+  isServerScope,
   putDataSource,
   readDataSources,
   redact,
+  withSourcesLock,
 } from '../data/sources.js';
 import { actorOf, record } from '../audit.js';
 import { fetchText } from '../data/fetch.js';
-import { NotFoundError, readProject } from '../store.js';
+import { NotFoundError, listProjects, readProject } from '../store.js';
 
+/** `id` is the project; absent on the `/api/server` mount, where the scope is the server's. */
 interface ProjectParams {
-  id: string;
+  id?: string;
 }
 interface SourceParams extends ProjectParams {
   sourceId: string;
+}
+
+/** The two mounts: a project's sources, and the server's. */
+export const PROJECT_SOURCES_PREFIX = '/api/projects/:id';
+export const SERVER_SOURCES_PREFIX = '/api/server';
+
+const scopeOf = (params: ProjectParams): string => params.id ?? SERVER_SCOPE;
+
+/** 404 for a project that is not there. The server scope always is. */
+async function ensureScope(scope: string): Promise<void> {
+  if (!isServerScope(scope)) await readProject(scope);
+}
+
+const EMPTY_STATUS = (id: string) => ({ id, revision: 0, rowCount: 0 });
+
+/** What a link points at, for a list row: enough to name it and say what kind it is. */
+function linkedSummary(registry: DataRegistry, def: DataSourceDef): { linked?: { id: string; name: string; type: string; interval: number } | null } {
+  if (!isLinkSource(def)) return {};
+  const target = registry.get(SERVER_SCOPE, def.source);
+  return {
+    linked: target
+      ? { id: target.def.id, name: target.def.name, type: target.def.type, interval: effectiveInterval(target.def) }
+      : null,
+  };
+}
+
+/** A refresh on request, held to the source's poll floor (`DataRegistry.refreshDueIn`). */
+async function refreshWithinLimits(
+  registry: DataRegistry,
+  scope: string,
+  sourceId: string,
+): Promise<{ entry: DataEntry; retryIn?: number }> {
+  const wait = registry.refreshDueIn(scope, sourceId);
+  if (wait > 0) return { entry: registry.get(scope, sourceId)!, retryIn: Math.ceil(wait / 1000) };
+  return { entry: await registry.refresh(scope, sourceId) };
 }
 
 export async function registerDataSourceRoutes(
   app: FastifyInstance,
   registry: DataRegistry,
 ): Promise<void> {
+  mountSourceRoutes(app, registry, PROJECT_SOURCES_PREFIX);
+  mountSourceRoutes(app, registry, SERVER_SOURCES_PREFIX);
+
+  /**
+   * Every source on this server, for the Data sources page: the server-level
+   * ones with the projects linked to each, then each project's own.
+   *
+   * One call rather than one per project, on the argument the per-project list
+   * already makes — the page shows definitions and health side by side, and
+   * here also across projects.
+   */
+  app.get('/api/sources', async () => {
+    const projects = await listProjects();
+    const nameOf = new Map(projects.map((p) => [p.id, p.name]));
+    const row = (scope: string, def: DataSourceDef) => {
+      const entry = registry.get(scope, def.id);
+      return {
+        def: redact(def),
+        interval: effectiveInterval(def),
+        status: entry?.status ?? EMPTY_STATUS(def.id),
+        columns: entry?.data.columns ?? [],
+        rowCount: entry?.data.rows.length ?? 0,
+        ...linkedSummary(registry, def),
+      };
+    };
+    const server = (await readDataSources(SERVER_SCOPE)).map((def) => ({
+      ...row(SERVER_SCOPE, def),
+      refreshIn: Math.ceil(registry.refreshDueIn(SERVER_SCOPE, def.id) / 1000),
+      links: registry
+        .linksTo(def.id)
+        .map((l) => ({ project: l.projectId, projectName: nameOf.get(l.projectId) ?? l.projectId, id: l.id, name: l.name }))
+        .sort((a, b) => a.projectName.localeCompare(b.projectName)),
+    }));
+    const local = [];
+    for (const project of projects) {
+      const defs = (await readDataSources(project.id)).filter((def) => !isLinkSource(def));
+      if (defs.length === 0) continue;
+      local.push({
+        id: project.id,
+        name: project.name,
+        sources: defs.map((def) => ({
+          ...row(project.id, def),
+          refreshIn: Math.ceil(registry.refreshDueIn(project.id, def.id) / 1000),
+        })),
+      });
+    }
+    return { server, projects: local, minPollInterval: MIN_POLL_INTERVAL };
+  });
+
+  /**
+   * Move a project's source to the server level, leaving a link in its place.
+   *
+   * The link keeps the source's id, so every layer bound to it, every backup
+   * and places table naming it, goes on working without being touched; and the
+   * registry's entry for that id keeps its rows across the change, so nothing
+   * on air blinks while the server-level source makes its first fetch.
+   *
+   * A backup stays with the project: it names a source in the project, which
+   * the server scope cannot see, so it rides on the link instead.
+   */
+  app.post<{ Params: { id: string; sourceId: string } }>(
+    '/api/projects/:id/datasources/:sourceId/move-to-server',
+    async (req, reply) => {
+      const projectId = req.params.id;
+      await readProject(projectId);
+      return withSourcesLock(SERVER_SCOPE, () =>
+        withSourcesLock(projectId, async () => {
+          const def = await getDataSource(projectId, req.params.sourceId);
+          if (!canBeServerSource(def)) {
+            reply.code(409);
+            return {
+              error: isLinkSource(def)
+                ? `"${def.name}" is already a link to a server-level source`
+                : `"${def.name}" holds this project's own rows — only fetched sources can be server-level`,
+            };
+          }
+          const places = placesSourceOf(def);
+          if (places !== undefined) {
+            reply.code(409);
+            return {
+              error: `"${def.name}" reads its places from the table "${places}" in this project, which a server-level source cannot see — give it its places directly first`,
+            };
+          }
+
+          const taken = new Set((await readDataSources(SERVER_SCOPE)).map((s) => s.id));
+          let serverId = def.id;
+          // Its own id if that is free, so the two lists read the same.
+          for (let n = 2; taken.has(serverId); n += 1) serverId = `${def.id.slice(0, 60)}-${n}`;
+
+          const { fallback, fallbackOn, ...rest } = def;
+          const moved = { ...rest, id: serverId } as DataSourceDef;
+          const link: LinkDataSource = {
+            id: def.id,
+            name: def.name,
+            type: 'link',
+            source: serverId,
+            ...(fallback !== undefined ? { fallback } : {}),
+            ...(fallback !== undefined && fallbackOn !== undefined ? { fallbackOn } : {}),
+          };
+
+          // Server first: a link to a source that is not there yet is the one
+          // state worth never being in, even for a moment.
+          await putDataSource(SERVER_SCOPE, moved);
+          await registry.upsert(SERVER_SCOPE, moved);
+          await putDataSource(projectId, link);
+          await registry.upsert(projectId, link);
+          await registry.refresh(SERVER_SCOPE, serverId);
+
+          void record({
+            action: 'source.move',
+            actor: actorOf(req),
+            project: projectId,
+            name: def.name,
+            detail: { source: def.id, server: serverId },
+          });
+          const entry = registry.get(projectId, link.id);
+          return {
+            def: link,
+            status: entry?.status ?? EMPTY_STATUS(link.id),
+            server: redact(moved),
+          };
+        }),
+      );
+    },
+  );
+}
+
+function mountSourceRoutes(app: FastifyInstance, registry: DataRegistry, prefix: string): void {
   /* --------------------------------------------------------------- read */
 
   app.get<{ Params: ProjectParams; Querystring: { rows?: string } }>(
-    '/api/projects/:id/datasources',
+    `${prefix}/datasources`,
     async (req) => {
-      await readProject(req.params.id);
-      const defs = await readDataSources(req.params.id);
+      const scope = scopeOf(req.params);
+      await ensureScope(scope);
+      const defs = await readDataSources(scope);
 
       /*
        * `?rows=N` includes each source's rows, capped at N.
@@ -90,14 +268,16 @@ export async function registerDataSourceRoutes(
        */
       return {
         sources: defs.map((def) => {
-          const entry = registry.get(req.params.id, def.id);
+          const entry = registry.get(scope, def.id);
           const rows = entry?.data.rows ?? [];
           return {
             def: redact(def),
             interval: effectiveInterval(def),
-            status: entry?.status ?? { id: def.id, revision: 0, rowCount: 0 },
+            status: entry?.status ?? EMPTY_STATUS(def.id),
             columns: entry?.data.columns ?? [],
             rowCount: rows.length,
+            // A link names what it points at, or `null` when that is missing.
+            ...linkedSummary(registry, def),
             ...(rowLimit > 0
               ? {
                   data: {
@@ -119,18 +299,20 @@ export async function registerDataSourceRoutes(
   );
 
   app.get<{ Params: SourceParams; Querystring: { rows?: string } }>(
-    '/api/projects/:id/datasources/:sourceId',
+    `${prefix}/datasources/:sourceId`,
     async (req) => {
-      const def = await getDataSource(req.params.id, req.params.sourceId);
-      const entry = registry.get(req.params.id, req.params.sourceId);
+      const scope = scopeOf(req.params);
+      const def = await getDataSource(scope, req.params.sourceId);
+      const entry = registry.get(scope, req.params.sourceId);
       const limit = Number(req.query.rows ?? '200');
       const data = entry?.data ?? { id: def.id, columns: [], rows: [] };
       return {
         def: redact(def),
         interval: effectiveInterval(def),
-        status: entry?.status ?? { id: def.id, revision: 0, rowCount: 0 },
+        status: entry?.status ?? EMPTY_STATUS(def.id),
         data: { ...data, rows: data.rows.slice(0, Number.isFinite(limit) ? limit : 200) },
         truncated: data.rows.length > limit,
+        ...linkedSummary(registry, def),
       };
     },
   );
@@ -138,25 +320,74 @@ export async function registerDataSourceRoutes(
   /* -------------------------------------------------------------- write */
 
   app.put<{ Params: SourceParams; Body: DataSourceDef }>(
-    '/api/projects/:id/datasources/:sourceId',
-    async (req) => {
-      await readProject(req.params.id);
+    `${prefix}/datasources/:sourceId`,
+    async (req, reply) => {
+      const scope = scopeOf(req.params);
+      await ensureScope(scope);
       assertSafeSourceId(req.params.sourceId);
       const def = { ...req.body, id: req.params.sourceId };
-      await putDataSource(req.params.id, def);
+
+      if (isServerScope(scope)) {
+        // Answered here as a 400 with the reason; `writeDataSources` holds the
+        // same line for every other way of writing the file.
+        if (!canBeServerSource(def)) {
+          reply.code(400);
+          return {
+            error: isLinkSource(def)
+              ? 'a server-level data source cannot itself be a link'
+              : `a ${def.type} source belongs to a project — only fetched sources can be server-level`,
+          };
+        }
+      } else if (isLinkSource(def)) {
+        // A link to nothing would save, sit there, and show an error for ever.
+        if (!registry.get(SERVER_SCOPE, def.source) && !(await readDataSources(SERVER_SCOPE)).some((s) => s.id === def.source)) {
+          reply.code(409);
+          return { error: `there is no server-level data source "${def.source}" to link to` };
+        }
+      }
+
+      await putDataSource(scope, def);
       // Registered immediately, so a manual table is queryable and an HTTP
       // source has fired its first poll before the editor asks for a preview.
-      const entry = await registry.upsert(req.params.id, def);
-      if (isPolledSource(def)) await registry.refresh(req.params.id, def.id);
-      return { def: redact(def), status: entry.status, interval: effectiveInterval(def) };
+      const entry = await registry.upsert(scope, def);
+      if (isPolledSource(def)) await registry.refresh(scope, def.id);
+      return { def: redact(def), status: entry.status, interval: effectiveInterval(def), ...linkedSummary(registry, def) };
     },
   );
 
   app.delete<{ Params: SourceParams }>(
-    '/api/projects/:id/datasources/:sourceId',
+    `${prefix}/datasources/:sourceId`,
     async (req, reply) => {
-      await deleteDataSource(req.params.id, req.params.sourceId);
-      registry.remove(req.params.id, req.params.sourceId);
+      const scope = scopeOf(req.params);
+      /*
+       * A server-level source cannot be deleted while a project links to it.
+       *
+       * This is the asymmetry that made the shared asset store copy rather
+       * than link (ASSETS.md §3): a central delete reaches projects nobody has
+       * open, mid-show. Refusing with the list is the other way to close it,
+       * and the one that keeps a single poll per source. Read from disk, not
+       * the registry, so a project that failed to register still counts.
+       */
+      if (isServerScope(scope)) {
+        const links = [];
+        for (const project of await listProjects()) {
+          for (const def of await readDataSources(project.id)) {
+            if (isLinkSource(def) && def.source === req.params.sourceId) {
+              links.push({ project: project.id, projectName: project.name, id: def.id, name: def.name });
+            }
+          }
+        }
+        if (links.length > 0) {
+          const names = [...new Set(links.map((l) => l.projectName))].sort((a, b) => a.localeCompare(b));
+          reply.code(409);
+          return {
+            error: `this source is linked from ${names.length === 1 ? 'a project' : `${names.length} projects`} (${names.join(', ')}) — unlink it there first`,
+            links,
+          };
+        }
+      }
+      await deleteDataSource(scope, req.params.sourceId);
+      registry.remove(scope, req.params.sourceId);
       reply.code(204);
       return null;
     },
@@ -164,15 +395,31 @@ export async function registerDataSourceRoutes(
 
   /* ------------------------------------------------------------ actions */
 
+  /**
+   * Fetch now — within the source's limits (0.80.0).
+   *
+   * A source fetched less than its poll floor ago is not fetched again: the
+   * answer carries `throttled.retryIn` (seconds) beside the rows it already
+   * has, with a 200, because "asked too soon" is information for a button to
+   * show, not a failure. The floor is the provider's for weather, air quality
+   * and alerts, and `MIN_POLL_INTERVAL` for everything else — the same clamp
+   * the scheduler works under, so no button, script or Stream Deck key can
+   * poll a provider faster than a saved interval could.
+   */
   app.post<{ Params: SourceParams }>(
-    '/api/projects/:id/datasources/:sourceId/refresh',
+    `${prefix}/datasources/:sourceId/refresh`,
     async (req) => {
-      await getDataSource(req.params.id, req.params.sourceId);
-      if (!registry.get(req.params.id, req.params.sourceId)) {
-        await registry.register(req.params.id);
+      const scope = scopeOf(req.params);
+      await getDataSource(scope, req.params.sourceId);
+      if (!registry.get(scope, req.params.sourceId)) {
+        await registry.register(scope);
       }
-      const entry = await registry.refresh(req.params.id, req.params.sourceId);
-      return { status: entry.status, data: entry.data };
+      const { entry, retryIn } = await refreshWithinLimits(registry, scope, req.params.sourceId);
+      return {
+        status: entry.status,
+        data: entry.data,
+        ...(retryIn !== undefined ? { throttled: { retryIn } } : {}),
+      };
     },
   );
 
@@ -195,25 +442,30 @@ export async function registerDataSourceRoutes(
       reply.code(400);
       return { error: `mode must be one of ${SOURCE_USES.join(', ')}` };
     }
-    const def = await getDataSource(req.params.id, req.params.sourceId);
+    const scope = scopeOf(req.params);
+    const def = await getDataSource(scope, req.params.sourceId);
     if (mode === 'backup' && def.fallback === undefined) {
       reply.code(409);
-      return { error: `data source "${def.id}" has no backup to use` };
+      return {
+        error: isLinkSource(def)
+          ? `"${def.name}" is a link with no backup of its own in this project — switch the server-level source on the Data sources page`
+          : `data source "${def.id}" has no backup to use`,
+      };
     }
-    if (!registry.get(req.params.id, def.id)) await registry.register(req.params.id);
-    const entry = registry.setUse(req.params.id, def.id, mode as SourceUse);
+    if (!registry.get(scope, def.id)) await registry.register(scope);
+    const entry = registry.setUse(scope, def.id, mode as SourceUse);
     // Logged: "who put the backup on air at 3 a.m." is a question someone asks.
     void record({
       action: 'source.use',
       actor: actorOf(req),
-      project: req.params.id,
+      ...(isServerScope(scope) ? {} : { project: scope }),
       name: def.name,
-      detail: { source: def.id, mode },
+      detail: { source: def.id, mode, ...(isServerScope(scope) ? { server: true } : {}) },
     });
     return { status: entry.status };
   };
-  app.get<{ Params: SourceParams; Querystring: { mode?: string } }>('/api/projects/:id/datasources/:sourceId/use', use);
-  app.post<{ Params: SourceParams; Querystring: { mode?: string } }>('/api/projects/:id/datasources/:sourceId/use', use);
+  app.get<{ Params: SourceParams; Querystring: { mode?: string } }>(`${prefix}/datasources/:sourceId/use`, use);
+  app.post<{ Params: SourceParams; Querystring: { mode?: string } }>(`${prefix}/datasources/:sourceId/use`, use);
 
   /**
    * Fetch a candidate source without saving it.
@@ -225,8 +477,9 @@ export async function registerDataSourceRoutes(
    * still a fetch this server makes.
    */
   app.post<{ Params: ProjectParams; Body: { def: DataSourceDef; transforms?: DataTransform[] } }>(
-    '/api/projects/:id/datasources-preview',
+    `${prefix}/datasources-preview`,
     async (req, reply) => {
+      const scope = scopeOf(req.params);
       const def = req.body?.def;
       if (!def || !def.type) {
         reply.code(400);
@@ -237,7 +490,7 @@ export async function registerDataSourceRoutes(
         // A table-fed source previews against the project's live tables, so
         // "read places from Cities" shows real cities before it is saved.
         const result = await loadDataSource({ ...def, id: def.id || 'preview' }, undefined, {
-          lookup: (sourceId) => registry.get(req.params.id, sourceId)?.data,
+          lookup: (sourceId) => registry.get(scope, sourceId)?.data,
         });
         const fetched = result.data ?? { id: def.id || 'preview', columns: [], rows: [] };
         /*
@@ -251,7 +504,7 @@ export async function registerDataSourceRoutes(
         // A lookup or union in the pipeline reads the project's other live sources.
         const shaped = applyTransforms(data, req.body.transforms ?? [], {
           now: new Date(),
-          source: (sourceId) => registry.get(req.params.id, sourceId)?.data,
+          source: (sourceId) => registry.get(scope, sourceId)?.data,
         });
         return {
           ok: true,
@@ -277,7 +530,7 @@ export async function registerDataSourceRoutes(
    * is first pointed at a feed; a saved source always carries an explicit path.
    */
   app.post<{ Params: ProjectParams; Body: { url: string; headers?: Record<string, string> } }>(
-    '/api/projects/:id/datasources-inspect',
+    `${prefix}/datasources-inspect`,
     async (req, reply) => {
       const url = req.body?.url;
       if (!url) {
@@ -306,7 +559,7 @@ export async function registerDataSourceRoutes(
    * Generic XML that they pasted an RSS URL and should use the feed type.
    */
   app.post<{ Params: ProjectParams; Body: { url: string; headers?: Record<string, string> } }>(
-    '/api/projects/:id/datasources-inspect-xml',
+    `${prefix}/datasources-inspect-xml`,
     async (req, reply) => {
       const url = req.body?.url;
       if (!url) {

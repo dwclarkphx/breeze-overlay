@@ -36,6 +36,9 @@ const MIME: Record<string, string> = {
   '.json': 'application/json',
 };
 
+/** Kept equal to `sourcesPageUrl()` in the editor (`state/sources-page.ts`); `portal.test.ts` holds the two together. */
+export const SOURCES_PAGE_URL = '/editor/?view=sources';
+
 const NOT_BUILT = `<!doctype html>
 <html><head><meta charset="utf-8"><title>Breeze editor</title>
 <style>body{font:14px/1.6 system-ui,sans-serif;background:#0d1117;color:#c9d1d9;padding:40px}
@@ -69,6 +72,14 @@ export async function registerEditorRoutes(app: FastifyInstance): Promise<void> 
     reply.header('cache-control', 'no-store');
     return html;
   };
+
+  /*
+   * The Data sources page (0.80.0). It is the editor's bundle in another mode
+   * — it shows the editor's own source form — so its real address is a query
+   * on `/editor/`. `/sources` is the address worth remembering and the one the
+   * portal links, beside `/peers` and `/activity`.
+   */
+  app.get('/sources', async (_req, reply) => reply.redirect(SOURCES_PAGE_URL, 302));
 
   app.get('/editor', async (_req, reply) => serveIndex(reply));
   app.get('/editor/', async (_req, reply) => serveIndex(reply));

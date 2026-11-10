@@ -27,6 +27,7 @@ import {
 } from '@breeze/schema';
 import { CompositionValidationError, assertValidComposition } from '@breeze/schema/validate';
 
+import type { DataRegistry } from '../data/registry.js';
 import { forgetMode } from '../mode.js';
 import { actorOf, record } from '../audit.js';
 import { fail, nameFail } from '../errors.js';
@@ -83,7 +84,7 @@ const notFoundAsUndefined = (err: unknown): undefined => {
   throw err;
 };
 
-export async function registerProjectRoutes(app: FastifyInstance): Promise<void> {
+export async function registerProjectRoutes(app: FastifyInstance, registry?: DataRegistry): Promise<void> {
   app.get('/api/projects', async () => ({ projects: await listProjects() }));
 
   app.post<{ Body: { name?: string; id?: string; key?: string } }>('/api/projects', async (req, reply) => {
@@ -209,6 +210,11 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
 
     await deleteProject(req.params.id);
     forgetMode(req.params.id);
+    // Its sources stop polling with it (0.80.0). They used to carry on until
+    // the server restarted — fetching for a project that no longer existed —
+    // and a link left registered would have gone on counting against deleting
+    // the server-level source it pointed at.
+    registry?.unregister(req.params.id);
     void record({
       action: 'project.delete',
       actor: actorOf(req),

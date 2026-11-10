@@ -917,8 +917,16 @@ export const DATA_SOURCE_TYPES = [
   // Phase 9 Wave R (ROLLS.md, CHARTS.md).
   'text',
   'poll',
+  // 0.80.0: a project's link to a server-level source.
+  'link',
 ] as const;
 export type DataSourceType = (typeof DATA_SOURCE_TYPES)[number];
+
+/**
+ * The scope server-level sources live in (0.80.0) — where a project id would
+ * otherwise go. `@` is outside the id alphabet, so it can never be a project.
+ */
+export const SERVER_SCOPE = '@server';
 
 /** Poll floor, seconds. One slow origin must not be able to starve the loop. */
 export const MIN_POLL_INTERVAL = 5;
@@ -2160,6 +2168,32 @@ export interface PollDataSource extends DataSourceBase {
   operatorEditable?: boolean;
 }
 
+/**
+ * A project's link to a server-level source (0.80.0).
+ *
+ * Server-level sources are set up once on the Data sources page and polled
+ * once, whatever number of projects show them. A project that wants one keeps
+ * this in its own `datasources.json`: an id of its own — what layers bind to,
+ * so nothing else in the project knows the difference — and the id of the
+ * server source whose rows it serves.
+ *
+ * **It links, where the shared asset store copies** (ASSETS.md §3), and the
+ * difference is the point. A copied logo going stale is a stale logo; a copied
+ * weather source is a second poll against the same provider, which is what a
+ * licence floor exists to prevent. The asymmetry that decided the asset store
+ * — a central delete reaching a project mid-show — is closed the other way:
+ * a server source cannot be deleted while a project links to it.
+ *
+ * `fallback` and `fallbackOn` work as on any source and name a source in the
+ * *project*, so a show can keep its own "temporarily unavailable" table behind
+ * a shared feed.
+ */
+export interface LinkDataSource extends DataSourceBase {
+  type: 'link';
+  /** The server-level source's id. */
+  source: string;
+}
+
 export type DataSourceDef =
   | ManualDataSource
   | HttpJsonDataSource
@@ -2172,7 +2206,8 @@ export type DataSourceDef =
   | CapDataSource
   | AirQualityDataSource
   | TextDataSource
-  | PollDataSource;
+  | PollDataSource
+  | LinkDataSource;
 
 /** Defs that address an origin by URL — everything the shared fetcher can take. */
 export type UrlDataSource =
@@ -2228,9 +2263,27 @@ export function isInlineSource(def: DataSourceDef): boolean {
   return def.type === 'manual' || def.type === 'poll' || (def.type === 'text' && !def.url);
 }
 
-/** Sources the poller drives. Manual rows are the definition; nothing to fetch. */
+/** A project's link to a server-level source: neither typed in nor fetched here. */
+export function isLinkSource(def: DataSourceDef): def is LinkDataSource {
+  return def.type === 'link';
+}
+
+/**
+ * Sources the poller drives. Manual rows are the definition; nothing to fetch.
+ * A link is not polled either — the server-level source it points at is.
+ */
 export function isPolledSource(def: DataSourceDef): boolean {
-  return !isInlineSource(def);
+  return !isInlineSource(def) && !isLinkSource(def);
+}
+
+/**
+ * Whether a def may be a server-level source: the fetched types only (decided
+ * 2026-11-09). A game table, a poll, a manual table and a text kept in a
+ * project hold a *show's* state, and two shows linked to one of those would
+ * share a score.
+ */
+export function canBeServerSource(def: DataSourceDef): boolean {
+  return isPolledSource(def);
 }
 
 /** Per-source health, surfaced in the editor so a dead feed is diagnosed there. */

@@ -110,7 +110,8 @@ function gsapTags(): string {
 // i18n-ignore-end
 
 /** Source types whose rows come from a fetch rather than from an operator. */
-const FETCHED_SOURCE_TYPES = new Set(['http-json', 'http-csv', 'rss', 'xml', 'sheets', 'weather', 'ftp', 'cap', 'air-quality']);
+// A `link` counts: what it links to is always a fetched source (0.80.0).
+const FETCHED_SOURCE_TYPES = new Set(['http-json', 'http-csv', 'rss', 'xml', 'sheets', 'weather', 'ftp', 'cap', 'air-quality', 'link']);
 
 /**
  * Is this field driven by a feed?
@@ -1282,6 +1283,7 @@ ${authPanel}
   <a class="pill" href="/docs" target="_blank" rel="noreferrer">${t('server.pages.userGuide')}</a>
   <a class="pill" href="/activity">${t('server.pages.activity')}</a>
   <a class="pill" href="/peers">${t('server.pages.connections')}</a>
+  <a class="pill" href="/sources">${t('server.pages.dataSources')}</a>
   <a class="pill" href="/backup">${t('server.pages.backup')}</a>
 </div>
 

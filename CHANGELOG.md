@@ -4,6 +4,41 @@ All notable changes to Breeze Overlay are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow the project rule: a feature bumps the minor version, a fix bumps the patch. Releases before 0.45.0 used two-part numbers (0.01–0.44). 1.0.0 will be the first public release.
 
+## [0.80.0] - 2026-11-09
+
+> Server-level data sources: set a feed up once on a new Data sources page, have it fetching before any project uses it, and link it into as many projects as show it. A project restored while the server is running now starts fetching its sources, and Refresh is held to each source's limits.
+
+### Added
+
+- **A Data sources page**, opened from the new **Data sources** button on the portal (beside Connections) or at `/sources`. It lists every source on the server: the server-level ones with the projects linked to each, then each project's own. Every fetched source shows how it is doing (live, failing, expired, frozen, on backup), how long ago it last synced, its row count and a **Refresh**.
+  - **+ Add data source** opens a window listing the kinds of source there are, with a line on each. Choosing one opens the same form the editor uses, in that window. A saved source starts fetching at once.
+  - **Edit** opens a server-level source in the same window. **Delete** is refused while a project links to the source, and names the projects.
+  - The page is the editor's own bundle in another mode (`/editor/?view=sources`), so the editor has to be built for it to open.
+- **Server-level data sources.** A source added on the Data sources page belongs to the server, not to a project, and is stored in `data/server/datasources.json`. It is fetched once however many projects show it, so three projects on one weather feed are one poll against the provider, not three.
+  - Only fetched kinds can be server-level: HTTP CSV, HTTP JSON, RSS, XML, private Google Sheets, weather, air quality, alerts, FTP/SFTP drops, a camera list, and a text fetched from a URL. A manual table, a poll, a sport game table and a text typed into a project hold one show's state and stay in that project.
+  - A server-level source's backup and its table of places must be server-level sources too.
+- **Links.** In the editor's data panel, **+ Add… → Link a server source…** lists the server-level sources and links one into the project. A link is a source like any other to the rest of the project (layers, rules, tables and tickers bind to it by its own id). It shows as **Linked · HTTP JSON** (or whatever it links to), with **Refresh** and **Unlink**.
+  - A link can have a **backup** from the project's own sources, which goes on air in that project when the server-level source has nothing fit to show.
+  - Everything else about the feed is edited on the Data sources page, for every project that shows it.
+  - New source type `link` in `datasources.json`: `{ "id", "name", "type": "link", "source": "<server source id>" }`, with optional `fallback` and `fallbackOn`.
+- **Move to server**, on every fetched source in the editor's data panel and on the Data sources page. The source becomes server-level and the project keeps a link under the same id, so nothing bound to it changes and its rows stay on air through the move. A backup stays with the project, on the link. Refused for a weather or air-quality source that reads its places from a table in the project.
+- **API**, alongside the page:
+  - Every data-source route under `/api/projects/:id/` also exists under `/api/server/` for the server-level sources: `datasources`, `datasources/:sourceId`, `…/refresh`, `…/use`, `…/media`, `…/media/check`, `datasources-preview`, `datasources-inspect` and `datasources-inspect-xml`.
+  - `GET /api/sources` returns every source on the server in one call: `server` (each with `links` and `refreshIn`) and `projects`.
+  - `POST /api/projects/:id/datasources/:sourceId/move-to-server`.
+  - A link's entry in the list and detail routes carries `linked` (the id, name, type and interval of what it points at, or `null` when that is missing).
+- **Backups carry a copy of what a project links to.** A project bundle includes the definitions of the server-level sources its links point at (and the backups and places tables those need), with secrets stripped as everywhere else in a bundle. On restore, a source this server does not have is created from the copy. One it already has is left exactly as it is: a bundle of one project does not redefine a source other projects share. The restore result lists what it created under `serverSources`.
+
+### Changed
+
+- **Refresh is held to the source's limits.** `POST …/datasources/:sourceId/refresh` no longer fetches a source that was last fetched less than its poll floor ago: five seconds for an ordinary feed, and the provider's own limit for weather, air quality and alerts. It answers `200` with the rows it already has and `throttled: { retryIn }` (seconds). The editor's data panel says so on a line under the heading, and the Data sources page shows the button as **Refresh in 0:42** until it may fetch. Saving a source still fetches at once.
+- The control panel shows a linked source as the kind of feed it is: the type on its badge, **Check cameras** for a linked camera list, and the score buttons for a linked sport feed.
+
+### Fixed
+
+- **A project restored from a backup starts fetching its data sources straight away.** Sources were registered for polling only when the server started. A project restored (or restored over) while the server was running had its sources on disk and no timers, so its graphics showed their authored rows until a source was saved in the editor or the server was restarted, which made it look as though opening the editor was what started the polling.
+- **Deleting a project stops its sources polling.** They used to go on being fetched until the server restarted.
+
 ## [0.79.1] - 2026-11-04
 
 > Sheets and CSV sources find their columns by header name, so a sheet with its columns in another order no longer puts a reversed score on air, a blank number cell reads as blank instead of 0, pasting into a sport table keeps its columns, and a fetched sport feed that fails its format check says so.

@@ -43,14 +43,16 @@ import {
   nameProblem,
   validateRundowns,
   normalizeName,
+  placesSourceOf,
   type AssetRef,
   type Composition,
+  type DataSourceDef,
   type NameProblem,
   type Project,
 } from '@breeze/schema';
 
 import { projectAssetsDir, projectDataSourcesFile, projectDir, projectRundownsFile } from '../config.js';
-import { readDataSources } from '../data/sources.js';
+import { SERVER_SCOPE, readDataSources, withSourcesLock, writeDataSources } from '../data/sources.js';
 import { APP_VERSION } from '../version.js';
 import {
   getDependencies,
@@ -116,6 +118,96 @@ export function stripSecrets<T extends Record<string, unknown>>(def: T): T {
 }
 
 /**
+ * A project's `datasources.json` as it goes into a bundle (0.80.0).
+ *
+ * A link names a server-level source, and that source is not in the project
+ * folder — so a bundle carrying only the link would restore, on any other
+ * machine, as a graphic pointing at nothing. The bundle therefore **carries a
+ * copy** of every server-level definition the project links to (decided
+ * 2026-11-09), under `linked`, beside the project's own `sources`. With them
+ * come the server sources *they* depend on: a backup, a table of places.
+ *
+ * Inside the project's own file rather than a file of its own, so the restore
+ * allowlist (`PROJECT_FILE`) does not grow a path and a bundle read by an
+ * older server restores exactly as it used to — `linked` is a key it ignores.
+ *
+ * Secrets are stripped from the copies as from everything else in a bundle.
+ */
+async function bundledSources(projectId: string): Promise<Record<string, unknown> | undefined> {
+  const sources = await readDataSources(projectId);
+  if (sources.length === 0) return undefined;
+
+  const wanted = sources.filter((s) => s.type === 'link').map((s) => (s as { source: string }).source);
+  const linked: DataSourceDef[] = [];
+  if (wanted.length > 0) {
+    const server = new Map((await readDataSources(SERVER_SCOPE)).map((s) => [s.id, s]));
+    const seen = new Set<string>();
+    while (wanted.length > 0) {
+      const id = wanted.pop()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const def = server.get(id);
+      if (!def) continue;
+      linked.push(def);
+      if (def.fallback !== undefined) wanted.push(def.fallback);
+      const places = placesSourceOf(def);
+      if (places !== undefined) wanted.push(places);
+    }
+  }
+
+  const strip = (s: DataSourceDef) => stripSecrets(s as unknown as Record<string, unknown>);
+  return {
+    formatVersion: FORMAT_VERSION,
+    sources: sources.map(strip),
+    ...(linked.length > 0 ? { linked: linked.map(strip) } : {}),
+  };
+}
+
+/**
+ * Take the `linked` copies out of a bundled `datasources.json` and add to the
+ * server scope the ones this server does not have.
+ *
+ * **Matched by id, and an existing source wins.** A restore onto the machine
+ * the bundle came from finds every source already there and changes nothing;
+ * a restore onto a fresh machine creates them. What it never does is
+ * overwrite: a server-level source is shared by every project linked to it,
+ * and a bundle of one project does not get to redefine it for the others.
+ *
+ * Returns the project's file with `linked` removed — it is bundle transport,
+ * not part of the file's format — and the ids it created.
+ */
+async function adoptLinkedSources(bytes: Uint8Array): Promise<{ file: Uint8Array; created: string[] }> {
+  let parsed: { linked?: unknown } & Record<string, unknown>;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(bytes)) as typeof parsed;
+  } catch {
+    // Written as it came, as it always was; `readDataSources` treats a corrupt file as empty.
+    return { file: bytes, created: [] };
+  }
+  if (!Array.isArray(parsed.linked)) return { file: bytes, created: [] };
+
+  const { linked, ...rest } = parsed;
+  const incoming = (linked as unknown[]).filter(
+    (d): d is DataSourceDef => typeof d === 'object' && d !== null && typeof (d as { id?: unknown }).id === 'string',
+  );
+  const created = await withSourcesLock(SERVER_SCOPE, async () => {
+    const existing = await readDataSources(SERVER_SCOPE);
+    const have = new Set(existing.map((s) => s.id));
+    const added = incoming.filter((d) => !have.has(d.id));
+    if (added.length === 0) return [];
+    try {
+      await writeDataSources(SERVER_SCOPE, [...existing, ...added]);
+      return added.map((d) => d.id);
+    } catch {
+      // A hand-edited bundle whose copies do not validate: the project still
+      // restores, and its links say which source is missing.
+      return [];
+    }
+  });
+  return { file: new TextEncoder().encode(`${JSON.stringify(rest, null, 2)}\n`), created };
+}
+
+/**
  * Build a bundle for one or more whole projects.
  *
  * Assets are read off disk rather than out of the index, and the two are
@@ -149,13 +241,8 @@ export async function buildBundle(projectIds: readonly string[]): Promise<{
     files[`projects/${id}/project.json`] = utf8(project);
     files[`projects/${id}/assets.json`] = utf8(assetsFile);
 
-    const sources = await readDataSources(id);
-    if (sources.length) {
-      files[`projects/${id}/datasources.json`] = utf8({
-        formatVersion: FORMAT_VERSION,
-        sources: sources.map((s) => stripSecrets(s as unknown as Record<string, unknown>)),
-      });
-    }
+    const sources = await bundledSources(id);
+    if (sources) files[`projects/${id}/datasources.json`] = utf8(sources);
 
     const rundowns = await readRundowns(id);
     if (rundowns.rundowns.length) files[`projects/${id}/rundowns.json`] = utf8(rundowns);
@@ -253,13 +340,8 @@ export async function buildCompositionBundle(
    * kilobytes of URLs with the credentials already stripped; carrying all of
    * it is cheap and cannot be wrong.
    */
-  const sources = await readDataSources(projectId);
-  if (sources.length) {
-    files[`projects/${projectId}/datasources.json`] = utf8({
-      formatVersion: FORMAT_VERSION,
-      sources: sources.map((s) => stripSecrets(s as unknown as Record<string, unknown>)),
-    });
-  }
+  const sources = await bundledSources(projectId);
+  if (sources) files[`projects/${projectId}/datasources.json`] = utf8(sources);
 
   const missing: string[] = [];
   let present = 0;
@@ -651,6 +733,8 @@ export interface RestoreOutcome {
   name: string;
   overwrote: boolean;
   assets: number;
+  /** Server-level data sources created from the bundle's copies (0.80.0). Absent when none were. */
+  serverSources?: string[];
 }
 
 /**
@@ -715,9 +799,14 @@ export async function restoreProject(
     );
   }
 
+  // Server-level sources the project links to arrive as copies (0.80.0) and
+  // are created here if this server lacks them, before the links that need them.
+  let serverSources: string[] = [];
   const sourcesJson = files.get('datasources.json');
   if (sourcesJson) {
-    await fs.writeFile(projectDataSourcesFile(targetId), Buffer.from(sourcesJson));
+    const adopted = await adoptLinkedSources(sourcesJson);
+    serverSources = adopted.created;
+    await fs.writeFile(projectDataSourcesFile(targetId), Buffer.from(adopted.file));
   }
 
   /*
@@ -746,5 +835,6 @@ export async function restoreProject(
     name: restored.name,
     overwrote: opts.overwrite,
     assets: written,
+    ...(serverSources.length > 0 ? { serverSources } : {}),
   };
 }

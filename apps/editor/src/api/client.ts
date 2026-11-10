@@ -30,6 +30,7 @@ import type {
 } from '@breeze/schema';
 
 import { msg, type Message, type Params } from '@breeze/i18n';
+import { SERVER_SCOPE } from '@breeze/schema';
 
 export interface ValidationIssue {
   path: string;
@@ -150,6 +151,18 @@ export interface ProjectSummary {
   name: string;
   updatedAt: string;
   compositions: Array<{ id: string; name: string }>;
+}
+
+/**
+ * Where a scope's data-source routes live (0.80.0).
+ *
+ * Every data-source call takes a project id — or `SERVER_SCOPE`, for the
+ * server-level sources, which the server mounts the same routes for under
+ * `/api/server`. Resolved here so the source form (`SourceEditor`) and every
+ * helper under it work on either without knowing which they were given.
+ */
+function sourcesBase(scope: string): string {
+  return scope === SERVER_SCOPE ? '/api/server' : `/api/projects/${encodeURIComponent(scope)}`;
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -477,7 +490,7 @@ export const api = {
    */
   listDataSources: (projectId: string, rows?: number) =>
     request<{ sources: DataSourceSummary[]; minPollInterval: number }>(
-      `/api/projects/${encodeURIComponent(projectId)}/datasources${rows ? `?rows=${rows}` : ''}`, // i18n-ignore — URL
+      `${sourcesBase(projectId)}/datasources${rows ? `?rows=${rows}` : ''}`, // i18n-ignore — URL
     ),
 
   getDataSource: (projectId: string, sourceId: string, rows = 200) =>
@@ -488,44 +501,59 @@ export const api = {
       data: DataSet;
       truncated: boolean;
     }>(
-      `/api/projects/${encodeURIComponent(projectId)}/datasources/${encodeURIComponent(sourceId)}?rows=${rows}`,
+      `${sourcesBase(projectId)}/datasources/${encodeURIComponent(sourceId)}?rows=${rows}`,
     ),
 
   saveDataSource: (projectId: string, def: DataSourceDef) =>
     request<{ def: DataSourceDef; status: DataSourceStatus; interval: number }>(
-      `/api/projects/${encodeURIComponent(projectId)}/datasources/${encodeURIComponent(def.id)}`,
+      `${sourcesBase(projectId)}/datasources/${encodeURIComponent(def.id)}`,
       { method: 'PUT', body: JSON.stringify(def) },
     ),
 
   deleteDataSource: (projectId: string, sourceId: string) =>
     request<void>(
-      `/api/projects/${encodeURIComponent(projectId)}/datasources/${encodeURIComponent(sourceId)}`,
+      `${sourcesBase(projectId)}/datasources/${encodeURIComponent(sourceId)}`,
       { method: 'DELETE' },
     ),
 
+  /**
+   * Fetch now. Held to the source's poll floor by the server (0.80.0): asked
+   * too soon it fetches nothing and says so in `throttled`, with the seconds
+   * until it will.
+   */
   refreshDataSource: (projectId: string, sourceId: string) =>
-    request<{ status: DataSourceStatus; data: DataSet }>(
-      `/api/projects/${encodeURIComponent(projectId)}/datasources/${encodeURIComponent(sourceId)}/refresh`,
+    request<{ status: DataSourceStatus; data: DataSet; throttled?: { retryIn: number } }>(
+      `${sourcesBase(projectId)}/datasources/${encodeURIComponent(sourceId)}/refresh`,
+      { method: 'POST' },
+    ),
+
+  /** Every source on the server — the Data sources page's one call (0.80.0). */
+  listAllSources: () => request<AllSources>('/api/sources'),
+
+  /** Move a project's fetched source to the server level, leaving a link under the same id (0.80.0). */
+  moveSourceToServer: (projectId: string, sourceId: string) =>
+    request<{ def: DataSourceDef; status: DataSourceStatus; server: DataSourceDef }>(
+      `${sourcesBase(projectId)}/datasources/${encodeURIComponent(sourceId)}/move-to-server`,
       { method: 'POST' },
     ),
 
   /** Every camera's check, for a source with media checks (Wave 8). */
   dataSourceMedia: (projectId: string, sourceId: string) =>
     request<{ summary: MediaSummary | null; rows: MediaRowStatus[] }>(
-      `/api/projects/${encodeURIComponent(projectId)}/datasources/${encodeURIComponent(sourceId)}/media`,
+      `${sourcesBase(projectId)}/datasources/${encodeURIComponent(sourceId)}/media`,
     ),
 
   /** Check every camera now (Wave 8). */
   checkDataSourceMedia: (projectId: string, sourceId: string) =>
     request<{ summary: MediaSummary | null; rows: MediaRowStatus[]; done?: boolean }>(
-      `/api/projects/${encodeURIComponent(projectId)}/datasources/${encodeURIComponent(sourceId)}/media/check`,
+      `${sourcesBase(projectId)}/datasources/${encodeURIComponent(sourceId)}/media/check`,
       { method: 'POST' },
     ),
 
   /** Whose rows a source serves: automatic, its own, or its backup (Wave 5). */
   setDataSourceUse: (projectId: string, sourceId: string, mode: SourceUse) =>
     request<{ status: DataSourceStatus }>(
-      `/api/projects/${encodeURIComponent(projectId)}/datasources/${encodeURIComponent(sourceId)}/use`,
+      `${sourcesBase(projectId)}/datasources/${encodeURIComponent(sourceId)}/use`,
       { method: 'POST', body: JSON.stringify({ mode }) },
     ),
 
@@ -545,13 +573,13 @@ export const api = {
       rowCount?: number;
       truncated?: boolean;
     }>(
-      `/api/projects/${encodeURIComponent(projectId)}/datasources-preview`,
+      `${sourcesBase(projectId)}/datasources-preview`,
       { method: 'POST', body: JSON.stringify({ def, transforms }) },
     ),
 
   inspectJsonFeed: (projectId: string, url: string) =>
     request<{ ok: boolean; error?: string; rowPath?: string; sample?: unknown }>(
-      `/api/projects/${encodeURIComponent(projectId)}/datasources-inspect`,
+      `${sourcesBase(projectId)}/datasources-inspect`,
       { method: 'POST', body: JSON.stringify({ url }) },
     ),
 
@@ -568,7 +596,7 @@ export const api = {
       feed?: 'rss' | 'rdf' | 'atom' | null;
       candidates?: Array<{ path: string; count: number }>;
       title?: string;
-    }>(`/api/projects/${encodeURIComponent(projectId)}/datasources-inspect-xml`, {
+    }>(`${sourcesBase(projectId)}/datasources-inspect-xml`, {
       method: 'POST',
       body: JSON.stringify({ url }),
     }),
@@ -583,6 +611,42 @@ export interface DataSourceSummary {
   /** Present only when the request asked for rows. May be capped — see `truncated`. */
   data?: DataSet;
   truncated?: boolean;
+  /**
+   * On a link (0.80.0): the server-level source it points at, or `null` when
+   * that source is not on this server. Absent on everything else.
+   */
+  linked?: LinkedSource | null;
+}
+
+/** What a link points at — enough to name it and say what kind of feed it is. */
+export interface LinkedSource {
+  id: string;
+  name: string;
+  type: DataSourceDef['type'];
+  interval: number;
+}
+
+/** A project's link to a server-level source, as the Data sources page lists it. */
+export interface SourceLink {
+  project: string;
+  projectName: string;
+  id: string;
+  name: string;
+}
+
+/** One row of the Data sources page: a summary, and how long until Refresh may fetch again. */
+export interface ServerSourceSummary extends DataSourceSummary {
+  /** Seconds until a requested refresh will fetch; 0 when it will now. */
+  refreshIn: number;
+  /** Server-level sources only: the projects linked to it. */
+  links?: SourceLink[];
+}
+
+export interface AllSources {
+  server: ServerSourceSummary[];
+  /** Each project's own sources — links left out, they are under `server`. */
+  projects: Array<{ id: string; name: string; sources: ServerSourceSummary[] }>;
+  minPollInterval: number;
 }
 
 /** URL of the transparent output page for a composition. */

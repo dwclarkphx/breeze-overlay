@@ -42,6 +42,8 @@ export type AuditAction =
   | 'panel.disconnect'
   /** An operator chose whose rows a data source serves (Wave 5). */
   | 'source.use'
+  /** A project's source was moved to the server level, leaving a link (0.80.0). */
+  | 'source.move'
   /** An operator changed a text source's words on air (Wave R). */
   | 'source.text'
   /** A poll was opened, closed, reset or re-worded (Wave R). Single votes are not logged. */

@@ -568,6 +568,10 @@ POST   /api/projects/:id/datasources-inspect-xml      { url } — rank candidate
 GET|POST /api/projects/:id/datasources/:sourceId/use    ?mode=auto|primary|backup — force a source onto its own rows or its backup
 GET|POST /api/projects/:id/datasources/:sourceId/media/check   check every camera in a media source now
 
+POST   /api/projects/:id/datasources/:sourceId/move-to-server   make it server-level, leaving a link under the same id
+GET    /api/sources                                   every source on the server: server-level with their linked projects, then each project's own
+…      /api/server/datasources…                       every datasources route above, for the server-level sources
+
 GET    /api/projects/:id/mode                         the project mode, and every mode its rules name
 GET|POST /api/projects/:id/mode/set                   ?value=first-alert — empty clears it
 GET    /api/channels                                  every graphic's channel, with its paged tables
@@ -576,6 +580,8 @@ GET    /media/:project/:source/:key/snapshot|stream   the camera proxy — one u
 ```
 
 Definitions and health come back together from `GET …/datasources` on purpose: the panel shows them side by side, and a source whose def says "every 10s" next to a status saying "last fetch 40 minutes ago" is exactly the picture an operator needs. Assembling that from two round trips invites showing a stale half of it.
+
+`…/refresh` is held to the source's limits: asked less than the source's poll floor after its last fetch (five seconds, or the provider's own limit for weather, air quality and alerts), it fetches nothing and answers `200` with the rows it has and `throttled: { retryIn }`, in seconds.
 
 `datasources-preview` and the two `inspect` routes answer `200` with `{ ok: false, error }` rather than a 4xx. A URL that is wrong while it is being typed is the normal case, not an exception — the panel renders the message beside the field.
 
@@ -608,6 +614,15 @@ With `BREEZE_API_KEY` set, every write and every control verb except `state` nee
 ### Bitfocus Companion
 
 [companion-module-breeze-overlay](https://github.com/bitfocus/companion-module-breeze-overlay) drives Breeze from a Stream Deck through Companion. It holds a live subscription to the hub rather than polling (`client: 'companion'`, without field data), so buttons light the moment a graphic changes state, and it offers PLAY/STOP/NEXT/PREV/CLEAR, clear-all for a scene, page and cycle actions, project mode, forcing a source onto its backup, and a camera check — with feedbacks and variables for on-air state, pages, held tables, source health and cameras, and presets built from `/api/channels`. It is MIT-licensed and versioned separately; it checks the server's version and offers only what that server supports.
+
+Which module version to install depends on your Companion:
+
+| Module | Needs | Covers |
+|---|---|---|
+| **1.1.x** | Companion 5.0 or later | Everything above |
+| **1.2.0 and later** | Companion **5.1** or later | Everything above, plus rundowns (cue and TAKE), outputs, timers, sport game tables, typed fields, roll transport and polls, for Breeze 0.79 or later |
+
+1.2.0 moved to Companion's module API 2.2, which Companion 5.0 will not load. On Companion 5.0, stay on 1.1.x: it keeps working against every Breeze version, including 0.79's graphics, and simply has no buttons for the 0.79 features.
 
 ### OGraf
 
@@ -649,6 +664,17 @@ One rule: **one canonical data shape, many source types.** Every source — a pa
   "fetchedAt": "…", "revision": 17     // bumped only when the content hash changes
 }
 ```
+
+### Server-level sources and links
+
+A source can belong to the server instead of a project. The **Data sources** button on the portal opens `/sources`, which lists every source on the server with its health, how long ago it last synced and a **Refresh**, and where **+ Add data source** sets one up in the same form the editor uses. A server-level source starts fetching as soon as it is saved, before any project uses it, and is fetched once however many projects show it.
+
+A project picks one up from the editor's data panel with **+ Add… → Link a server source…**. The link is stored in the project as `{ "id", "name", "type": "link", "source": "<server source id>" }` and behaves as a source of the project: layers bind to the link's own id, and it may have a backup from the project's own sources. **Move to server** turns a project's fetched source into a server-level one and leaves a link under the same id.
+
+- Only fetched kinds can be server-level. Manual tables, polls, sport game tables and text typed into a project stay in the project.
+- A server-level source cannot be deleted while a project links to it.
+- Server-level definitions live in `data/server/datasources.json`. A project backup carries a copy of the ones it links to, and a restore creates any this server lacks without touching ones it has.
+- Every source in every project is registered for polling when the server starts, and when a project is restored. Nothing waits for the editor to be opened.
 
 ### Source types
 

@@ -1473,3 +1473,96 @@ img.layer-thumb {
 .sport-guide-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 4px 0; }
 .sport-guide-table th { text-align: start; color: var(--muted); font-weight: 500; padding: 2px 4px; }
 .sport-guide-table td { padding: 2px 4px; border-top: 1px solid var(--border); vertical-align: top; }
+
+
+/* ------------------------------------------------------- data sources page */
+/*
+ * The Data sources page (0.80.0) is this bundle in another mode, opened from
+ * the portal beside Connections and Activity — so it is dressed as they are
+ * (the server's SHELL_CSS in pages.ts: the 32px page margin, the pills, the
+ * small-caps table heads), not as an editor panel. The two share every colour
+ * token already, which is what makes that a page of rules rather than a theme.
+ *
+ * The editor pins html, body and #root to the window's height; this page is a
+ * document that scrolls.
+ */
+:root[data-view='sources'], :root[data-view='sources'] body, :root[data-view='sources'] #root { height: auto; min-height: 100%; }
+:root[data-view='sources'] body { font-size: 14px; line-height: 1.6; }
+
+.sources-page { padding: 32px; max-width: 1280px; }
+.sources-page header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.sources-page h1 { font-size: 20px; margin: 0; }
+.sources-page header .primary { margin-inline-start: auto; }
+.sources-page h2 { font-size: 15px; margin: 28px 0 10px; display: flex; align-items: center; gap: 8px; }
+.sources-page h3 { font-size: 13px; margin: 18px 0 6px; font-weight: 600; }
+.sources-page code { background: var(--panel); padding: 1px 5px; border-radius: 4px; color: var(--muted); font-size: 12px; }
+.sources-page .count { font-size: 12px; font-weight: 400; color: var(--muted); background: var(--panel); padding: 1px 8px; border-radius: 10px; }
+.sources-page .hint { color: var(--muted); }
+.sources-page .sp-intro { max-width: 820px; margin: 0 0 8px; }
+.sources-page footer { margin-top: 28px; color: var(--muted); font-size: 12px; max-width: 820px; }
+
+/* Pills: big enough to hit on a tablet, and visibly a control. */
+.sources-page .pill {
+  display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--panel); color: var(--text);
+  text-decoration: none; font-weight: 600; white-space: nowrap; font-size: 14px;
+}
+.sources-page .pill:hover { border-color: var(--accent); }
+.sources-page .pill.primary { background: var(--accent-dim); border-color: var(--accent-border); color: var(--on-accent); }
+
+/* Fixed columns, so the server-level table and every project's line up down
+   the page: the project tables have no "linked" column, and their sync column
+   takes its width. */
+.sources-page table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+.sources-page .c-source { width: 30%; }
+.sources-page .c-kind { width: 13%; }
+.sources-page .c-linked { width: 17%; }
+.sources-page .c-sync { width: 15%; }
+.sources-page .c-sync.wide { width: 32%; }
+.sources-page .c-rows { width: 5%; }
+.sources-page td { overflow-wrap: anywhere; }
+.sources-page th {
+  text-align: start; color: var(--muted); font-size: 11px; text-transform: var(--ui-caps, uppercase);
+  letter-spacing: calc(.6px * var(--ui-tracking, 1)); font-weight: 600;
+  padding: 0 12px 8px 0; border-bottom: 1px solid var(--border);
+}
+.sources-page td { padding: 9px 12px 9px 0; border-bottom: 1px solid var(--border-muted); vertical-align: top; font-size: 13px; }
+.sources-page .num { text-align: end; font-variant-numeric: tabular-nums; }
+.sources-page .sp-sub { color: var(--muted); font-size: 12px; }
+.sources-page .sp-name { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
+.sources-page .sp-chip {
+  display: inline-block; margin: 0 5px 4px 0; padding: 1px 9px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--panel); font-size: 12px; white-space: nowrap;
+}
+.sources-page .sp-actions { white-space: nowrap; text-align: end; }
+.sources-page .sp-actions > * { margin-inline-start: 5px; }
+.sources-page .sp-actions button, .sources-page .sp-actions select { padding: 4px 10px; }
+
+/* How a source is doing, findable by colour before the row is read — and by
+   word, for anyone the colour does not reach. */
+.sources-page .sp-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: 0 0 auto; align-self: center; }
+.sources-page .sp-dot.live { background: var(--success); }
+.sources-page .sp-dot.failing, .sources-page .sp-dot.expired, .sources-page .sp-dot.stuck { background: var(--danger); }
+.sources-page .sp-dot.backup { background: var(--attention-soft); }
+.sources-page .sp-health { font-size: 12px; font-weight: 600; color: var(--muted); }
+.sources-page .sp-health.live { color: var(--success); }
+.sources-page .sp-health.failing, .sources-page .sp-health.expired, .sources-page .sp-health.stuck { color: var(--danger-soft); }
+.sources-page .sp-health.backup { color: var(--attention-soft); }
+
+.sources-page .sp-banner {
+  margin: 10px 0; padding: 8px 12px; border-radius: 6px; max-width: 900px;
+  border: 1px solid var(--border); background: var(--panel);
+}
+.sources-page .sp-banner.error { background: var(--danger-bg); color: var(--danger-on-bg); border-color: var(--danger-border); }
+
+/* The first step of Add: the kinds of source, each with a line on what it is for. */
+.sp-kinds { display: flex; flex-direction: column; gap: 6px; min-width: min(520px, 80vw); }
+.sp-kind {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 8px 12px; text-align: start; border-radius: 6px;
+}
+.sp-kind span { color: var(--muted); font-size: 12px; white-space: normal; max-width: 70ch; }
+
+/* The data panel's line for something worth saying that is not an error (0.80.0). */
+.panel-notice { padding: 6px 10px; background: var(--panel-2); color: var(--muted); font-size: 11px; }
+.source-picker { min-width: min(460px, 80vw); }

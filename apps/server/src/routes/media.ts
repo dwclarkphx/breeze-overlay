@@ -16,7 +16,9 @@
 
 import type { FastifyInstance } from 'fastify';
 
-import type { DataRegistry } from '../data/registry.js';
+import { SERVER_SCOPE } from '@breeze/schema';
+
+import type { DataEntry, DataRegistry } from '../data/registry.js';
 import { NotProxied, STREAM_BOUNDARY, type MediaMonitor } from '../media/monitor.js';
 
 interface ProxyParams {
@@ -24,9 +26,19 @@ interface ProxyParams {
   source: string;
   key: string;
 }
+/** `id` is the project; absent on the `/api/server` mount (0.80.0). */
 interface SourceParams {
-  id: string;
+  id?: string;
   sourceId: string;
+}
+
+/**
+ * The entry whose cameras are checked: the source itself, or — for a project's
+ * link — the server-level source it points at, which is where the checks run.
+ */
+function checked(registry: DataRegistry, params: SourceParams): DataEntry | undefined {
+  const entry = registry.get(params.id ?? SERVER_SCOPE, params.sourceId);
+  return entry ? (registry.target(entry) ?? entry) : undefined;
 }
 
 const NO_STORE = 'no-store, no-cache, must-revalidate';
@@ -91,14 +103,16 @@ export async function registerMediaRoutes(
   /* ------------------------------------------------------------------ api */
 
   /** Every row's check — the editor's and the control panel's detail. */
-  app.get<{ Params: SourceParams }>('/api/projects/:id/datasources/:sourceId/media', async (req, reply) => {
-    const { id, sourceId } = req.params;
-    if (!registry.get(id, sourceId)) return reply.code(404).send({ error: `no data source "${sourceId}"` });
+  const detail = async (req: { params: SourceParams }, reply: { code(n: number): { send(b: unknown): unknown } }) => {
+    const entry = checked(registry, req.params);
+    if (!entry) return reply.code(404).send({ error: `no data source "${req.params.sourceId}"` });
     return {
-      summary: monitor.summary(id, sourceId) ?? null,
-      rows: monitor.rows(id, sourceId),
+      summary: monitor.summary(entry.projectId, entry.def.id) ?? null,
+      rows: monitor.rows(entry.projectId, entry.def.id),
     };
-  });
+  };
+  app.get<{ Params: SourceParams }>('/api/projects/:id/datasources/:sourceId/media', detail);
+  app.get<{ Params: SourceParams }>('/api/server/datasources/:sourceId/media', detail);
 
   /**
    * Check every camera now rather than at the next round — after fixing one,
@@ -106,10 +120,12 @@ export async function registerMediaRoutes(
    * URL; gated like every other action (`app.ts`).
    */
   const check = async (req: { params: SourceParams }, reply: { code(n: number): { send(b: unknown): unknown } }) => {
-    const { id, sourceId } = req.params;
-    const entry = registry.get(id, sourceId);
+    const { sourceId } = req.params;
+    const entry = checked(registry, req.params);
     if (!entry) return reply.code(404).send({ error: `no data source "${sourceId}"` });
     if (!entry.def.media) return reply.code(400).send({ error: `data source "${sourceId}" has no media checks` });
+    const id = entry.projectId;
+    const checkedId = entry.def.id;
     /*
      * Answered within a few seconds whatever happens. A round with a camera
      * that does not answer takes its whole timeout, and a control surface
@@ -117,11 +133,13 @@ export async function registerMediaRoutes(
      * the round is still running; the status shows its result when it ends.
      */
     const done = await Promise.race([
-      monitor.checkNow(id, sourceId).then(() => true),
+      monitor.checkNow(id, checkedId).then(() => true),
       new Promise<false>((resolve) => setTimeout(() => resolve(false), CHECK_WAIT_MS).unref?.()),
     ]);
-    return { done, summary: monitor.summary(id, sourceId) ?? null, rows: monitor.rows(id, sourceId) };
+    return { done, summary: monitor.summary(id, checkedId) ?? null, rows: monitor.rows(id, checkedId) };
   };
   app.get<{ Params: SourceParams }>('/api/projects/:id/datasources/:sourceId/media/check', check);
   app.post<{ Params: SourceParams }>('/api/projects/:id/datasources/:sourceId/media/check', check);
+  app.get<{ Params: SourceParams }>('/api/server/datasources/:sourceId/media/check', check);
+  app.post<{ Params: SourceParams }>('/api/server/datasources/:sourceId/media/check', check);
 }

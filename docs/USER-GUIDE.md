@@ -131,6 +131,34 @@ Calls made by Breeze's own pages — the editor, the portal, the control panel �
 
 The page refreshes itself every five seconds. Like Activity it shows addresses and browsers, not people, and like Activity it needs no key to read. The API table never shows a query string, so a key sent as `?key=` does not appear on it. The same data is available as JSON at `/api/peers`.
 
+### Data sources — every source on the server
+
+The **Data sources** button on the portal, next to **Connections**, opens a page listing every data source on the server (`/sources`). It is where you set a source up once for several projects to share, and where you look when you want to know whether the feeds are running without opening the editor.
+
+**Server-level** sources come first. Each row shows:
+
+| | |
+|---|---|
+| **Source** | Its name and id, with a dot for how it is doing. An error or warning from its last fetch is written under the name. |
+| **Kind** | What sort of source it is, and how often it is fetched. |
+| **Linked projects** | Every project that shows it. |
+| **Last sync** | **Live**, **Failing**, **Expired**, **Frozen** or **On backup**, and how long ago it last fetched successfully. A failing source also says when it last tried and how many tries have failed in a row. |
+| **Rows** | How many rows it holds now. |
+
+and three buttons:
+
+- **Edit** opens the source in a window, in the same form the editor uses.
+- **Refresh** fetches it now. A source cannot be fetched again sooner than its provider allows, so straight after a fetch the button reads **Refresh in 4s** (or **Refresh in 3:51** for a weather provider) and counts down. See [Refreshing a source](#refreshing-a-source).
+- **Delete** removes it. It is greyed out while any project links to the source: unlink it in those projects first.
+
+**In projects** lists each project's own sources underneath, with the same health and **Refresh**. They are edited in the editor. A fetched one has **Move to server** (see [Sharing a source between projects](#sharing-a-source-between-projects)).
+
+**+ Add data source** opens a window that lists the kinds of source you can add here, with a line on each. Choose one and the window shows its form. Fill it in, press **Preview** to check it, and **Save source**. It starts fetching straight away, whether or not any project uses it yet.
+
+Only sources that are *fetched* can be added here. A manual table, a poll, a sport's game table and text you type in belong to one show, so they are added in that project, in the editor.
+
+Sources fetch whenever the server is running. Nobody has to open the editor or this page first.
+
 ### The console dashboard
 
 By default the server's terminal is a plain log. Set `BREEZE_CONSOLE=dashboard` and it becomes a status board instead:
@@ -538,7 +566,7 @@ Click the **▾ Data sources** heading to fold the panel away. Collapsed, it bec
 
 ![The data sources panel](images/data-panel.png)
 
-`+ Add…` offers twelve kinds:
+`+ Add…` offers twelve kinds, a sport template, and a link to a source shared between projects:
 
 - **Manual table** — you type the rows. Good for standings, credits, anything you maintain by hand.
 - **HTTP CSV / Google Sheet** — a URL that returns CSV. A published Google Sheet works directly: use its **Publish to web → CSV** link. No API key.
@@ -553,6 +581,8 @@ Click the **▾ Data sources** heading to fold the panel away. Collapsed, it bec
 - **Text (lyrics, credits)** — long text, typed in or fetched, split into rows by line or by verse, with headings and two-column credits read for you. For rolls and lyric straps. See [Long text](#long-text--lyrics-and-credits).
 - **Poll (counted by the operator)** — a question, its options and their votes, counted from the control panel. See [Polls](#polls).
 - **From a sport template…** — the five tables a sports production needs (teams, players, coaches, venue and the live game), shaped for the sport and its rules, typed in or fed from a Sheet, CSV or JSON. See [below](#sport-templates).
+
+- **Link a server source…** — use a source that was set up on the [Data sources page](#data-sources--every-source-on-the-server), shared with other projects. See [Sharing a source between projects](#sharing-a-source-between-projects).
 
 **Open and Edit.** Each source has two ways in:
 - **Edit** opens it in the panel, under the list.
@@ -571,6 +601,36 @@ A source that stops answering keeps its last good rows. A feed going down does n
 The one exception is data that must not be shown stale. Air-quality sources have a **Blank the rows after** setting (three hours for AirNow): once a source has gone that long without a successful fetch, its rows are emptied — the columns stay, so the layout holds — and they come back with the next good fetch. Alerts work the same way on their own: a warning leaves the screen when its expiry passes, even if the feed is down.
 
 **Blank cells stay blank.** A blank cell in a number column is blank on air, not `0`, whichever kind of source it comes from. An unplayed quarter in a line score stays empty and a score nobody has typed yet shows nothing. Type `0` where you mean zero.
+
+### Sharing a source between projects
+
+A fetched source can belong to the server rather than to one project. It is then fetched **once**, however many projects show it, and it can be set up and left running before any project uses it.
+
+**To use a server-level source in a project:** choose **+ Add… → Link a server source…**. The window lists the server-level sources with their kind, row count and last fetch. Press **Link** on the one you want. It appears in the data panel as **Linked · HTTP JSON** (or whatever kind it is), and you bind tables, text and tickers to it like any other source.
+
+**To make one of this project's sources server-level:** press **Move to server** on it. The project goes on showing it through a link with the same id, so nothing bound to it needs changing and nothing on air blinks. Other projects can then link it.
+
+What a link lets you change in the project:
+
+- its **name** here;
+- a **backup** from this project's own sources, which goes on air in this project when the server-level source has nothing fit to show.
+
+Everything else (the address, the interval, the checks under *When the data is bad*) belongs to the server-level source and is edited on the Data sources page, for every project at once.
+
+**Unlink** removes the link from this project. The server-level source carries on for the others.
+
+Things to know:
+
+- Only fetched sources can be server-level. Manual tables, polls, game tables and typed-in text stay in their project.
+- A weather or air-quality source that reads its places from a table in the project can't be moved until it is given its places directly, because a server-level source can't see a project's tables.
+- A server-level source can't be deleted while a project links to it.
+- A project backup carries a copy of the server-level sources it links to. Restoring it on another server creates them there. Restoring it on a server that already has them changes nothing about them.
+
+### Refreshing a source
+
+**Refresh** fetches a source now instead of waiting for its next turn. It is held to the same limits as the schedule: an ordinary feed can be fetched every five seconds, and weather, air-quality and alert providers each set their own, longer limit. Press it sooner and nothing is fetched. The data panel says how long is left, and the Data sources page shows the wait on the button.
+
+Saving a source always fetches it at once, so an edit can be seen to have worked.
 
 ### When the data is bad
 
@@ -1595,6 +1655,18 @@ Checks every camera in a camera list now, and answers with each one's state — 
 | The sports, their rules, buttons and columns | `/api/sports` (no key) |
 
 `/state` on a graphic also returns its `timers`, even with `?data=0`.
+
+### Data sources and refresh
+
+| What | URL |
+|---|---|
+| Every source on the server | `GET /api/sources` (no key): `server`, each with the projects linked to it, and `projects`, each with its own |
+| A project's sources, or the server-level ones | `GET /api/projects/<project>/datasources` · `GET /api/server/datasources` (no key) |
+| Fetch a source now | `POST /api/projects/<project>/datasources/<source>/refresh` · `POST /api/server/datasources/<source>/refresh` |
+| Put a source's backup on air | `/api/projects/<project>/datasources/<source>/use?mode=backup` (`auto`, `primary`) · the same under `/api/server/` |
+| Move a project's source to the server | `POST /api/projects/<project>/datasources/<source>/move-to-server` |
+
+A refresh asked for sooner than the source allows fetches nothing. It still answers `200`, with the rows it has and `"throttled": { "retryIn": 4 }`, the seconds until it will fetch. Refreshing a link refreshes the server-level source it points at.
 
 ### Rolls, polls and text
 

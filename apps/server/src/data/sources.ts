@@ -25,14 +25,40 @@ import {
   DEFAULT_POLL_INTERVAL,
   DEFAULT_WEATHER_POLL_INTERVAL,
   FORMAT_VERSION,
+  SERVER_SCOPE,
+  canBeServerSource,
   isInlineSource,
+  isLinkSource,
   pollFloor,
   type DataSourceDef,
 } from '@breeze/schema';
 import { validateDataSources } from '@breeze/schema/validate';
 
-import { projectDataSourcesFile, projectDir } from '../config.js';
+import path from 'node:path';
+
+import { projectDataSourcesFile, serverSourcesFile } from '../config.js';
 import { NotFoundError, assertSafeId } from '../store.js';
+
+export { SERVER_SCOPE };
+
+/**
+ * A scope is where a list of sources lives: a project id, or `SERVER_SCOPE`
+ * for the server-level list (0.80.0). Every function below takes one where it
+ * used to take a project id, so the registry, the routes and the lock treat
+ * the server's sources exactly as they treat a project's — the same file
+ * format, validated by the same schema.
+ */
+export function isServerScope(scope: string): boolean {
+  return scope === SERVER_SCOPE;
+}
+
+function assertScope(scope: string): void {
+  if (!isServerScope(scope)) assertSafeId(scope);
+}
+
+function sourcesFile(scope: string): string {
+  return isServerScope(scope) ? serverSourcesFile() : projectDataSourcesFile(scope);
+}
 
 export interface DataSourcesFile {
   formatVersion: typeof FORMAT_VERSION;
@@ -54,7 +80,7 @@ export function assertSafeSourceId(id: string): void {
  * at all. Clamping gives them the graphic, at the rate the provider permits.
  */
 export function effectiveInterval(def: DataSourceDef): number {
-  if (isInlineSource(def)) return 0;
+  if (isInlineSource(def) || isLinkSource(def)) return 0;
   const fallback =
     def.type === 'weather' ? DEFAULT_WEATHER_POLL_INTERVAL
     : def.type === 'air-quality' ? DEFAULT_AIR_QUALITY_POLL_INTERVAL
@@ -73,7 +99,8 @@ export function effectiveInterval(def: DataSourceDef): number {
  * rows are the definition, not a fetch.
  */
 export function effectiveExpiry(def: DataSourceDef): number | undefined {
-  if (isInlineSource(def)) return undefined;
+  // A link's rows run out when the server source's do; it has no limit of its own.
+  if (isInlineSource(def) || isLinkSource(def)) return undefined;
   if (def.expireAfter !== undefined) return def.expireAfter;
   if (def.type === 'air-quality' && def.provider === 'airnow-feed') return DEFAULT_AIR_QUALITY_EXPIRY;
   return undefined;
@@ -91,10 +118,10 @@ async function writeAtomic(file: string, contents: string): Promise<void> {
  * fail to open because of it.
  */
 export async function readDataSources(projectId: string): Promise<DataSourceDef[]> {
-  assertSafeId(projectId);
+  assertScope(projectId);
   let raw: string;
   try {
-    raw = await fs.readFile(projectDataSourcesFile(projectId), 'utf8');
+    raw = await fs.readFile(sourcesFile(projectId), 'utf8');
   } catch {
     return [];
   }
@@ -112,8 +139,22 @@ export async function writeDataSources(
   projectId: string,
   sources: DataSourceDef[],
 ): Promise<DataSourceDef[]> {
-  assertSafeId(projectId);
+  assertScope(projectId);
   for (const source of sources) assertSafeSourceId(source.id);
+
+  /*
+   * The server scope holds fetched sources only (decided 2026-11-09). Checked
+   * here, at the one place every write passes, rather than in the route: a
+   * restore and a "move to server" write this file too.
+   */
+  if (isServerScope(projectId)) {
+    const stray = sources.find((source) => !canBeServerSource(source));
+    if (stray) {
+      throw new Error(
+        `"${stray.name}" cannot be a server-level data source — only fetched sources can; a ${stray.type} source belongs to a project`,
+      );
+    }
+  }
 
   const seen = new Set<string>();
   for (const source of sources) {
@@ -137,9 +178,9 @@ export async function writeDataSources(
     throw new Error(`invalid data source definition — ${detail}`);
   }
 
-  await fs.mkdir(projectDir(projectId), { recursive: true });
+  await fs.mkdir(path.dirname(sourcesFile(projectId)), { recursive: true });
   await writeAtomic(
-    projectDataSourcesFile(projectId),
+    sourcesFile(projectId),
     `${JSON.stringify(file, null, 2)}\n`,
   );
   return sources;
@@ -216,7 +257,8 @@ export function redact(def: DataSourceDef): DataSourceDef {
     def.type === 'sheets' ||
     def.type === 'weather' ||
     def.type === 'air-quality' ||
-    def.type === 'ftp'
+    def.type === 'ftp' ||
+    def.type === 'link'
   ) {
     return def;
   }

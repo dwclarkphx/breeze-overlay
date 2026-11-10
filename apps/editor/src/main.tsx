@@ -10,7 +10,9 @@ import { StrictMode, useEffect, useState, type JSX } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { App } from './App.js';
+import { SourcesPage } from './components/SourcesPage.js';
 import { applyDocumentLocale, bootCatalogue, loadCatalogue } from './state/i18n.js';
+import { isSourcesPage } from './state/sources-page.js';
 import './styles.css';
 
 /**
@@ -22,6 +24,16 @@ import './styles.css';
  * renders placeholder panels until the project loads, so in practice the
  * catalogue lands before there is any text on screen to change.
  */
+/*
+ * One bundle, two pages (0.80.0): the editor, and the Data sources page the
+ * portal links to — see `state/sources-page.ts` for why it lives here. Decided
+ * once, at load: the two share no state and nothing navigates between them
+ * without a page load. The attribute is what lets the stylesheet give the page
+ * a scrolling document where the editor has a fixed, full-height frame.
+ */
+const SOURCES_PAGE = isSourcesPage();
+if (SOURCES_PAGE) document.documentElement.dataset.view = 'sources';
+
 function Root(): JSX.Element {
   const [catalogue, setCatalogue] = useState(bootCatalogue);
 
@@ -39,7 +51,7 @@ function Root(): JSX.Element {
 
   return (
     <I18nProvider catalogue={catalogue}>
-      <App />
+      {SOURCES_PAGE ? <SourcesPage /> : <App />}
     </I18nProvider>
   );
 }

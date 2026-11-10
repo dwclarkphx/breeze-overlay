@@ -41,6 +41,8 @@ import {
 } from '../archive/bundle.js';
 import { fail, type ErrorBody } from '../errors.js';
 import { backupPage } from '../pages.js';
+import type { DataRegistry } from '../data/registry.js';
+import { SERVER_SCOPE } from '../data/sources.js';
 import { NotFoundError, listProjects, readProject } from '../store.js';
 
 /**
@@ -92,7 +94,7 @@ function bundleName(ids: readonly string[]): string {
   return `breeze-backup-${what}-${stamp}.zip`;
 }
 
-export async function registerBackupRoutes(app: FastifyInstance): Promise<void> {
+export async function registerBackupRoutes(app: FastifyInstance, registry?: DataRegistry): Promise<void> {
   /**
    * The page.
    *
@@ -378,6 +380,26 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
             });
             existing.add(targetId);
             restored.push(outcome);
+          }
+
+          /*
+           * Start the restored projects' sources polling (0.80.0).
+           *
+           * Until now nothing did: a project that arrived while the server was
+           * running had its `datasources.json` on disk and no timers, and its
+           * graphics showed their authored snapshot until a source was saved
+           * in the editor or the server restarted. The server scope first, for
+           * any source the bundle's copies just created; an overwrite is
+           * covered by the same call, which also drops sources the restored
+           * file no longer has.
+           */
+          if (registry) {
+            try {
+              if (restored.some((r) => r.serverSources?.length)) await registry.register(SERVER_SCOPE);
+              for (const r of restored) await registry.register(r.id);
+            } catch (err) {
+              app.log.warn({ err }, 'could not register the restored data sources');
+            }
           }
 
           if (restored.length === 0) {

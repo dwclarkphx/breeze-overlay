@@ -200,6 +200,12 @@ export const projectFile = (id: string) => path.join(projectDir(id), 'project.js
 export const projectAssetsDir = (id: string) => path.join(projectDir(id), 'assets');
 export const projectDataSourcesFile = (id: string) =>
   path.join(projectDir(id), 'datasources.json');
+/**
+ * Server-level data sources (0.80.0): one file beside `projects/`, not inside
+ * it, because they belong to no project. A folder of its own so the server
+ * scope has somewhere to grow without a second top-level file.
+ */
+export const serverSourcesFile = () => path.join(config.dataDir, 'server', 'datasources.json');
 /** The asset index. Split out of project.json in Phase 7.5 — see ASSETS.md §6. */
 export const projectAssetsFile = (id: string) => path.join(projectDir(id), 'assets.json');
 /** Rundowns (Phase 9 Wave A) — beside the asset index, under the same write lock. */

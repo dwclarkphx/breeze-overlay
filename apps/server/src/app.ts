@@ -10,7 +10,7 @@ import websocket from '@fastify/websocket';
 
 import { CompositionValidationError } from '@breeze/schema/validate';
 
-import { DATA_UPDATE_KEY, channelTakesData } from '@breeze/schema';
+import { DATA_UPDATE_KEY, SERVER_SCOPE, channelTakesData } from '@breeze/schema';
 
 import { config } from './config.js';
 import { DataRegistry } from './data/registry.js';
@@ -154,6 +154,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       route === '/api/projects/:id/datasources/:sourceId/use' ||
       // Checking every camera now makes a request to each of them (Wave 8).
       route === '/api/projects/:id/datasources/:sourceId/media/check' ||
+      // The same two on a server-level source (0.80.0), which every linked project shows.
+      route === '/api/server/datasources/:sourceId/use' ||
+      route === '/api/server/datasources/:sourceId/media/check' ||
       // A score tapped from a header-less button (Phase 9 Wave B).
       route === '/api/projects/:id/datasources/:sourceId/game' ||
       // A poll vote from one, the same (Wave R).
@@ -321,6 +324,18 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   // browser source may be opened without anyone visiting the editor first, so
   // waiting for a request to register them would leave a graphic showing its
   // authored snapshot until someone happened to look at it.
+  //
+  // The server-level sources first (0.80.0): a project's link adopts what its
+  // server source has, and should find that source there when it registers.
+  // A project that arrives later — restored from a backup, merged into — is
+  // registered by the route that brought it (routes/backup.ts); until 0.80.0
+  // nothing did, and its sources sat unpolled until one was saved or the
+  // server restarted.
+  try {
+    await data.register(SERVER_SCOPE);
+  } catch (err) {
+    app.log.warn({ err }, 'could not register the server-level data sources');
+  }
   for (const project of await listProjects()) {
     try {
       await data.register(project.id);
@@ -345,9 +360,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
 
   await registerAuthRoutes(app, sessions);
-  await registerProjectRoutes(app);
+  await registerProjectRoutes(app, data);
   await registerAssetRoutes(app, transcodes);
-  await registerBackupRoutes(app);
+  await registerBackupRoutes(app, data);
   await registerPlayRoutes(app, data);
   await registerControlRoutes(app, hub, data, sessions);
   const rundowns = await registerRundownRoutes(app, hub, data);

@@ -29,12 +29,23 @@
  *     its backup's rows when `own` has nothing fit to show or an operator has
  *     said so. Everything that reads `data` (pages, places lookups, the editor)
  *     sees what the audience sees.
+ *
+ * And one about where a source lives (0.80.0):
+ *
+ *  6. **A server-level source is polled once, however many projects show it.**
+ *     It is an entry like any other, under `SERVER_SCOPE` where a project id
+ *     would be. A project's *link* to it is an entry too, with no timer of its
+ *     own: its `own` rows are whatever the server source has on air, adopted
+ *     each time that source publishes. Everything downstream of an entry —
+ *     the push to the project's channels, a backup, a places table — works on
+ *     a link without knowing it is one.
  */
 
 import { createHash } from 'node:crypto';
 
 import {
   GUARD_DROP_CONFIRMATIONS,
+  SERVER_SCOPE,
   applyGuard,
   attributionShown,
   blankAttribution,
@@ -42,6 +53,7 @@ import {
   emptyDataSet,
   conform,
   isInlineSource,
+  isLinkSource,
   parseTextBody,
   pollDataSet,
   placesFromRows,
@@ -228,6 +240,10 @@ export async function loadDataSource(def: DataSourceDef, prior?: DataEntry, ctx:
 }> {
   if (def.type === 'manual') {
     return { data: { id: def.id, columns: def.columns, rows: conform(def.rows, def.columns) } };
+  }
+  // A link is never fetched: the registry hands it its server source's rows.
+  if (def.type === 'link') {
+    throw new Error(`"${def.name}" is a link to the server-level source "${def.source}" and has nothing of its own to fetch`);
   }
   // Wave R: a poll's rows are its tally; a text kept in the project is its body.
   if (def.type === 'poll' || (def.type === 'text' && def.url === undefined)) {
@@ -472,6 +488,13 @@ export class DataRegistry {
     }
     this.entries.set(key, entry);
 
+    // A link has no fetch of its own: it takes what its server source has on air.
+    if (isLinkSource(def)) {
+      this.clearTimer(key);
+      this.syncLink(entry);
+      return entry;
+    }
+
     // A manual source needs no fetch — its rows are the definition. A poll
     // and a text kept in the project are the same (Wave R).
     if (isInlineSource(def)) {
@@ -492,6 +515,113 @@ export class DataRegistry {
     this.entries.delete(key);
     this.media?.remove(projectId, sourceId);
     this.republishBackedBy(projectId, sourceId);
+    if (projectId === SERVER_SCOPE) this.syncLinksTo(sourceId);
+  }
+
+  /** Forget a whole project: its timers, its rows, its media checks. For a deleted project. */
+  unregister(projectId: string): void {
+    for (const [key, entry] of [...this.entries]) {
+      if (entry.projectId !== projectId) continue;
+      this.clearTimer(key);
+      this.entries.delete(key);
+      this.media?.remove(projectId, entry.def.id);
+    }
+  }
+
+  /* ------------------------------------------------------------- links */
+
+  /** The server-level entry a link points at, or undefined when it is not on this server. */
+  target(entry: DataEntry): DataEntry | undefined {
+    return isLinkSource(entry.def) ? this.entries.get(this.key(SERVER_SCOPE, entry.def.source)) : undefined;
+  }
+
+  /** Every project link to a server-level source — what the Data sources page lists, and what guards a delete. */
+  linksTo(sourceId: string): Array<{ projectId: string; id: string; name: string }> {
+    const out: Array<{ projectId: string; id: string; name: string }> = [];
+    for (const entry of this.entries.values()) {
+      if (isLinkSource(entry.def) && entry.def.source === sourceId) {
+        out.push({ projectId: entry.projectId, id: entry.def.id, name: entry.def.name });
+      }
+    }
+    return out;
+  }
+
+  private syncLinksTo(sourceId: string): void {
+    for (const entry of [...this.entries.values()]) {
+      if (isLinkSource(entry.def) && entry.def.source === sourceId) this.syncLink(entry);
+    }
+  }
+
+  /**
+   * Bring a link up to date with its server source: adopt the rows that source
+   * has on air and carry its health across, so the project's panels say what
+   * the Data sources page says.
+   *
+   * The rows adopted are the server source's `data`, not its `own` — what it
+   * serves, which may be its backup's, or blank once expired. A link shows
+   * what the server decided to show.
+   *
+   * A link whose server source is missing (a project restored onto another
+   * machine by hand) keeps whatever it last had and says why in its status.
+   * Rule 1 applies to a link as to anything else.
+   */
+  private syncLink(link: DataEntry): void {
+    if (!isLinkSource(link.def)) return;
+    const target = this.target(link);
+    const status = link.status;
+    for (const field of ['lastFetch', 'lastSuccess', 'lastError', 'warning', 'failures', 'expired', 'stuck', 'dropped', 'media'] as const) {
+      delete status[field];
+    }
+    if (!target) {
+      status.lastError = `the server-level data source "${link.def.source}" is not on this server — add it on the Data sources page, or unlink this source`;
+      status.failures = 1;
+      this.publish(link);
+      return;
+    }
+    const from = target.status;
+    if (from.lastFetch !== undefined) status.lastFetch = from.lastFetch;
+    if (from.lastSuccess !== undefined) status.lastSuccess = from.lastSuccess;
+    if (from.lastError !== undefined) status.lastError = from.lastError;
+    if (from.warning !== undefined) status.warning = from.warning;
+    if (from.failures !== undefined) status.failures = from.failures;
+    if (from.expired !== undefined) status.expired = from.expired;
+    if (from.stuck !== undefined) status.stuck = from.stuck;
+    if (from.dropped !== undefined) status.dropped = from.dropped;
+    if (from.media !== undefined) status.media = from.media;
+
+    // Nothing published yet: the link has nothing to adopt, as its server
+    // source has nothing to show (see `publish`).
+    if (target.hash === '') {
+      this.publish(link);
+      return;
+    }
+    this.ingest(link, {
+      id: link.def.id,
+      columns: target.data.columns,
+      rows: target.data.rows,
+      ...(target.data.fetchedAt !== undefined ? { fetchedAt: target.data.fetchedAt } : {}),
+    });
+    // When the content last changed at its origin, not when it reached the link.
+    if (from.lastChange !== undefined) status.lastChange = from.lastChange;
+  }
+
+  /**
+   * Milliseconds until a refresh *on request* may fetch, or 0 when it may now.
+   *
+   * A refresh button is a way to poll faster than the poll interval, and for
+   * some sources the interval is not ours to shorten: a weather provider's
+   * floor is its licence, NWS asks alert consumers for thirty seconds. So a
+   * requested refresh waits out the same floor the scheduler is clamped to,
+   * counted from the last fetch of any kind. Saving a source still fetches at
+   * once — an edit has to be seen to have worked — and that is not this path.
+   */
+  refreshDueIn(projectId: string, sourceId: string, now = Date.now()): number {
+    const entry = this.entries.get(this.key(projectId, sourceId));
+    const fetched = entry ? (this.target(entry) ?? entry) : undefined;
+    if (!fetched || isInlineSource(fetched.def) || isLinkSource(fetched.def)) return 0;
+    const last = fetched.status.lastFetch ? Date.parse(fetched.status.lastFetch) : NaN;
+    if (!Number.isFinite(last)) return 0;
+    return Math.max(0, last + pollFloor(fetched.def) * 1000 - now);
   }
 
   /** Sources whose backup is `sourceId` look again at what they serve. */
@@ -547,6 +677,14 @@ export class DataRegistry {
     const key = this.key(projectId, sourceId);
     const entry = this.entries.get(key);
     if (!entry) throw new Error(`data source "${sourceId}" is not registered`);
+
+    // A link is refreshed by refreshing what it links to; the rows come back
+    // through `publish`, to this link and every other.
+    if (isLinkSource(entry.def)) {
+      const target = this.target(entry);
+      if (target) await this.refresh(SERVER_SCOPE, target.def.id);
+      return this.entries.get(key) ?? entry;
+    }
 
     /*
      * One fetch per source at a time. A second caller — the refresh button, or
@@ -718,6 +856,8 @@ export class DataRegistry {
 
   /** Set or clear `stuck`: own content unchanged for longer than the guard allows. */
   private flagStuck(entry: DataEntry, now = Date.now()): void {
+    // A link's `stuck` is its server source's, carried across by `syncLink`.
+    if (isLinkSource(entry.def)) return;
     const limit = isInlineSource(entry.def) ? undefined : entry.def.guard?.maxUnchanged;
     const since = entry.status.lastChange ? Date.parse(entry.status.lastChange) : NaN;
     if (limit !== undefined && Number.isFinite(since) && now - since >= limit * 1000) entry.status.stuck = true;
@@ -741,6 +881,18 @@ export class DataRegistry {
   /** Whether this source's own rows are fit for air. */
   private ownUsable(entry: DataEntry): boolean {
     if (isInlineSource(entry.def)) return true;
+    // A link's rows are fit when what its server source serves is fit — which
+    // already counts that source's own backup. Not fit, and the link's own
+    // backup (a table in the project) is asked.
+    //
+    // A link whose server source is gone has no health to ask about. It keeps
+    // what it last had (rule 1) unless the project gave it a backup, which is
+    // then the better thing to show than rows nothing will ever refresh.
+    if (isLinkSource(entry.def)) {
+      const target = this.target(entry);
+      if (!target) return Boolean(entry.ownLoaded) && entry.def.fallback === undefined;
+      return Boolean(entry.ownLoaded) && this.served(target, new Set()).usable;
+    }
     if (!entry.ownLoaded) return false;
     this.flagExpired(entry);
     this.flagStuck(entry);
@@ -828,7 +980,8 @@ export class DataRegistry {
           data = this.media.decorate(entry.projectId, entry.def.id, data);
           const summary = this.media.summary(entry.projectId, entry.def.id);
           if (summary) entry.status.media = summary;
-        } else {
+        } else if (!isLinkSource(entry.def)) {
+          // A link's is its server source's (`syncLink`).
           delete entry.status.media;
         }
       }
@@ -849,6 +1002,11 @@ export class DataRegistry {
     for (const other of this.entries.values()) {
       if (other.projectId === entry.projectId && other.def.fallback === entry.def.id) this.publish(other, visiting);
     }
+
+    // Rule 6: whatever a server-level source now serves, and however it is
+    // doing, reaches every project linked to it — rows changed or not, since a
+    // failure changes a link's health without changing its rows.
+    if (entry.projectId === SERVER_SCOPE) this.syncLinksTo(entry.def.id);
   }
 
   private refetchPlacesReaders(entry: DataEntry): void {

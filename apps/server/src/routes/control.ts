@@ -25,7 +25,7 @@ import { SESSION_COOKIE, keyMatches, readCookie, sameOrigin, type Sessions } fro
 import { controlPage, isFedSource, type ControlPanelBinding } from '../pages.js';
 import { channelKey, parseClientMessage, type ControlHub, type ControlVerb } from '../hub.js';
 import type { DataRegistry } from '../data/registry.js';
-import { readDataSources } from '../data/sources.js';
+import { SERVER_SCOPE, readDataSources } from '../data/sources.js';
 import { getChannel, getComposition, listAssets, readProject } from '../store.js';
 import {
   bindingsJsonSchema,
@@ -33,6 +33,7 @@ import {
   collectOverrideBindings,
   collectScrolls,
   collectSources,
+  isLinkSource,
   collectTimers,
   sceneElements,
   stepCount,
@@ -535,6 +536,24 @@ export async function registerControlRoutes(
       const byId = new Map(defs.map((d) => [d.id, d]));
 
       /*
+       * What a link stands for (0.80.0): the server-level definition, read
+       * only when the project has a link. The panel shows a linked feed as the
+       * kind of feed it is — its type on the badge, its cameras checked, its
+       * sport's score buttons — not as "a link".
+       */
+      let serverDefs: DataSourceDef[] = [];
+      if (defs.some(isLinkSource)) {
+        try {
+          serverDefs = await readDataSources(SERVER_SCOPE);
+        } catch {
+          serverDefs = [];
+        }
+      }
+      const serverById = new Map(serverDefs.map((d) => [d.id, d]));
+      const standsFor = (def: DataSourceDef): DataSourceDef =>
+        isLinkSource(def) ? (serverById.get(def.source) ?? def) : def;
+
+      /*
        * Fed panels come from `collectSources`, not from `collectBindings`.
        *
        * A layer reading a feed does not need a `binding` at all — the screen
@@ -562,7 +581,7 @@ export async function registerControlRoutes(
           ...(ref.column ? { column: ref.column } : {}),
           readOnly: true,
           sourceName: def.name,
-          sourceType: def.type,
+          sourceType: standsFor(def).type,
         });
       }
 
@@ -575,7 +594,7 @@ export async function registerControlRoutes(
         .filter((b) => !(b.source && fedSourceIds.has(b.source)))
         .map((b) => {
           const def = b.source ? byId.get(b.source) : undefined;
-          return def ? { ...b, sourceName: def.name, sourceType: def.type } : b;
+          return def ? { ...b, sourceName: def.name, sourceType: standsFor(def).type } : b;
         });
 
       /*
@@ -617,13 +636,14 @@ export async function registerControlRoutes(
         for (const ref of collectSources(comp)) {
           const def = byId.get(ref.id);
           // A typed camera list is watched too: its cameras are checked (Wave 8).
-          if (!def || !(isFedSource(def.type) || def.media) || watched.some((w) => w.id === def.id)) continue;
+          const media = def ? standsFor(def).media : undefined;
+          if (!def || !(isFedSource(def.type) || media) || watched.some((w) => w.id === def.id)) continue;
           const backup = def.fallback !== undefined ? byId.get(def.fallback) : undefined;
           watched.push({
             id: def.id,
             name: def.name,
             ...(backup ? { backup: backup.id, backupName: backup.name } : {}),
-            ...(def.media ? { media: true } : {}),
+            ...(media ? { media: true } : {}),
             ...(isFedSource(def.type) ? {} : { fed: false }),
           });
         }
@@ -644,7 +664,8 @@ export async function registerControlRoutes(
       for (const id of visited) {
         const comp = id === composition.id ? composition : byCompId.get(id);
         for (const ref of comp ? collectSources(comp) : []) {
-          const def = byId.get(ref.id);
+          const own = byId.get(ref.id);
+          const def = own ? standsFor(own) : undefined;
           if (def?.template) sportKeys.add(`${def.template.sport}/${def.template.ruleset}`);
         }
       }

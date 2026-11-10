@@ -34,7 +34,8 @@
     "apps/server/src/audit.ts",
     "apps/editor/src/components/SportTemplates.tsx",
     "apps/editor/src/components/ChartsSection.tsx",
-    "apps/editor/src/components/LiveSourceFields.tsx"
+    "apps/editor/src/components/LiveSourceFields.tsx",
+    "apps/editor/src/components/SourcesPage.tsx"
   ],
   "//scan": "Exactly the surfaces the sweep covers (I18N.md §1.1). An include list rather than exclusions, because the things left out are left out for a reason and a new file should have to argue its way in: apps/server/client/player.ts is frozen diagnostics on the /play page, the data and media adapters are developer-facing, and the routes' error strings become codes under §5.1 rather than catalogue entries.",
   "scan": [
@@ -56,6 +57,7 @@
   "//namespaces": "Key prefix per file, where the default (basename minus a Panel/Editor/Dialog suffix) reads badly. Keeping this explicit means a file rename does not silently re-key an entire panel's catalogue entries.",
   "namespaces": {
     "apps/editor/src/App.tsx": "editor.app",
+    "apps/editor/src/components/SourcesPage.tsx": "editor.sources",
     "apps/editor/src/components/AssetBin.tsx": "editor.bin",
     "apps/editor/src/components/AssetLibrary.tsx": "editor.assets",
     "apps/editor/src/components/DataPanel.tsx": "editor.data",

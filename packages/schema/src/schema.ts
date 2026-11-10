@@ -1547,6 +1547,20 @@ export const dataSourcesSchema = {
             required: ['question', 'options'],
             additionalProperties: false,
           },
+          // 0.80.0: a link to a server-level source. Its backup, if any, is a
+          // source in this project.
+          {
+            properties: {
+              id: { type: 'string', minLength: 1 },
+              name: { type: 'string' },
+              type: { const: 'link' },
+              source: { type: 'string', minLength: 1, maxLength: 64 },
+              fallback: { type: 'string', minLength: 1 },
+              fallbackOn: { enum: [...FALLBACK_TRIGGERS] },
+            },
+            required: ['source'],
+            additionalProperties: false,
+          },
         ],
       },
     },
